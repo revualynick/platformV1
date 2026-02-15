@@ -350,6 +350,124 @@ export const kudosGiven = [
   { id: "k6", to: "Marcus Rivera", message: "Great mentoring of the new intern — really patient and thorough.", value: "Teamwork", date: "Feb 5, 2026" },
 ];
 
+// Self-reflections
+export const selfReflections = [
+  {
+    id: "sr1",
+    week: "Feb 10, 2026",
+    status: "complete" as const,
+    promptTheme: "Celebrate wins and build confidence",
+    highlights: "Led the API migration and prepared a rollback plan that saved us when we hit the rate-limit issue. Also onboarded two new team members to the codebase.",
+    challenges: "Sprint planning ran long again — I need to timebox more aggressively. Also felt stretched thin between the migration and the onboarding docs.",
+    goalForNextWeek: "Prep a tighter agenda before sprint planning. Delegate the remaining onboarding tasks to Marcus.",
+    mood: "energized" as const,
+    engagementScore: 88,
+  },
+  {
+    id: "sr2",
+    week: "Feb 3, 2026",
+    status: "complete" as const,
+    promptTheme: "Process challenges and blockers",
+    highlights: "Shipped the caching layer ahead of schedule. Pair-programmed with Aisha on the invalidation strategy — she picked it up fast.",
+    challenges: "Got pulled into two unrelated incidents mid-week that derailed my focus. Need to protect deep work time better.",
+    goalForNextWeek: "Block out Wednesday and Thursday mornings as no-meeting time.",
+    mood: "focused" as const,
+    engagementScore: 85,
+  },
+  {
+    id: "sr3",
+    week: "Jan 27, 2026",
+    status: "complete" as const,
+    promptTheme: "Celebrate wins and build confidence",
+    highlights: "Wrote the onboarding doc that multiple people said was one of the best they'd seen. Feels good to invest in team knowledge.",
+    challenges: "Standup updates were vague — got feedback from Elena about it. She's right, I was context-switching too much to give clear updates.",
+    goalForNextWeek: "Write one-line standup notes the night before.",
+    mood: "reflective" as const,
+    engagementScore: 82,
+  },
+  {
+    id: "sr4",
+    week: "Jan 20, 2026",
+    status: "complete" as const,
+    promptTheme: "Process challenges and blockers",
+    highlights: "Fixed the auth race condition that had been haunting us for weeks. Clean solution, no hacks.",
+    challenges: "Only completed 2 of 3 interactions this week — skipped Friday's because I was deep in the bug. Need to not let debugging eat my whole schedule.",
+    goalForNextWeek: "Set a hard stop on debugging after 4 hours. Timebox.",
+    mood: "tired" as const,
+    engagementScore: 75,
+  },
+  {
+    id: "sr5",
+    week: "Jan 13, 2026",
+    status: "complete" as const,
+    promptTheme: "Celebrate wins and build confidence",
+    highlights: "Successfully demoed the new dashboard to stakeholders. Got positive feedback from the VP of Product.",
+    challenges: "Felt underprepared for the Q&A portion. Should have anticipated more questions about the data pipeline.",
+    goalForNextWeek: "For the next demo, write a FAQ doc beforehand.",
+    mood: "optimistic" as const,
+    engagementScore: 78,
+  },
+  {
+    id: "sr6",
+    week: "Jan 6, 2026",
+    status: "complete" as const,
+    promptTheme: "Process challenges and blockers",
+    highlights: "Started the quarter strong — clear goals, good kickoff. Team energy felt high.",
+    challenges: "Adjusting to the new project structure. Not fully sure where some responsibilities land between our team and platform.",
+    goalForNextWeek: "Set up a sync with the platform team lead to clarify ownership boundaries.",
+    mood: "optimistic" as const,
+    engagementScore: 72,
+  },
+];
+
+// Org chart — people, roles, reporting lines, relationship threads
+export type OrgRole = "vp" | "director" | "manager" | "lead" | "senior" | "mid" | "junior";
+
+export const orgPeople = [
+  { id: "p0", name: "Dana Whitfield", role: "vp" as OrgRole, title: "VP of Engineering", team: "Engineering", reportsTo: null, email: "dana.whitfield@acmecorp.com" },
+  { id: "p1", name: "Alex Thompson", role: "director" as OrgRole, title: "Director of Engineering", team: "Engineering", reportsTo: "p0", email: "alex.thompson@acmecorp.com" },
+  { id: "p2", name: "Jordan Wells", role: "manager" as OrgRole, title: "Engineering Manager", team: "Engineering", reportsTo: "p1", email: "jordan.wells@acmecorp.com" },
+  { id: "p3", name: "Sarah Chen", role: "senior" as OrgRole, title: "Senior Software Engineer", team: "Core Platform", reportsTo: "p2", email: "sarah.chen@acmecorp.com" },
+  { id: "p4", name: "Marcus Rivera", role: "senior" as OrgRole, title: "Senior Software Engineer", team: "Core Platform", reportsTo: "p2", email: "marcus.rivera@acmecorp.com" },
+  { id: "p5", name: "Aisha Patel", role: "senior" as OrgRole, title: "Senior Security Engineer", team: "Core Platform", reportsTo: "p2", email: "aisha.patel@acmecorp.com" },
+  { id: "p6", name: "James Okonkwo", role: "mid" as OrgRole, title: "Software Engineer", team: "Core Platform", reportsTo: "p2", email: "james.okonkwo@acmecorp.com" },
+  { id: "p7", name: "Elena Volkov", role: "mid" as OrgRole, title: "Software Engineer", team: "Core Platform", reportsTo: "p2", email: "elena.volkov@acmecorp.com" },
+  { id: "p8", name: "David Kim", role: "junior" as OrgRole, title: "Junior Engineer", team: "Core Platform", reportsTo: "p2", email: "david.kim@acmecorp.com" },
+  { id: "p9", name: "Priya Sharma", role: "manager" as OrgRole, title: "Engineering Manager", team: "Data & ML", reportsTo: "p1", email: "priya.sharma@acmecorp.com" },
+  { id: "p10", name: "Tom Nguyen", role: "senior" as OrgRole, title: "Senior ML Engineer", team: "Data & ML", reportsTo: "p9", email: "tom.nguyen@acmecorp.com" },
+  { id: "p11", name: "Rachel Adams", role: "mid" as OrgRole, title: "Data Engineer", team: "Data & ML", reportsTo: "p9", email: "rachel.adams@acmecorp.com" },
+  { id: "p12", name: "Leo Park", role: "lead" as OrgRole, title: "Tech Lead", team: "Infrastructure", reportsTo: "p1", email: "leo.park@acmecorp.com" },
+  { id: "p13", name: "Nina Torres", role: "mid" as OrgRole, title: "DevOps Engineer", team: "Infrastructure", reportsTo: "p12", email: "nina.torres@acmecorp.com" },
+];
+
+// Relationship threads between people — tagged connections beyond reporting lines
+export const orgThreads = [
+  { id: "t1", from: "p3", to: "p4", tags: ["pair-programming", "code-review"], strength: 0.92, label: "Regular pair partners on core services" },
+  { id: "t2", from: "p3", to: "p5", tags: ["code-review", "security"], strength: 0.78, label: "Security review pipeline" },
+  { id: "t3", from: "p4", to: "p6", tags: ["mentorship"], strength: 0.85, label: "Marcus mentoring James on backend patterns" },
+  { id: "t4", from: "p5", to: "p10", tags: ["cross-team", "security"], strength: 0.71, label: "ML model security audit collaboration" },
+  { id: "t5", from: "p3", to: "p7", tags: ["pair-programming"], strength: 0.68, label: "Sprint pairing on API layer" },
+  { id: "t6", from: "p12", to: "p3", tags: ["cross-team", "architecture"], strength: 0.74, label: "Platform architecture alignment" },
+  { id: "t7", from: "p4", to: "p8", tags: ["mentorship", "onboarding"], strength: 0.80, label: "Marcus onboarding David to the codebase" },
+  { id: "t8", from: "p9", to: "p2", tags: ["cross-team", "planning"], strength: 0.65, label: "Cross-team sprint coordination" },
+  { id: "t9", from: "p7", to: "p11", tags: ["cross-team", "data"], strength: 0.55, label: "API ↔ data pipeline integration" },
+  { id: "t10", from: "p13", to: "p12", tags: ["deployment", "infra"], strength: 0.90, label: "CI/CD pipeline ownership" },
+];
+
+export const threadTagColors: Record<string, { bg: string; text: string }> = {
+  "pair-programming": { bg: "bg-forest/10", text: "text-forest" },
+  "code-review": { bg: "bg-sky-50", text: "text-sky-600" },
+  "mentorship": { bg: "bg-violet-100", text: "text-violet-600" },
+  "cross-team": { bg: "bg-terracotta/10", text: "text-terracotta" },
+  "security": { bg: "bg-danger/10", text: "text-danger" },
+  "architecture": { bg: "bg-amber/10", text: "text-warning" },
+  "onboarding": { bg: "bg-positive/10", text: "text-positive" },
+  "planning": { bg: "bg-stone-100", text: "text-stone-500" },
+  "data": { bg: "bg-sky-50", text: "text-sky-600" },
+  "deployment": { bg: "bg-stone-100", text: "text-stone-600" },
+  "infra": { bg: "bg-stone-100", text: "text-stone-600" },
+};
+
 // Team feedback (for manager /team/feedback)
 export const teamFeedbackAll = [
   { id: "tf1", reviewer: "Sarah Chen", subject: "Marcus Rivera", date: "Feb 13, 2026", summary: "Strong sprint execution. Consistently delivers on commitments and communicates blockers early.", sentiment: "positive" as const, score: 91, interactionType: "peer_review" },
@@ -381,18 +499,246 @@ export const leaderboardHistory = [
   ]},
 ];
 
-// Question bank (for /settings/questions)
-export const questionBank = [
-  { id: "q1", text: "What did this person do well in the last sprint?", category: "peer_review", coreValue: null, isSystem: true, active: true },
-  { id: "q2", text: "Can you share a specific example of how they demonstrated teamwork?", category: "peer_review", coreValue: "Teamwork", isSystem: true, active: true },
-  { id: "q3", text: "What's one thing they could improve on?", category: "peer_review", coreValue: null, isSystem: true, active: true },
-  { id: "q4", text: "How effectively did they communicate blockers and progress?", category: "peer_review", coreValue: "Communication", isSystem: true, active: true },
-  { id: "q5", text: "Describe a moment where they took ownership of a challenge.", category: "peer_review", coreValue: "Ownership", isSystem: false, active: true },
-  { id: "q6", text: "What accomplishment are you most proud of this week?", category: "self_reflection", coreValue: null, isSystem: true, active: true },
-  { id: "q7", text: "Where did you feel stuck, and how did you work through it?", category: "self_reflection", coreValue: null, isSystem: true, active: true },
-  { id: "q8", text: "How would you rate your manager's support this week?", category: "three_sixty", coreValue: null, isSystem: true, active: true },
-  { id: "q9", text: "What's the overall mood of your team right now?", category: "pulse_check", coreValue: null, isSystem: true, active: true },
-  { id: "q10", text: "How has this person demonstrated innovation in their recent work?", category: "peer_review", coreValue: "Innovation", isSystem: false, active: false },
+// Questionnaires — collections of question themes (directions, not rigid scripts)
+// AI rewords themes into natural conversation based on context, relationship, and prior interactions
+// verbatim: false (default) = AI adapts phrasing naturally
+// verbatim: true = AI uses exact wording from first examplePhrasing (for compliance/HR consistency)
+export const questionnaires = [
+  {
+    id: "qn1",
+    name: "Sprint Peer Review",
+    category: "peer_review" as const,
+    source: "built_in" as const,
+    active: true,
+    verbatim: false,
+    description: "End-of-sprint peer evaluation focused on collaboration and delivery quality",
+    themes: [
+      {
+        id: "th1",
+        intent: "Identify specific contributions and strengths",
+        dataGoal: "Capture concrete positive behaviors tied to recent work",
+        examplePhrasings: [
+          "What stood out to you about how they handled the sprint?",
+          "Can you think of a moment where they really came through?",
+          "What did they do particularly well this time around?",
+        ],
+        coreValue: null,
+      },
+      {
+        id: "th2",
+        intent: "Surface collaboration quality",
+        dataGoal: "Assess how well the person works with others and supports teammates",
+        examplePhrasings: [
+          "How was it working with them on shared tasks?",
+          "Did they make your work easier or harder? How so?",
+          "Can you share an example of how they supported the team?",
+        ],
+        coreValue: "Teamwork",
+      },
+      {
+        id: "th3",
+        intent: "Identify growth areas constructively",
+        dataGoal: "Get actionable improvement suggestions without negativity",
+        examplePhrasings: [
+          "If you could suggest one thing for them to try differently, what would it be?",
+          "What's one area where a small change could make a big difference?",
+          "Where do you see the most room for growth?",
+        ],
+        coreValue: null,
+      },
+      {
+        id: "th4",
+        intent: "Evaluate communication effectiveness",
+        dataGoal: "Understand how well they keep others informed and unblock themselves",
+        examplePhrasings: [
+          "How clear were they about where things stood with their work?",
+          "Did you always know what they were working on?",
+          "How effectively did they flag blockers or ask for help?",
+        ],
+        coreValue: "Communication",
+      },
+    ],
+    timesUsed: 47,
+    lastUsed: "Feb 13, 2026",
+  },
+  {
+    id: "qn2",
+    name: "Weekly Self-Reflection",
+    category: "self_reflection" as const,
+    source: "built_in" as const,
+    active: true,
+    verbatim: false,
+    description: "Personal reflection on accomplishments, challenges, and growth",
+    themes: [
+      {
+        id: "th5",
+        intent: "Celebrate wins and build confidence",
+        dataGoal: "Track what the person values about their own contributions",
+        examplePhrasings: [
+          "What felt like your biggest win this week?",
+          "What are you most proud of from the last few days?",
+          "What would you tell a friend you accomplished this week?",
+        ],
+        coreValue: null,
+      },
+      {
+        id: "th6",
+        intent: "Process challenges and blockers",
+        dataGoal: "Identify recurring obstacles and coping strategies",
+        examplePhrasings: [
+          "What was the trickiest part of your week?",
+          "Where did you feel stuck, and what helped you move forward?",
+          "Was there a moment where things felt hard? What happened?",
+        ],
+        coreValue: null,
+      },
+    ],
+    timesUsed: 32,
+    lastUsed: "Feb 14, 2026",
+  },
+  {
+    id: "qn3",
+    name: "Manager Effectiveness",
+    category: "three_sixty" as const,
+    source: "custom" as const,
+    active: true,
+    verbatim: true,
+    description: "Upward feedback on manager support, clarity, and team development — verbatim mode for consistent HR benchmarking",
+    themes: [
+      {
+        id: "th7",
+        intent: "Assess management support quality",
+        dataGoal: "Understand whether reports feel supported and unblocked",
+        examplePhrasings: [
+          "How supported did you feel by your manager this week?",
+          "Was there a time you needed help — did you get it?",
+          "How well does your manager remove obstacles for you?",
+        ],
+        coreValue: null,
+      },
+      {
+        id: "th8",
+        intent: "Evaluate clarity of direction",
+        dataGoal: "Check if priorities and expectations are communicated clearly",
+        examplePhrasings: [
+          "Are you clear on what's expected of you right now?",
+          "Do you feel like you understand the team's priorities?",
+          "How well does your manager set direction?",
+        ],
+        coreValue: "Communication",
+      },
+    ],
+    timesUsed: 14,
+    lastUsed: "Feb 7, 2026",
+  },
+  {
+    id: "qn4",
+    name: "Team Pulse",
+    category: "pulse_check" as const,
+    source: "imported" as const,
+    active: true,
+    verbatim: false,
+    description: "Quick sentiment check imported from company wellness survey template",
+    themes: [
+      {
+        id: "th9",
+        intent: "Gauge team morale",
+        dataGoal: "Track sentiment trends over time to catch culture issues early",
+        examplePhrasings: [
+          "How's the vibe on your team lately?",
+          "If you described the team energy in one word, what would it be?",
+          "What's the overall mood right now?",
+        ],
+        coreValue: null,
+      },
+    ],
+    timesUsed: 22,
+    lastUsed: "Feb 12, 2026",
+  },
+  {
+    id: "qn5",
+    name: "Ownership Deep-Dive",
+    category: "peer_review" as const,
+    source: "custom" as const,
+    active: false,
+    verbatim: false,
+    description: "Focused exploration of accountability and follow-through behaviors",
+    themes: [
+      {
+        id: "th10",
+        intent: "Probe initiative and accountability",
+        dataGoal: "Identify self-starting behavior and commitment to follow-through",
+        examplePhrasings: [
+          "Can you think of a time they took the lead without being asked?",
+          "How do they handle things when plans change or something breaks?",
+          "Describe a moment where they really owned a challenge.",
+        ],
+        coreValue: "Ownership",
+      },
+    ],
+    timesUsed: 5,
+    lastUsed: "Jan 15, 2026",
+  },
+];
+
+// AI-discovered question themes from comms analysis
+export const aiDiscoveredThemes = [
+  {
+    id: "ai1",
+    intent: "Cross-team handoff friction",
+    discoveredFrom: "Recurring mentions in #engineering and #product about unclear ownership during project transitions",
+    confidence: 0.89,
+    suggestedFor: "peer_review" as const,
+    examplePhrasings: [
+      "How smooth was the handoff between teams on this project?",
+      "Were there moments where it wasn't clear who owned what?",
+    ],
+    discoveredAt: "Feb 11, 2026",
+    status: "suggested" as const,
+    relatedCommsCount: 14,
+  },
+  {
+    id: "ai2",
+    intent: "Meeting overload impact on deep work",
+    discoveredFrom: "Calendar analysis shows 60%+ of eng team has >4hrs daily meetings; correlated Slack messages about focus time",
+    confidence: 0.82,
+    suggestedFor: "pulse_check" as const,
+    examplePhrasings: [
+      "Are you getting enough uninterrupted time to focus?",
+      "How do meetings affect your ability to do your best work?",
+    ],
+    discoveredAt: "Feb 9, 2026",
+    status: "accepted" as const,
+    relatedCommsCount: 23,
+  },
+  {
+    id: "ai3",
+    intent: "Recognition gap for backend contributors",
+    discoveredFrom: "Feedback data shows 70% fewer kudos for infrastructure work vs. user-facing features",
+    confidence: 0.74,
+    suggestedFor: "peer_review" as const,
+    examplePhrasings: [
+      "Has anyone behind the scenes made your work possible lately?",
+      "What invisible work has helped the team that deserves recognition?",
+    ],
+    discoveredAt: "Feb 6, 2026",
+    status: "suggested" as const,
+    relatedCommsCount: 8,
+  },
+  {
+    id: "ai4",
+    intent: "Onboarding support quality",
+    discoveredFrom: "New hire mentions in #general about feeling lost; correlates with low first-month engagement scores",
+    confidence: 0.91,
+    suggestedFor: "three_sixty" as const,
+    examplePhrasings: [
+      "How well supported did you feel in your first few weeks?",
+      "Was there something that would have made ramping up easier?",
+    ],
+    discoveredAt: "Jan 30, 2026",
+    status: "dismissed" as const,
+    relatedCommsCount: 6,
+  },
 ];
 
 // Escalation audit trail (for /settings/escalations)

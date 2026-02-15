@@ -2,8 +2,9 @@ import { Sidebar } from "@/components/sidebar";
 
 const navItems = [
   { label: "Organization", href: "/settings", icon: "◉" },
+  { label: "People", href: "/settings/people", icon: "⊡" },
   { label: "Core Values", href: "/settings/values", icon: "◇" },
-  { label: "Question Bank", href: "/settings/questions", icon: "◈" },
+  { label: "Questionnaires", href: "/settings/questions", icon: "◈" },
   { label: "Integrations", href: "/settings/integrations", icon: "⬡" },
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },
 ];
