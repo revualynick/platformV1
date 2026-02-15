@@ -1,0 +1,31 @@
+{
+  "name": "@revualy/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@revualy/shared": "workspace:*",
+    "@revualy/chat-core": "workspace:*",
+    "@revualy/chat-adapter-slack": "workspace:*",
+    "@revualy/ai-core": "workspace:*",
+    "@revualy/db": "workspace:*",
+    "fastify": "^5.2.0",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/cookie": "^11.0.0",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}
