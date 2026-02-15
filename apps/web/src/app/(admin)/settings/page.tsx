@@ -1,4 +1,10 @@
-import { coreValues, integrations, escalations } from "@/lib/mock-data";
+import { getOrgConfig } from "@/lib/api";
+import {
+  coreValues as mockCoreValues,
+  integrations,
+  escalations,
+} from "@/lib/mock-data";
+import { ValuesCard } from "./values-card";
 
 const severityStyles = {
   coaching: {
@@ -37,7 +43,22 @@ const platformIcons: Record<string, string> = {
   google_calendar: "📅",
 };
 
-export default function AdminSettings() {
+async function loadValues() {
+  try {
+    const { coreValues } = await getOrgConfig();
+    return coreValues.map((v) => ({
+      id: v.id,
+      name: v.name,
+      description: v.description,
+      active: v.isActive,
+    }));
+  } catch {
+    return mockCoreValues;
+  }
+}
+
+export default async function AdminSettings() {
+  const coreValues = await loadValues();
   const openEscalations = escalations.filter((e) => e.status === "open");
 
   return (
@@ -110,51 +131,7 @@ export default function AdminSettings() {
             className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
             style={{ animationDelay: "300ms", boxShadow: "var(--shadow-sm)" }}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-display text-base font-semibold text-stone-800">
-                Core Values
-              </h3>
-              <button className="rounded-xl bg-forest/[0.06] px-4 py-2 text-xs font-medium text-forest hover:bg-forest/10">
-                + Add Value
-              </button>
-            </div>
-            <div className="space-y-2">
-              {coreValues.map((value, i) => (
-                <div
-                  key={value.id}
-                  className="group flex items-center gap-4 rounded-xl px-4 py-3 transition-colors hover:bg-stone-50"
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-forest/[0.06] text-xs font-bold text-forest">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-stone-800">
-                      {value.name}
-                    </p>
-                    <p className="text-xs text-stone-400">
-                      {value.description}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600">
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ValuesCard values={coreValues} />
           </div>
 
           {/* Integrations */}

@@ -1,78 +1,90 @@
 import type { FastifyPluginAsync } from "fastify";
+import { Queue } from "bullmq";
 import { AdapterRegistry } from "@revualy/chat-core";
+import type { ChatPlatform } from "@revualy/shared";
 
 const registry = new AdapterRegistry();
+
+// Lazy-initialized conversation queue (set by server startup)
+let conversationQueue: Queue | null = null;
+
+export function setConversationQueue(queue: Queue) {
+  conversationQueue = queue;
+}
+
+async function handleWebhook(
+  app: { log: { info: (...args: unknown[]) => void } },
+  platform: ChatPlatform,
+  headers: Record<string, string>,
+  body: unknown,
+  orgId: string,
+) {
+  if (!registry.has(platform)) return { status: 503, body: { error: `${platform} adapter not configured` } };
+
+  const adapter = registry.get(platform);
+  const verification = await adapter.verifyWebhook(headers, body);
+
+  if (!verification.isValid) return { status: 401, body: { error: "Invalid signature" } };
+  if (verification.challenge) return { status: 200, body: { challenge: verification.challenge } };
+
+  const message = await adapter.normalizeInbound(body);
+  if (message && conversationQueue) {
+    // Enqueue as a conversation reply job
+    await conversationQueue.add("reply", {
+      type: "reply",
+      orgId,
+      conversationId: message.threadId ?? "", // thread maps to conversation
+      userMessage: message.text,
+      platform,
+      platformUserId: message.platformUserId,
+      platformChannelId: message.platformChannelId,
+    });
+    app.log.info({ messageId: message.id, platform }, "Inbound message enqueued");
+  } else if (message) {
+    app.log.info({ messageId: message.id, platform }, "Inbound message received (no queue)");
+  }
+
+  return { status: 200, body: undefined };
+}
 
 export const chatRoutes: FastifyPluginAsync = async (app) => {
   // Slack webhook
   app.post("/slack/events", async (request, reply) => {
-    if (!registry.has("slack")) {
-      return reply.code(503).send({ error: "Slack adapter not configured" });
-    }
-
-    const adapter = registry.get("slack");
-    const headers = request.headers as Record<string, string>;
-    const verification = await adapter.verifyWebhook(headers, request.body);
-
-    if (!verification.isValid) {
-      return reply.code(401).send({ error: "Invalid signature" });
-    }
-
-    if (verification.challenge) {
-      return reply.send({ challenge: verification.challenge });
-    }
-
-    const message = await adapter.normalizeInbound(request.body);
-    if (message) {
-      // TODO: Publish to BullMQ event bus for conversation manager
-      app.log.info({ messageId: message.id, platform: "slack" }, "Inbound message received");
-    }
-
-    return reply.code(200).send();
+    const orgId = request.tenant?.orgId ?? "unknown";
+    const result = await handleWebhook(
+      app,
+      "slack",
+      request.headers as Record<string, string>,
+      request.body,
+      orgId,
+    );
+    return reply.code(result.status).send(result.body);
   });
 
   // Google Chat webhook
   app.post("/gchat/events", async (request, reply) => {
-    if (!registry.has("google_chat")) {
-      return reply.code(503).send({ error: "Google Chat adapter not configured" });
-    }
-
-    const adapter = registry.get("google_chat");
-    const headers = request.headers as Record<string, string>;
-    const verification = await adapter.verifyWebhook(headers, request.body);
-
-    if (!verification.isValid) {
-      return reply.code(401).send({ error: "Invalid signature" });
-    }
-
-    const message = await adapter.normalizeInbound(request.body);
-    if (message) {
-      app.log.info({ messageId: message.id, platform: "google_chat" }, "Inbound message received");
-    }
-
-    return reply.code(200).send();
+    const orgId = request.tenant?.orgId ?? "unknown";
+    const result = await handleWebhook(
+      app,
+      "google_chat",
+      request.headers as Record<string, string>,
+      request.body,
+      orgId,
+    );
+    return reply.code(result.status).send(result.body);
   });
 
   // Teams webhook
   app.post("/teams/events", async (request, reply) => {
-    if (!registry.has("teams")) {
-      return reply.code(503).send({ error: "Teams adapter not configured" });
-    }
-
-    const adapter = registry.get("teams");
-    const headers = request.headers as Record<string, string>;
-    const verification = await adapter.verifyWebhook(headers, request.body);
-
-    if (!verification.isValid) {
-      return reply.code(401).send({ error: "Invalid signature" });
-    }
-
-    const message = await adapter.normalizeInbound(request.body);
-    if (message) {
-      app.log.info({ messageId: message.id, platform: "teams" }, "Inbound message received");
-    }
-
-    return reply.code(200).send();
+    const orgId = request.tenant?.orgId ?? "unknown";
+    const result = await handleWebhook(
+      app,
+      "teams",
+      request.headers as Record<string, string>,
+      request.body,
+      orgId,
+    );
+    return reply.code(result.status).send(result.body);
   });
 };
 

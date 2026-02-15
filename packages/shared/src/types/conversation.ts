@@ -41,6 +41,31 @@ export interface Question {
   createdAt: ISODateTime;
 }
 
+export type QuestionnaireSource = "built_in" | "custom" | "imported";
+
+export interface Questionnaire {
+  id: UUID;
+  name: string;
+  category: InteractionType;
+  source: QuestionnaireSource;
+  verbatim: boolean;
+  isActive: boolean;
+  themes: QuestionnaireTheme[];
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
+}
+
+export interface QuestionnaireTheme {
+  id: UUID;
+  questionnaireId: UUID;
+  intent: string;
+  dataGoal: string;
+  examplePhrasings: string[];
+  coreValueId: UUID | null;
+  sortOrder: number;
+  createdAt: ISODateTime;
+}
+
 export interface InteractionScheduleEntry {
   id: UUID;
   userId: UUID;

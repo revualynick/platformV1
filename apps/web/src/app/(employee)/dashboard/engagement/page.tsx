@@ -1,19 +1,92 @@
+import { auth } from "@/lib/auth";
+import { getEngagementScores } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import {
-  weeklyEngagementDetail,
-  engagementHistory,
-  currentUser,
+  weeklyEngagementDetail as mockWeeklyDetail,
+  engagementHistory as mockHistory,
+  currentUser as mockUser,
 } from "@/lib/mock-data";
 
-const statusStyles = {
+const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
   complete: { bg: "bg-positive/10", text: "text-positive", label: "Complete" },
   partial: { bg: "bg-amber/10", text: "text-warning", label: "Partial" },
 };
 
-export default function EngagementPage() {
-  const current = weeklyEngagementDetail[0];
-  const previous = weeklyEngagementDetail[1];
+type WeekDetail = {
+  week: string;
+  score: number;
+  interactions: number;
+  avgWordCount: number;
+  responseTime: string;
+  specificExamples: number;
+  status: string;
+};
+
+async function loadEngagementData() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return {
+      weeklyDetail: mockWeeklyDetail as WeekDetail[],
+      chartData: mockHistory,
+      streak: mockUser.streak,
+    };
+  }
+
+  try {
+    const result = await getEngagementScores(userId);
+    if (result.data.length === 0) {
+      return {
+        weeklyDetail: mockWeeklyDetail as WeekDetail[],
+        chartData: mockHistory,
+        streak: mockUser.streak,
+      };
+    }
+
+    const scores = result.data;
+
+    // Build chart data (last 6 weeks)
+    const chartData = scores.slice(-6).map((s) => ({
+      week: new Date(s.weekStarting).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      score: s.averageQualityScore,
+      interactions: s.interactionsCompleted,
+    }));
+
+    // Build weekly detail
+    const weeklyDetail: WeekDetail[] = scores.slice(-6).reverse().map((s) => ({
+      week: new Date(s.weekStarting).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      score: s.averageQualityScore,
+      interactions: s.interactionsCompleted,
+      // These fields aren't tracked per-week in the API yet — use reasonable defaults
+      avgWordCount: 0,
+      responseTime: "—",
+      specificExamples: 0,
+      status: s.interactionsCompleted >= s.interactionsTarget ? "complete" : "partial",
+    }));
+
+    const latest = scores[scores.length - 1];
+
+    return {
+      weeklyDetail,
+      chartData,
+      streak: latest.streak,
+    };
+  } catch {
+    return {
+      weeklyDetail: mockWeeklyDetail as WeekDetail[],
+      chartData: mockHistory,
+      streak: mockUser.streak,
+    };
+  }
+}
+
+export default async function EngagementPage() {
+  const { weeklyDetail, chartData, streak } = await loadEngagementData();
+
+  const current = weeklyDetail[0];
+  const previous = weeklyDetail[1] ?? current;
   const scoreDelta = current.score - previous.score;
 
   return (
@@ -57,7 +130,7 @@ export default function EngagementPage() {
             <span className="text-xs text-stone-400">vs last week</span>
           </div>
           <p className="mt-3 text-center text-xs text-stone-400">
-            {currentUser.streak}w streak
+            {streak}w streak
           </p>
         </div>
 
@@ -72,7 +145,7 @@ export default function EngagementPage() {
             },
             {
               label: "Avg Word Count",
-              value: current.avgWordCount.toString(),
+              value: current.avgWordCount > 0 ? current.avgWordCount.toString() : "—",
               sub: "Words per response",
               color: "text-stone-900",
             },
@@ -84,7 +157,7 @@ export default function EngagementPage() {
             },
             {
               label: "Specific Examples",
-              value: current.specificExamples.toString(),
+              value: current.specificExamples > 0 ? current.specificExamples.toString() : "—",
               sub: "Cited in feedback",
               color: "text-forest",
             },
@@ -124,7 +197,7 @@ export default function EngagementPage() {
           </h3>
           <span className="text-xs text-stone-400">Last 6 weeks</span>
         </div>
-        <EngagementChart data={engagementHistory} />
+        <EngagementChart data={chartData} />
       </div>
 
       {/* Weekly history table */}
@@ -150,13 +223,13 @@ export default function EngagementPage() {
             )}
           </div>
           {/* Rows */}
-          {weeklyEngagementDetail.map((week, i) => {
-            const status = statusStyles[week.status];
+          {weeklyDetail.map((week, i) => {
+            const status = statusStyles[week.status] ?? statusStyles.partial;
             return (
               <div
                 key={week.week}
                 className={`grid grid-cols-6 items-center gap-4 py-3.5 ${
-                  i !== weeklyEngagementDetail.length - 1
+                  i !== weeklyDetail.length - 1
                     ? "border-b border-stone-50"
                     : ""
                 }`}
@@ -179,7 +252,7 @@ export default function EngagementPage() {
                   {week.interactions} / 3
                 </span>
                 <span className="text-sm tabular-nums text-stone-600">
-                  {week.avgWordCount}
+                  {week.avgWordCount > 0 ? week.avgWordCount : "—"}
                 </span>
                 <span className="text-sm text-stone-600">
                   {week.responseTime}

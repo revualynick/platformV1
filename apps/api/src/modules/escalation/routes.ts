@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
+import { requireRole } from "../../lib/rbac.js";
 
 export const escalationRoutes: FastifyPluginAsync = async (app) => {
+  // Escalations are admin/HR only
+  app.addHook("preHandler", requireRole("admin"));
   // GET /escalations — HR feed (HR/admin only)
   app.get("/", async (request, reply) => {
     // TODO: List escalations with audit trail

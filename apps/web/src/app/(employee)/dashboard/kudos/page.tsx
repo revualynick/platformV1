@@ -1,4 +1,9 @@
-import { kudosReceived, kudosGiven } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { getKudos, getOrgConfig } from "@/lib/api";
+import {
+  kudosReceived as mockReceived,
+  kudosGiven as mockGiven,
+} from "@/lib/mock-data";
 
 const valueColors: Record<string, string> = {
   Ownership: "bg-terracotta/10 text-terracotta",
@@ -8,7 +13,77 @@ const valueColors: Record<string, string> = {
   Innovation: "bg-amber/10 text-warning",
 };
 
-export default function KudosPage() {
+type KudosItem = {
+  id: string;
+  from: string;
+  to: string;
+  date: string;
+  message: string;
+  value: string;
+};
+
+async function loadKudosData() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { received: mockReceived, given: mockGiven };
+  }
+
+  try {
+    const [kudosResult, orgResult] = await Promise.allSettled([
+      getKudos(userId),
+      getOrgConfig(),
+    ]);
+
+    const valuesMap = new Map<string, string>();
+    if (orgResult.status === "fulfilled") {
+      orgResult.value.coreValues.forEach((v) => valuesMap.set(v.id, v.name));
+    }
+
+    if (kudosResult.status === "fulfilled" && kudosResult.value.data.length > 0) {
+      const all = kudosResult.value.data;
+      const received: KudosItem[] = all
+        .filter((k) => k.receiverId === userId)
+        .map((k) => ({
+          id: k.id,
+          from: "Colleague", // Names not resolved yet
+          to: "You",
+          date: new Date(k.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          message: k.message,
+          value: k.coreValueId ? (valuesMap.get(k.coreValueId) ?? "Recognition") : "Recognition",
+        }));
+
+      const given: KudosItem[] = all
+        .filter((k) => k.giverId === userId)
+        .map((k) => ({
+          id: k.id,
+          from: "You",
+          to: "Colleague",
+          date: new Date(k.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          message: k.message,
+          value: k.coreValueId ? (valuesMap.get(k.coreValueId) ?? "Recognition") : "Recognition",
+        }));
+
+      if (received.length > 0 || given.length > 0) {
+        return { received, given };
+      }
+    }
+
+    return { received: mockReceived, given: mockGiven };
+  } catch {
+    return { received: mockReceived, given: mockGiven };
+  }
+}
+
+export default async function KudosPage() {
+  const { received, given } = await loadKudosData();
+
+  // Determine top value from received kudos
+  const valueCounts: Record<string, number> = {};
+  received.forEach((k) => { valueCounts[k.value] = (valueCounts[k.value] || 0) + 1; });
+  const topValue = Object.entries(valueCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+
   return (
     <div className="max-w-5xl">
       {/* Header */}
@@ -24,19 +99,19 @@ export default function KudosPage() {
         {[
           {
             label: "Received",
-            value: kudosReceived.length.toString(),
+            value: received.length.toString(),
             sub: "From your peers",
             color: "text-forest",
           },
           {
             label: "Given",
-            value: kudosGiven.length.toString(),
+            value: given.length.toString(),
             sub: "To your peers",
             color: "text-terracotta",
           },
           {
             label: "Top Value",
-            value: "Ownership",
+            value: topValue,
             sub: "Most recognized for",
             color: "text-stone-900",
           },
@@ -73,7 +148,7 @@ export default function KudosPage() {
               Received
             </h3>
             <div className="space-y-4">
-              {kudosReceived.map((kudo, i) => (
+              {received.map((kudo, i) => (
                 <div
                   key={kudo.id}
                   className="card-enter group rounded-xl border border-stone-100 p-5 transition-colors hover:border-stone-200"
@@ -125,7 +200,7 @@ export default function KudosPage() {
               Given
             </h3>
             <div className="space-y-4">
-              {kudosGiven.map((kudo, i) => (
+              {given.map((kudo, i) => (
                 <div
                   key={kudo.id}
                   className="card-enter rounded-xl border border-stone-100 p-5 transition-colors hover:border-stone-200"

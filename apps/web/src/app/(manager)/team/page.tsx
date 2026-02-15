@@ -1,47 +1,163 @@
+import { auth } from "@/lib/auth";
+import { getUsers, getEngagementScores, getFlaggedItems } from "@/lib/api";
 import { TeamTrendChart } from "@/components/charts/team-trend-chart";
 import {
-  teamMembers,
-  flaggedItems,
-  leaderboard,
-  teamEngagementTrend,
+  teamMembers as mockTeamMembers,
+  flaggedItems as mockFlaggedItems,
+  leaderboard as mockLeaderboard,
+  teamEngagementTrend as mockTrend,
 } from "@/lib/mock-data";
 
-const trendIcons = {
-  up: { icon: "▲", color: "text-positive" },
-  stable: { icon: "—", color: "text-stone-400" },
-  down: { icon: "▼", color: "text-danger" },
+const trendIcons: Record<string, { icon: string; color: string }> = {
+  up: { icon: "\u25B2", color: "text-positive" },
+  stable: { icon: "\u2014", color: "text-stone-400" },
+  down: { icon: "\u25BC", color: "text-danger" },
 };
 
-const severityStyles = {
-  coaching: {
-    bg: "bg-amber/10",
-    text: "text-warning",
-    border: "border-amber/20",
-    label: "Coaching",
-  },
-  warning: {
-    bg: "bg-terracotta/10",
-    text: "text-terracotta",
-    border: "border-terracotta/20",
-    label: "Warning",
-  },
-  critical: {
-    bg: "bg-danger/10",
-    text: "text-danger",
-    border: "border-danger/20",
-    label: "Critical",
-  },
+const severityStyles: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  coaching: { bg: "bg-amber/10", text: "text-warning", border: "border-amber/20", label: "Coaching" },
+  warning: { bg: "bg-terracotta/10", text: "text-terracotta", border: "border-terracotta/20", label: "Warning" },
+  critical: { bg: "bg-danger/10", text: "text-danger", border: "border-danger/20", label: "Critical" },
 };
 
-export default function TeamDashboard() {
-  const avgEngagement = Math.round(
-    teamMembers.reduce((sum, m) => sum + m.engagementScore, 0) /
-      teamMembers.length,
-  );
-  const totalInteractions = teamMembers.reduce(
-    (sum, m) => sum + m.interactionsThisWeek,
-    0,
-  );
+type TeamMember = {
+  id: string;
+  name: string;
+  engagementScore: number;
+  interactionsThisWeek: number;
+  target: number;
+  trend: string;
+};
+
+type FlaggedItem = {
+  id: string;
+  severity: string;
+  subjectName: string;
+  reason: string;
+  excerpt: string | null;
+  date: string;
+};
+
+type LeaderboardEntry = {
+  rank: number;
+  name: string;
+  score: number;
+  streak: number;
+};
+
+async function loadTeamData() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return {
+      teamName: "Engineering",
+      teamMembers: mockTeamMembers as TeamMember[],
+      flaggedItems: mockFlaggedItems as FlaggedItem[],
+      leaderboard: mockLeaderboard as LeaderboardEntry[],
+      trendData: mockTrend,
+    };
+  }
+
+  try {
+    const [usersResult, flaggedResult] = await Promise.allSettled([
+      getUsers({ managerId: userId }),
+      getFlaggedItems(),
+    ]);
+
+    let teamMembers: TeamMember[] = mockTeamMembers;
+    let leaderboard: LeaderboardEntry[] = mockLeaderboard;
+
+    if (usersResult.status === "fulfilled" && usersResult.value.data.length > 0) {
+      const members = usersResult.value.data;
+
+      // Fetch engagement scores for each team member
+      const engResults = await Promise.allSettled(
+        members.map((m) => getEngagementScores(m.id)),
+      );
+
+      teamMembers = members.map((m, idx) => {
+        const eng = engResults[idx];
+        let score = 0;
+        let interactions = 0;
+        let target = 3;
+        let streak = 0;
+        if (eng.status === "fulfilled" && eng.value.data.length > 0) {
+          const latest = eng.value.data[eng.value.data.length - 1];
+          score = latest.averageQualityScore;
+          interactions = latest.interactionsCompleted;
+          target = latest.interactionsTarget;
+          streak = latest.streak;
+          const prev = eng.value.data.length > 1 ? eng.value.data[eng.value.data.length - 2] : null;
+          const delta = prev ? latest.averageQualityScore - prev.averageQualityScore : 0;
+          return {
+            id: m.id,
+            name: m.name,
+            engagementScore: score,
+            interactionsThisWeek: interactions,
+            target,
+            trend: delta > 2 ? "up" : delta < -2 ? "down" : "stable",
+          };
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          engagementScore: score,
+          interactionsThisWeek: interactions,
+          target,
+          trend: "stable",
+        };
+      });
+
+      // Build leaderboard from team members
+      leaderboard = [...teamMembers]
+        .sort((a, b) => b.engagementScore - a.engagementScore)
+        .map((m, i) => ({
+          rank: i + 1,
+          name: m.name,
+          score: m.engagementScore,
+          streak: 0,
+        }));
+    }
+
+    // Flagged items
+    let flaggedItems: FlaggedItem[] = mockFlaggedItems;
+    if (flaggedResult.status === "fulfilled" && flaggedResult.value.data.length > 0) {
+      flaggedItems = flaggedResult.value.data.map((item) => ({
+        id: item.escalation.id,
+        severity: item.escalation.severity,
+        subjectName: "Team Member",
+        reason: item.escalation.reason,
+        excerpt: item.escalation.flaggedContent || null,
+        date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      }));
+    }
+
+    return {
+      teamName: "Your Team",
+      teamMembers,
+      flaggedItems,
+      leaderboard,
+      trendData: mockTrend, // Trend chart needs historical aggregate — not available per API yet
+    };
+  } catch {
+    return {
+      teamName: "Engineering",
+      teamMembers: mockTeamMembers as TeamMember[],
+      flaggedItems: mockFlaggedItems as FlaggedItem[],
+      leaderboard: mockLeaderboard as LeaderboardEntry[],
+      trendData: mockTrend,
+    };
+  }
+}
+
+export default async function TeamDashboard() {
+  const { teamName, teamMembers, flaggedItems, leaderboard, trendData } = await loadTeamData();
+
+  const avgEngagement = teamMembers.length > 0
+    ? Math.round(teamMembers.reduce((sum, m) => sum + m.engagementScore, 0) / teamMembers.length)
+    : 0;
+  const totalInteractions = teamMembers.reduce((sum, m) => sum + m.interactionsThisWeek, 0);
   const totalTarget = teamMembers.reduce((sum, m) => sum + m.target, 0);
 
   return (
@@ -50,7 +166,7 @@ export default function TeamDashboard() {
       <div className="mb-10">
         <p className="text-sm font-medium text-stone-400">Team overview</p>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
-          Engineering
+          {teamName}
         </h1>
       </div>
 
@@ -119,7 +235,7 @@ export default function TeamDashboard() {
               Range: highest — avg — lowest
             </span>
           </div>
-          <TeamTrendChart data={teamEngagementTrend} />
+          <TeamTrendChart data={trendData} />
         </div>
 
         {/* Leaderboard */}
@@ -182,7 +298,7 @@ export default function TeamDashboard() {
         </h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {teamMembers.map((member) => {
-            const trend = trendIcons[member.trend];
+            const trend = trendIcons[member.trend] ?? trendIcons.stable;
             return (
               <div
                 key={member.id}
@@ -258,7 +374,7 @@ export default function TeamDashboard() {
           </h3>
           <div className="space-y-3">
             {flaggedItems.map((item) => {
-              const style = severityStyles[item.severity];
+              const style = severityStyles[item.severity] ?? severityStyles.coaching;
               return (
                 <div
                   key={item.id}

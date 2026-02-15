@@ -1,19 +1,108 @@
-import { teamFeedbackAll, teamMembers } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { getUsers, getFeedback, getOrgConfig } from "@/lib/api";
+import {
+  teamFeedbackAll as mockTeamFeedback,
+  teamMembers as mockTeamMembers,
+} from "@/lib/mock-data";
 
-const sentimentColors = {
+const sentimentColors: Record<string, { bg: string; text: string; label: string }> = {
   positive: { bg: "bg-positive/10", text: "text-positive", label: "Positive" },
   neutral: { bg: "bg-amber/10", text: "text-warning", label: "Neutral" },
   negative: { bg: "bg-danger/10", text: "text-danger", label: "Negative" },
   mixed: { bg: "bg-stone-100", text: "text-stone-600", label: "Mixed" },
 };
 
-export default function TeamFeedbackPage() {
-  const avgScore = Math.round(
-    teamFeedbackAll.reduce((sum, f) => sum + f.score, 0) /
-      teamFeedbackAll.length,
-  );
-  const highQuality = teamFeedbackAll.filter((f) => f.score >= 80).length;
-  const lowQuality = teamFeedbackAll.filter((f) => f.score < 50).length;
+type TeamFeedback = {
+  id: string;
+  reviewer: string;
+  subject: string;
+  summary: string;
+  sentiment: string;
+  score: number;
+  date: string;
+  interactionType: string;
+};
+
+type MemberSummary = { id: string; name: string };
+
+async function loadTeamFeedbackData() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return {
+      feedback: mockTeamFeedback as TeamFeedback[],
+      members: mockTeamMembers.map((m) => ({ id: m.id, name: m.name })),
+    };
+  }
+
+  try {
+    const [usersResult, orgResult] = await Promise.allSettled([
+      getUsers({ managerId: userId }),
+      getOrgConfig(),
+    ]);
+
+    if (usersResult.status !== "fulfilled" || usersResult.value.data.length === 0) {
+      return {
+        feedback: mockTeamFeedback as TeamFeedback[],
+        members: mockTeamMembers.map((m) => ({ id: m.id, name: m.name })),
+      };
+    }
+
+    const teamUsers = usersResult.value.data;
+    const members: MemberSummary[] = teamUsers.map((u) => ({ id: u.id, name: u.name }));
+    const nameMap = new Map(teamUsers.map((u) => [u.id, u.name]));
+
+    // Fetch feedback for each team member in parallel
+    const fbResults = await Promise.allSettled(
+      teamUsers.map((u) => getFeedback(u.id)),
+    );
+
+    const allFeedback: TeamFeedback[] = [];
+    fbResults.forEach((result) => {
+      if (result.status === "fulfilled") {
+        result.value.data.forEach((e) => {
+          allFeedback.push({
+            id: e.id,
+            reviewer: nameMap.get(e.reviewerId) ?? "Peer",
+            subject: nameMap.get(e.subjectId) ?? "Team Member",
+            summary: e.aiSummary || "No summary available",
+            sentiment: e.sentiment,
+            score: e.engagementScore,
+            date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            interactionType: e.interactionType,
+          });
+        });
+      }
+    });
+
+    // Sort by date descending
+    allFeedback.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (allFeedback.length > 0) {
+      return { feedback: allFeedback, members };
+    }
+
+    return {
+      feedback: mockTeamFeedback as TeamFeedback[],
+      members: mockTeamMembers.map((m) => ({ id: m.id, name: m.name })),
+    };
+  } catch {
+    return {
+      feedback: mockTeamFeedback as TeamFeedback[],
+      members: mockTeamMembers.map((m) => ({ id: m.id, name: m.name })),
+    };
+  }
+}
+
+export default async function TeamFeedbackPage() {
+  const { feedback, members } = await loadTeamFeedbackData();
+
+  const avgScore = feedback.length > 0
+    ? Math.round(feedback.reduce((sum, f) => sum + f.score, 0) / feedback.length)
+    : 0;
+  const highQuality = feedback.filter((f) => f.score >= 80).length;
+  const lowQuality = feedback.filter((f) => f.score < 50).length;
 
   return (
     <div className="max-w-6xl">
@@ -30,7 +119,7 @@ export default function TeamFeedbackPage() {
         {[
           {
             label: "Total Entries",
-            value: teamFeedbackAll.length.toString(),
+            value: feedback.length.toString(),
             sub: "This period",
             color: "text-stone-900",
           },
@@ -43,7 +132,7 @@ export default function TeamFeedbackPage() {
           {
             label: "High Quality",
             value: highQuality.toString(),
-            sub: "Score ≥ 80",
+            sub: "Score \u2265 80",
             color: "text-positive",
           },
           {
@@ -77,8 +166,8 @@ export default function TeamFeedbackPage() {
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Feedback list */}
         <div className="space-y-3 lg:col-span-8">
-          {teamFeedbackAll.map((fb, i) => {
-            const sentiment = sentimentColors[fb.sentiment];
+          {feedback.map((fb, i) => {
+            const sentiment = sentimentColors[fb.sentiment] ?? sentimentColors.neutral;
             return (
               <div
                 key={fb.id}
@@ -90,7 +179,7 @@ export default function TeamFeedbackPage() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    {/* Reviewer → Subject */}
+                    {/* Reviewer -> Subject */}
                     <div className="flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-100 text-[10px] font-medium text-stone-600">
                         {fb.reviewer
@@ -169,15 +258,11 @@ export default function TeamFeedbackPage() {
               Per Member
             </h3>
             <div className="space-y-3">
-              {teamMembers.map((member) => {
-                const memberFeedback = teamFeedbackAll.filter(
-                  (f) =>
-                    f.subject === member.name || f.reviewer === member.name,
-                );
-                const given = teamFeedbackAll.filter(
+              {members.map((member) => {
+                const given = feedback.filter(
                   (f) => f.reviewer === member.name,
                 ).length;
-                const received = teamFeedbackAll.filter(
+                const received = feedback.filter(
                   (f) => f.subject === member.name,
                 ).length;
                 return (

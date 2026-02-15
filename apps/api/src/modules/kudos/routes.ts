@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
+import { requireAuth } from "../../lib/rbac.js";
 
 export const kudosRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preHandler", requireAuth);
   // POST /kudos — Create a kudos
   app.post("/", async (request, reply) => {
     // TODO: Create kudos entry

@@ -1,0 +1,437 @@
+// Typed API client for Revualy backend
+// Server components: uses absolute URL to Fastify + auth session headers
+// Client components: not supported — use server actions instead
+
+import { auth } from "@/lib/auth";
+
+const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? "dev-secret";
+
+async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  // Resolve auth session for tenant context
+  const session = await auth();
+  const authHeaders: Record<string, string> = session
+    ? {
+        "x-org-id": session.orgId,
+        "x-user-id": session.user.id,
+        "x-internal-secret": INTERNAL_SECRET,
+      }
+    : {
+        // Dev fallback when no session (e.g. during development without auth)
+        "x-org-id": "dev-org",
+        "x-user-id": "dev-user",
+      };
+
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...init?.headers,
+    },
+    // Don't cache by default for server components — data changes frequently
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${path} — ${body}`);
+  }
+
+  return res.json() as Promise<T>;
+}
+
+// ── Org / Admin ────────────────────────────────────────
+
+export interface CoreValueRow {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface TeamRow {
+  id: string;
+  name: string;
+  managerId: string | null;
+  parentTeamId: string | null;
+  createdAt: string;
+}
+
+export async function getOrgConfig() {
+  return apiFetch<{ coreValues: CoreValueRow[]; teams: TeamRow[] }>(
+    "/api/v1/admin/org",
+  );
+}
+
+export async function createCoreValue(data: {
+  name: string;
+  description?: string;
+  sortOrder?: number;
+}) {
+  return apiFetch<CoreValueRow>("/api/v1/admin/values", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCoreValue(
+  id: string,
+  data: { name?: string; description?: string; sortOrder?: number; isActive?: boolean },
+) {
+  return apiFetch<CoreValueRow>(`/api/v1/admin/values/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Questionnaires ─────────────────────────────────────
+
+export interface ThemeRow {
+  id: string;
+  questionnaireId: string;
+  intent: string;
+  dataGoal: string;
+  examplePhrasings: string[];
+  coreValueId: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface QuestionnaireRow {
+  id: string;
+  name: string;
+  category: string;
+  source: string;
+  verbatim: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  themes: ThemeRow[];
+}
+
+export async function getQuestionnaires() {
+  return apiFetch<{ data: QuestionnaireRow[] }>(
+    "/api/v1/admin/questionnaires",
+  );
+}
+
+export async function createQuestionnaire(data: {
+  name: string;
+  category: string;
+  source?: string;
+  verbatim?: boolean;
+  themes?: Array<{
+    intent: string;
+    dataGoal: string;
+    examplePhrasings?: string[];
+    coreValueId?: string;
+  }>;
+}) {
+  return apiFetch<QuestionnaireRow>("/api/v1/admin/questionnaires", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateQuestionnaire(
+  id: string,
+  data: { name?: string; category?: string; verbatim?: boolean; isActive?: boolean },
+) {
+  return apiFetch<QuestionnaireRow>(`/api/v1/admin/questionnaires/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteQuestionnaire(id: string) {
+  return apiFetch<{ id: string; deleted: true }>(
+    `/api/v1/admin/questionnaires/${id}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function createTheme(
+  questionnaireId: string,
+  data: {
+    intent: string;
+    dataGoal: string;
+    examplePhrasings?: string[];
+    coreValueId?: string;
+    sortOrder?: number;
+  },
+) {
+  return apiFetch<ThemeRow>(
+    `/api/v1/admin/questionnaires/${questionnaireId}/themes`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export async function updateTheme(
+  id: string,
+  data: {
+    intent?: string;
+    dataGoal?: string;
+    examplePhrasings?: string[];
+    coreValueId?: string | null;
+    sortOrder?: number;
+  },
+) {
+  return apiFetch<ThemeRow>(`/api/v1/admin/themes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteTheme(id: string) {
+  return apiFetch<{ id: string; deleted: true }>(
+    `/api/v1/admin/themes/${id}`,
+    { method: "DELETE" },
+  );
+}
+
+// ── Users ──────────────────────────────────────────────
+
+export interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  teamId: string | null;
+  managerId: string | null;
+  timezone: string;
+  isActive: boolean;
+  onboardingCompleted: boolean;
+  preferences: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getUser(id: string) {
+  return apiFetch<UserRow>(`/api/v1/users/${id}`);
+}
+
+export async function getCurrentUser() {
+  return apiFetch<UserRow>("/api/v1/auth/me");
+}
+
+export async function updateUser(
+  id: string,
+  data: {
+    name?: string;
+    role?: string;
+    teamId?: string | null;
+    timezone?: string;
+    preferences?: Record<string, unknown>;
+  },
+) {
+  return apiFetch<UserRow>(`/api/v1/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getUsers(filters?: { teamId?: string; managerId?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.teamId) params.set("teamId", filters.teamId);
+  if (filters?.managerId) params.set("managerId", filters.managerId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<{ data: UserRow[] }>(`/api/v1/users${qs}`);
+}
+
+// ── Engagement ─────────────────────────────────────────
+
+export interface EngagementScoreRow {
+  id: string;
+  userId: string;
+  weekStarting: string;
+  interactionsCompleted: number;
+  interactionsTarget: number;
+  averageQualityScore: number;
+  responseRate: number;
+  streak: number;
+  rank: number | null;
+  createdAt: string;
+}
+
+export async function getEngagementScores(userId: string) {
+  return apiFetch<{ data: EngagementScoreRow[]; userId: string }>(
+    `/api/v1/users/${userId}/engagement`,
+  );
+}
+
+// ── Feedback ───────────────────────────────────────────
+
+export interface FeedbackEntryRow {
+  id: string;
+  conversationId: string;
+  reviewerId: string;
+  subjectId: string;
+  interactionType: string;
+  rawContent: string;
+  aiSummary: string;
+  sentiment: string;
+  engagementScore: number;
+  wordCount: number;
+  hasSpecificExamples: boolean;
+  createdAt: string;
+  valueScores: Array<{
+    id: string;
+    feedbackEntryId: string;
+    coreValueId: string;
+    score: number;
+    evidence: string;
+  }>;
+}
+
+export async function getFeedback(userId: string) {
+  return apiFetch<{ data: FeedbackEntryRow[]; userId: string }>(
+    `/api/v1/users/${userId}/feedback`,
+  );
+}
+
+export async function getFlaggedItems() {
+  return apiFetch<{
+    data: Array<{
+      escalation: {
+        id: string;
+        feedbackEntryId: string;
+        severity: string;
+        reason: string;
+        flaggedContent: string;
+        resolvedAt: string | null;
+        resolvedBy: string | null;
+        createdAt: string;
+      };
+      feedback: FeedbackEntryRow;
+    }>;
+  }>("/api/v1/feedback/flagged");
+}
+
+// ── Relationships ──────────────────────────────────────
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  role: string;
+  team: string | null;
+  managerId: string | null;
+}
+
+export interface GraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  type: "reports_to" | "thread";
+  label: string;
+  tags: string[];
+  strength: number;
+  source: string;
+}
+
+export async function getOrgGraph() {
+  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
+    "/api/v1/relationships",
+  );
+}
+
+export async function getUserRelationships(userId: string) {
+  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
+    `/api/v1/users/${userId}/relationships`,
+  );
+}
+
+export async function createRelationship(data: {
+  fromUserId: string;
+  toUserId: string;
+  label?: string;
+  tags?: string[];
+  strength?: number;
+  source?: string;
+  notes?: string;
+}) {
+  return apiFetch("/api/v1/relationships", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRelationship(
+  id: string,
+  data: {
+    label?: string;
+    tags?: string[];
+    strength?: number;
+    notes?: string;
+    isActive?: boolean;
+  },
+) {
+  return apiFetch(`/api/v1/relationships/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRelationship(id: string) {
+  return apiFetch<{ id: string; deleted: true }>(
+    `/api/v1/relationships/${id}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function updateManager(
+  userId: string,
+  managerId: string | null,
+) {
+  return apiFetch(`/api/v1/users/${userId}/manager`, {
+    method: "PATCH",
+    body: JSON.stringify({ managerId }),
+  });
+}
+
+// ── Conversations ──────────────────────────────────────
+
+export async function getConversations(status?: string) {
+  const params = status ? `?status=${status}` : "";
+  return apiFetch<{ data: Array<Record<string, unknown>> }>(
+    `/api/v1/conversations${params}`,
+  );
+}
+
+export async function getConversation(id: string) {
+  return apiFetch<Record<string, unknown>>(
+    `/api/v1/conversations/${id}`,
+  );
+}
+
+// ── Escalations ────────────────────────────────────────
+
+export async function getEscalations() {
+  return apiFetch<{ data: Array<Record<string, unknown>> }>(
+    "/api/v1/escalations",
+  );
+}
+
+// ── Kudos ──────────────────────────────────────────────
+
+export interface KudosRow {
+  id: string;
+  giverId: string;
+  receiverId: string;
+  message: string;
+  coreValueId: string | null;
+  source: string;
+  createdAt: string;
+}
+
+export async function getKudos(userId: string) {
+  return apiFetch<{ data: KudosRow[]; userId: string }>(
+    `/api/v1/kudos?userId=${userId}`,
+  );
+}

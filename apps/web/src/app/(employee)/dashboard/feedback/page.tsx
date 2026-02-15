@@ -1,23 +1,98 @@
-import { allFeedback, valuesScores } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { getFeedback, getOrgConfig } from "@/lib/api";
+import {
+  allFeedback as mockFeedback,
+  valuesScores as mockValuesScores,
+} from "@/lib/mock-data";
 
-const sentimentColors = {
+const sentimentColors: Record<string, { bg: string; text: string; label: string }> = {
   positive: { bg: "bg-positive/10", text: "text-positive", label: "Positive" },
   neutral: { bg: "bg-amber/10", text: "text-warning", label: "Neutral" },
   negative: { bg: "bg-danger/10", text: "text-danger", label: "Negative" },
   mixed: { bg: "bg-stone-100", text: "text-stone-600", label: "Mixed" },
 };
 
-export default function FeedbackPage() {
-  const positive = allFeedback.filter((f) => f.sentiment === "positive").length;
-  const neutral = allFeedback.filter((f) => f.sentiment === "neutral").length;
-  const avgScore = Math.round(
-    allFeedback.reduce((sum, f) => sum + f.engagementScore, 0) /
-      allFeedback.length,
-  );
+type FeedbackItem = {
+  id: string;
+  fromName: string;
+  date: string;
+  summary: string;
+  sentiment: string;
+  engagementScore: number;
+  values: string[];
+};
+
+type ValueScore = { value: string; score: number };
+
+async function loadFeedbackData() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { feedback: mockFeedback as FeedbackItem[], valuesScores: mockValuesScores };
+  }
+
+  try {
+    const [fbResult, orgResult] = await Promise.allSettled([
+      getFeedback(userId),
+      getOrgConfig(),
+    ]);
+
+    const valuesMap = new Map<string, string>();
+    if (orgResult.status === "fulfilled") {
+      orgResult.value.coreValues.forEach((v) => valuesMap.set(v.id, v.name));
+    }
+
+    let feedback: FeedbackItem[] = mockFeedback;
+    let valuesScores: ValueScore[] = mockValuesScores;
+
+    if (fbResult.status === "fulfilled" && fbResult.value.data.length > 0) {
+      feedback = fbResult.value.data.map((e) => ({
+        id: e.id,
+        fromName: "Peer",
+        date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        summary: e.aiSummary || "No summary available",
+        sentiment: e.sentiment,
+        engagementScore: e.engagementScore,
+        values: e.valueScores.map((vs) => valuesMap.get(vs.coreValueId) ?? "Unknown"),
+      }));
+
+      // Aggregate value scores
+      const scoresByValue = new Map<string, number[]>();
+      fbResult.value.data.forEach((e) => {
+        e.valueScores.forEach((vs) => {
+          const name = valuesMap.get(vs.coreValueId) ?? "Unknown";
+          const list = scoresByValue.get(name) ?? [];
+          list.push(vs.score);
+          scoresByValue.set(name, list);
+        });
+      });
+      if (scoresByValue.size > 0) {
+        valuesScores = Array.from(scoresByValue.entries()).map(([value, scores]) => ({
+          value,
+          score: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+        }));
+      }
+    }
+
+    return { feedback, valuesScores };
+  } catch {
+    return { feedback: mockFeedback as FeedbackItem[], valuesScores: mockValuesScores };
+  }
+}
+
+export default async function FeedbackPage() {
+  const { feedback, valuesScores } = await loadFeedbackData();
+
+  const positive = feedback.filter((f) => f.sentiment === "positive").length;
+  const neutral = feedback.filter((f) => f.sentiment === "neutral").length;
+  const avgScore = feedback.length > 0
+    ? Math.round(feedback.reduce((sum, f) => sum + f.engagementScore, 0) / feedback.length)
+    : 0;
 
   // Count value mentions across all feedback
   const valueMentions: Record<string, number> = {};
-  allFeedback.forEach((f) =>
+  feedback.forEach((f) =>
     f.values.forEach((v) => {
       valueMentions[v] = (valueMentions[v] || 0) + 1;
     }),
@@ -38,14 +113,14 @@ export default function FeedbackPage() {
         {[
           {
             label: "Total Received",
-            value: allFeedback.length.toString(),
+            value: feedback.length.toString(),
             sub: "All time",
             color: "text-stone-900",
           },
           {
             label: "Positive",
             value: positive.toString(),
-            sub: `${Math.round((positive / allFeedback.length) * 100)}% of total`,
+            sub: feedback.length > 0 ? `${Math.round((positive / feedback.length) * 100)}% of total` : "—",
             color: "text-positive",
           },
           {
@@ -85,8 +160,8 @@ export default function FeedbackPage() {
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Feedback list */}
         <div className="space-y-3 lg:col-span-8">
-          {allFeedback.map((fb, i) => {
-            const sentiment = sentimentColors[fb.sentiment];
+          {feedback.map((fb, i) => {
+            const sentiment = sentimentColors[fb.sentiment] ?? sentimentColors.neutral;
             return (
               <div
                 key={fb.id}
