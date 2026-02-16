@@ -14,7 +14,7 @@ import { conversationRoutes } from "./modules/conversation/routes.js";
 import { calibrationRoutes } from "./modules/calibration/routes.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis } from "./workers/index.js";
-import { LLMGateway } from "@revualy/ai-core";
+import { createLLMGateway } from "@revualy/ai-core";
 import { AdapterRegistry } from "@revualy/chat-core";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -75,9 +75,17 @@ async function start() {
   const queues = createQueues(REDIS_URL);
   setConversationQueue(queues.conversationQueue);
 
-  // LLM gateway and adapter registry for workers
-  // Providers are registered when platform adapters are configured
-  const llm = new LLMGateway("anthropic");
+  // LLM gateway — provider determined by env vars
+  const llm = createLLMGateway({
+    provider: process.env.LLM_PROVIDER ?? "anthropic",
+    apiKey: process.env.LLM_API_KEY ?? "",
+    baseUrl: process.env.LLM_BASE_URL || undefined,
+    models: {
+      ...(process.env.LLM_MODEL_FAST ? { fast: process.env.LLM_MODEL_FAST } : {}),
+      ...(process.env.LLM_MODEL_STANDARD ? { standard: process.env.LLM_MODEL_STANDARD } : {}),
+      ...(process.env.LLM_MODEL_ADVANCED ? { advanced: process.env.LLM_MODEL_ADVANCED } : {}),
+    },
+  });
   const adapters = new AdapterRegistry();
 
   const workers = createWorkers({

@@ -1,3 +1,4 @@
+import type { ModelTier } from "@revualy/shared";
 import type {
   LLMProviderAdapter,
   LLMCompletionRequest,
@@ -6,7 +7,22 @@ import type {
   EmbeddingRequest,
   EmbeddingResponse,
   LLMProvider,
+  LLMGatewayConfig,
 } from "./types.js";
+import { AnthropicAdapter } from "./providers/anthropic.js";
+import { OpenAICompatAdapter } from "./providers/openai-compat.js";
+
+const ANTHROPIC_DEFAULTS: Record<ModelTier, string> = {
+  fast: "claude-haiku-4-5-20251001",
+  standard: "claude-sonnet-4-5-20250929",
+  advanced: "claude-opus-4-6",
+};
+
+const OPENAI_DEFAULTS: Record<ModelTier, string> = {
+  fast: "gpt-4o-mini",
+  standard: "gpt-4o",
+  advanced: "gpt-4o",
+};
 
 /**
  * LLMGateway — provider-agnostic AI interface.
@@ -53,4 +69,39 @@ export class LLMGateway {
     }
     return adapter.embed(request);
   }
+}
+
+/**
+ * Factory: create a fully-wired LLMGateway from config.
+ * Provider is "anthropic" → AnthropicAdapter, anything else → OpenAICompatAdapter.
+ */
+export function createLLMGateway(config: LLMGatewayConfig): LLMGateway {
+  const defaults =
+    config.provider === "anthropic"
+      ? ANTHROPIC_DEFAULTS
+      : config.provider === "openai"
+        ? OPENAI_DEFAULTS
+        : undefined;
+
+  const models: Record<ModelTier, string> = {
+    fast: config.models?.fast ?? defaults?.fast ?? config.provider,
+    standard: config.models?.standard ?? defaults?.standard ?? config.provider,
+    advanced: config.models?.advanced ?? defaults?.advanced ?? config.provider,
+  };
+
+  const providerConfig = {
+    provider: config.provider,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl,
+    models,
+  };
+
+  const adapter =
+    config.provider === "anthropic"
+      ? new AnthropicAdapter(providerConfig)
+      : new OpenAICompatAdapter(providerConfig);
+
+  const gateway = new LLMGateway(config.provider);
+  gateway.registerProvider(adapter);
+  return gateway;
 }

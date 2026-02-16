@@ -1,6 +1,6 @@
 import type { ModelTier } from "@revualy/shared";
 
-export type LLMProvider = "anthropic" | "openai";
+export type LLMProvider = string;
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
@@ -28,6 +28,7 @@ export interface LLMCompletionResponse {
 export interface LLMProviderConfig {
   provider: LLMProvider;
   apiKey: string;
+  baseUrl?: string;
   models: Record<ModelTier, string>;
 }
 
@@ -39,6 +40,13 @@ export interface LLMProviderAdapter {
   readonly provider: LLMProvider;
 
   complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse>;
+}
+
+export interface LLMGatewayConfig {
+  provider: LLMProvider;
+  apiKey: string;
+  baseUrl?: string;
+  models?: Partial<Record<ModelTier, string>>;
 }
 
 export interface EmbeddingRequest {
