@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { ChatSimulation } from "@/components/chat-simulation";
 
 export const metadata: Metadata = {
   title: "Home",
@@ -212,6 +213,23 @@ export default async function HomePage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Chat simulation */}
+        <div className="mt-16">
+          <div className="mb-8 text-center">
+            <p className="text-xs font-semibold tracking-wider text-forest uppercase">
+              How it feels
+            </p>
+            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight text-stone-900 md:text-3xl">
+              A real feedback interaction
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-stone-500">
+              This is what a typical Revualy exchange looks like — 45 seconds
+              in chat, honest signal captured, values mapped automatically.
+            </p>
+          </div>
+          <ChatSimulation />
         </div>
       </div>
     </div>

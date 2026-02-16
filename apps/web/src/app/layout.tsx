@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { Fraunces, Outfit } from "next/font/google";
+import { Playfair_Display, Outfit } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import "./globals.css";
 
-const fraunces = Fraunces({
+const playfair = Playfair_Display({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-display",
-  axes: ["opsz"],
 });
 
 const outfit = Outfit({
@@ -23,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s | Revualy",
   },
   description:
-    "Continuous peer feedback that maps to your values. 2-3 micro-interactions per week, delivered through the chat tools your team already uses.",
+    "Honest peer feedback through 2-3 micro-interactions per week, delivered through the chat tools your team already uses. No more rehearsed survey answers.",
 };
 
 export default function RootLayout({
@@ -32,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${outfit.variable}`}>
+    <html lang="en" className={`${playfair.variable} ${outfit.variable}`}>
       <body className="min-h-screen bg-cream font-body text-stone-900 antialiased">
         <SessionProvider>{children}</SessionProvider>
       </body>
