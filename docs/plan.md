@@ -95,7 +95,7 @@ Each organization gets its own isolated PostgreSQL database. This ensures:
 - On each API request, middleware resolves the authenticated user's org → looks up the database connection string → routes all queries to that org's database.
 - Connection pooling via PgBouncer or a pooler per database to manage connections efficiently.
 
-Key tables per tenant DB: `users`, `user_platform_identities`, `teams`, `core_values`, `user_relationships`, `questionnaires`, `questionnaire_themes`, `conversations`, `conversation_messages`, `feedback_entries`, `feedback_value_scores`, `kudos`, `engagement_scores`, `escalations`, `escalation_audit_log`, `questions`, `interaction_schedule`, `pulse_check_triggers`, `calendar_events`
+Key tables per tenant DB: `users`, `user_platform_identities`, `teams`, `core_values`, `user_relationships`, `questionnaires`, `questionnaire_themes`, `conversations`, `conversation_messages`, `feedback_entries`, `feedback_value_scores`, `kudos`, `engagement_scores`, `escalations`, `escalation_audit_log`, `questions`, `interaction_schedule`, `pulse_check_triggers`, `calendar_events`, `notification_preferences`, `calendar_tokens`
 
 - Encryption at rest per database (RDS AES-256 + pgcrypto for sensitive columns like `raw_content`)
 - pgvector extension enabled per tenant DB for semantic search
@@ -210,12 +210,13 @@ revualy/
 ├── apps/
 │   ├── api/                    # Fastify server + BullMQ workers
 │   │   └── src/
-│   │       ├── modules/        # auth, chat, conversation, feedback, etc. (14 route files)
-│   │       └── workers/        # conversation, analysis, scheduler, notification queues
+│   │       ├── modules/        # auth, chat, conversation, feedback, manager, notifications, etc. (16 route files)
+│   │       ├── lib/            # email, calendar, availability, interaction-scheduler, analysis-pipeline
+│   │       └── workers/        # conversation, analysis, scheduler, notification, calendar-sync queues
 │   └── web/                    # Next.js 15 dashboards
 │       └── src/app/
 │           ├── (employee)/     # Employee: dashboard, feedback, engagement, kudos
-│           ├── (manager)/      # Manager: team overview, feedback, flagged, leaderboard
+│           ├── (manager)/      # Manager: team overview, feedback, flagged, leaderboard, questions, org-chart
 │           └── (admin)/        # Admin: settings, values, questionnaires, integrations, escalations
 ├── docs/                       # Architecture docs
 └── docker-compose.yml          # PostgreSQL+pgvector, Redis 7, Neo4j 5
@@ -239,6 +240,11 @@ revualy/
 /api/v1/admin/questionnaires      # Questionnaire CRUD + theme management
 /api/v1/admin/relationships        # Graph overrides
 /api/v1/admin/integrations         # Platform connections
+/api/v1/notifications/preferences  # Notification preferences (GET/PATCH)
+/api/v1/integrations/google/*      # Google Calendar OAuth (authorize, callback, status)
+/api/v1/manager/questionnaires     # Manager-scoped question bank CRUD
+/api/v1/manager/org-chart          # Manager reporting tree + threads
+/api/v1/manager/relationships      # Manager-scoped relationship creation
 /webhooks/slack/*                  # Slack adapter
 /webhooks/teams/*                  # Teams adapter
 /webhooks/gchat/*                  # Google Chat adapter
@@ -254,6 +260,7 @@ revualy/
 - **Palette:** Cream (#FFFBF5), Forest green (#2D5A3D), Terracotta (#C4654A), warm stone scale
 - **Cards:** rounded-2xl, warm shadows, staggered entry animations
 - **Textures:** Subtle grain overlay, dot-grid patterns
+- **Navigation path bar:** A breadcrumb-style path bar (e.g. "Team → Sarah Chen → Feedback") that stays hidden by default and reveals on hover over the top edge of the content area. Slides down with a subtle transition. Shows the full navigation path so users always know where they are, without eating vertical space. Appears across all dashboard layouts (employee, manager, admin).
 - **Charts:** Recharts (LineChart, RadarChart, AreaChart) with forest/terracotta palette
 
 ### Dashboard Pages
@@ -269,6 +276,7 @@ revualy/
 - `/team/feedback` — All team feedback with reviewer→subject flow, per-member sidebar
 - `/team/flagged` — Language/behavior flags, at-risk members, coaching tips
 - `/team/leaderboard` — Rankings with historical weeks, participation stats
+- `/team/[userId]` — **Per-reportee page** (like Culture Amp's 1-on-1 view). Dedicated page per direct report showing their engagement history, values radar, recent feedback, and a persistent **1-1 notes** section. Managers can add timestamped private notes (talking points, coaching observations, follow-up items). Notes are only visible to the manager, not the employee or admin. Notes persist across meetings and form a running record for performance conversations. Data model: `manager_notes` table (managerId, subjectUserId, content, createdAt, updatedAt).
 
 **Admin** (`/settings`)
 - Overview: org stats, core values list, integrations, escalation feed
@@ -318,10 +326,9 @@ revualy/
 **Remaining stubs (to be completed in later phases):**
 - Leaderboard endpoint (returns empty — needs Redis sorted sets, Phase 4)
 - Escalation module (returns empty — needs audit trail, Phase 4)
-- Kudos module (returns empty — Phase 3)
-- Notification worker (weekly_digest, leaderboard_update — Phase 4)
-- Reflections page (frontend mock only — no self-reflection API)
+- Reflections page (frontend mock only — no self-reflection API, Phase 5)
 - AI provider SDKs not integrated (LLM gateway abstraction exists, no Anthropic/OpenAI SDK wired)
+- Outlook calendar integration (Phase 5 — Google Calendar done in Phase 3)
 
 ### Phase 2.5: Marketing Site + Demo Funnel
 - SEO-optimized landing pages (public routes in Next.js app, no auth required)
@@ -332,33 +339,37 @@ revualy/
 - Design: uses existing "Warm Editorial" system (Fraunces/Outfit, forest/terracotta/cream palette)
 - Built with frontend-design plugin for distinctive, non-generic aesthetics
 - Google Search Console + sitemap.xml + robots.txt
+- **Copy direction:** Avoid generic "feedback" language. Lead with *real-time insight* — the value prop is that managers and teams get continuous signal about culture, values alignment, and team health as it happens, not in a quarterly report. Frame the product around insight and visibility, not process and reviews. Key phrases: "real-time insight into your team's culture", "see what's happening, not what happened", "continuous signal, not annual noise".
 
-### Phase 3: Intelligence (Weeks 9-12)
-- **Calendar-aware interaction scheduling**
-  - Sync Google Calendar / Outlook calendars via OAuth (read-only)
-  - Scan each user's calendar for free gaps (no meetings, no focus time blocks)
-  - Score gaps by quality: prefer mid-morning/mid-afternoon lulls, avoid back-to-back meeting edges, respect "Do Not Disturb" / OOO status
-  - Feed gap windows into the interaction scheduler so the bot only initiates feedback conversations when the user actually has breathing room
-  - Fallback: if no calendar connected, use historical chat-activity patterns (existing behavior)
-  - Store `calendar_events` per tenant DB, refresh on a 15-min polling interval (webhook where supported)
-- Auto-relationship graph from calendar data (shared-meeting frequency → connection strength in Neo4j)
-- Core values mapping in feedback analysis
-- Language flagging + manager coaching alerts
-- Kudos system (chat capture + dashboard display)
-- AI theme discovery from comms analysis
-- **Manager-driven question bank + sub-org chart**
-  - Add a cut-down question bank UI to the manager tab so managers can create/edit questionnaire themes for their own teams without needing admin access
-  - Manager-created themes are scoped to their team and feed into the org-wide question bank (admin can review/promote to global)
-  - Add a sub-org chart view to the manager tab showing the manager's direct/indirect reports and their thread connections
-  - Managers can create/edit thread connections between their reports (e.g. pairing two team members for peer review)
-  - Sub-org chart thread connections sync upstream into the main org-wide relationship graph — manager edits are the primary source of truth for intra-team relationships
-  - RBAC: managers can only see/edit relationships and themes within their reporting tree, not across the whole org
+### Phase 3: Intelligence (Weeks 9-12) ✅
+- ✅ **Kudos system** — Full CRUD API with user name joins (`giverName`/`receiverName`), Zod validation (`createKudosSchema`, `kudosQuerySchema`), Send Kudos modal (client component with receiver/value selects), server action, dashboard page wired to live API
+- ✅ **Email notifications** — Resend wrapper (stub-logs without API key), three HTML email templates (weekly digest, flag alert, nudge) with warm editorial palette, notification preferences table + GET/PATCH API, worker cases for `schedule_weekly_digests` (Monday 9am UTC cron), `weekly_digest`, `flag_alert`, `nudge`. RFC 8058 one-click unsubscribe headers.
+- ✅ **Calendar-aware interaction scheduling**
+  - ✅ Google Calendar OAuth (authorize/callback/status routes via `googleapis`)
+  - ✅ Token storage in `calendar_tokens` table with refresh-on-expiry
+  - ✅ Calendar sync worker (15-min repeatable cron) — fetches next 7 days, upserts into `calendar_events`
+  - ✅ Availability engine: `findFreeSlots()` finds gaps, `scoreSlot()` prefers mid-morning/mid-afternoon, `findBestSlot()` combines both
+  - ✅ `calculateSendTime()` now async — checks calendar availability first, falls back to preferred time + jitter
+  - ✅ Auto-relationship inference from co-attendees (>=2 shared meetings → `user_relationships` with `source: "calendar"`)
+  - Outlook sync deferred to Phase 5
+- ✅ **Manager question bank + sub-org chart**
+  - ✅ `createdByUserId` + `teamScope` columns on `questionnaires` table (migration 0004)
+  - ✅ Manager-scoped API routes: GET/POST/PATCH questionnaires (ownership check), GET org-chart (BFS reporting tree), POST relationships (both users must be in tree)
+  - ✅ `getReportingTree()` BFS helper walks `users.managerId` for full direct/indirect report tree
+  - ✅ Question bank page ("My Team" vs "Org-Wide" sections) + Create Questionnaire modal (name, category, verbatim, dynamic themes)
+  - ✅ Org chart page: CSS flexbox tree with recursive `TreeNode` component, relationship threads overlay, stats cards
+  - ✅ `selectQuestionnaire()` updated to prefer team-scoped questionnaires for the user's team
+  - RBAC enforced: `requireRole("manager")` preHandler, ownership checks on PATCH, tree-scope checks on relationships
+- Core values mapping in feedback analysis (already implemented in Phase 2 analysis pipeline)
+- Language flagging + manager coaching alerts (already implemented in Phase 2 analysis pipeline)
+- AI theme discovery from comms analysis (deferred — requires LLM SDK wiring)
 
-- **Demo chat interactions (marketing + lead capture)**
-  - **Animated preview (no auth):** Looping chat interaction animation on the `/home` hub page showing a realistic 3-4 message feedback conversation between the Revualy bot and a user. Auto-types messages with realistic delays, pauses at the end, then resets. Pure CSS/JS animation — no video file. Visible to all visitors as a taste of the product.
-  - **Live interactive demo (gated):** A working sample chat interaction behind a lead capture form (name, work email, company, team size). After submission, the user enters a sandbox chat UI where the Revualy bot walks them through an actual feedback conversation using the conversation orchestrator with a demo questionnaire. Uses mock peer data and a demo org context — no real account created. Conversation is disposable (not persisted beyond the session).
-  - Lead capture data stored in the control plane DB (`demo_leads` table: name, email, company, team_size, created_at, interaction_completed boolean)
-  - Follow-up: demo completion triggers a notification to the sales pipeline (email or webhook)
+**Not implemented in Phase 3 (deferred):**
+- Demo chat interactions (animated preview + live interactive demo) — deferred to Phase 4
+- Outlook calendar integration — deferred to Phase 5
+
+**New dependencies added:** `resend`, `googleapis`
+**New migrations:** 0002 (notification_preferences), 0003 (calendar_tokens), 0004 (questionnaire scope columns)
 
 ### Phase 4: Google Chat Adapter + Beta Launch (Weeks 13-16)
 - **Google Chat adapter** (via Chat API + Pub/Sub for events, Cards v2 for rich messages)
@@ -366,16 +377,19 @@ revualy/
 - Escalation pipeline + HR feed
 - Leaderboard + weekly digest + voucher tracking
 - Onboarding flow (AI get-to-know-you)
+- Demo chat interactions (animated preview + live interactive demo, deferred from Phase 3)
 - **Beta launch with Google Chat company**
 
 ### Phase 5: Advanced Features + Teams (Weeks 17-20)
 - Calibration engine
 - Pulse check: comms ingestion + follow-up
 - 360 manager reviews (aggregated upward feedback)
-- Self-reflection interactions
-- Relationship web visualization (D3.js)
+- Self-reflection interactions + reflections page
+- Relationship web visualization (D3.js — replace CSS flexbox org chart)
 - Data export, blind review mode
 - Microsoft Teams adapter (third platform)
+- Outlook calendar integration
+- AI theme discovery (requires LLM SDK wiring)
 
 ---
 

@@ -14,6 +14,9 @@ import {
   conversationMessages,
   escalations,
   escalationAuditLog,
+  notificationPreferences,
+  calendarTokens,
+  calendarEvents,
 } from "./schema/tenant.js";
 
 const DB_URL =
@@ -27,6 +30,9 @@ async function seed() {
   // ── Clean slate (idempotent) ─────────────────────────
   // Delete in reverse FK order to avoid constraint violations
   console.log("  Clearing existing data...");
+  await db.delete(calendarEvents);
+  await db.delete(calendarTokens);
+  await db.delete(notificationPreferences);
   await db.delete(escalationAuditLog);
   await db.delete(escalations);
   await db.delete(engagementScores);

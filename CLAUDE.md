@@ -6,13 +6,15 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phase 1 (Foundation) and Phase 2 (Core Loop) are complete.** See `docs/plan.md` Phase 2 checklist for everything that's built, plus the "Remaining stubs" section for what's empty.
+**Phase 1 (Foundation), Phase 2 (Core Loop), and Phase 3 (Intelligence) are complete.** See `docs/plan.md` for full checklists.
 
-**Next up:** Phase 3 (Intelligence features) or Phase 4 (Google Chat adapter + beta launch). Check with user which to prioritize.
+Phase 3 added: Kudos system (full CRUD + modal), email notifications (Resend + templates + preferences + cron), Google Calendar sync (OAuth + availability engine + relationship inference), manager question bank + sub-org chart (scoped CRUD + BFS reporting tree + CSS tree page).
+
+**Next up:** Phase 4 (Google Chat adapter + beta launch). Phase 2.5 (marketing site) is also unbuilt.
 
 ## Repo structure
 ```
-apps/api/         — Fastify server + BullMQ workers (src/server.ts is the entry point)
+apps/api/         — Fastify server + BullMQ workers (16 route modules, 5 queues)
 apps/web/         — Next.js 15 dashboards (App Router, server components)
 packages/shared/  — Domain types + utilities
 packages/chat-core/         — ChatAdapter interface + AdapterRegistry
@@ -20,7 +22,7 @@ packages/chat-adapter-slack/ — Slack adapter (complete)
 packages/chat-adapter-gchat/ — Google Chat adapter (partial stub)
 packages/chat-adapter-teams/ — Teams adapter (stub)
 packages/ai-core/           — LLMGateway (abstraction only, no SDK wired)
-packages/db/                — Drizzle schema (control plane + tenant), Neo4j ops, seed
+packages/db/                — Drizzle schema (control plane + tenant), Neo4j ops, seed, migrations
 docs/plan.md                — Full architecture + phase checklist
 ```
 
@@ -48,12 +50,14 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
-## Known gaps (as of Phase 2 complete)
-- Leaderboard, Kudos, Escalation API modules return empty (stubs)
-- Notification worker is a stub (weekly_digest, leaderboard_update)
-- Reflections page is pure mock (no self-reflection API)
+## Known gaps (as of Phase 3 complete)
+- Leaderboard endpoint returns empty (needs Redis sorted sets — Phase 4)
+- Escalation module returns empty (needs audit trail — Phase 4)
+- Reflections page is pure mock (no self-reflection API — Phase 5)
 - LLM gateway has no provider SDKs wired (Anthropic/OpenAI)
-- Admin mutation buttons (Add Value, Edit, Delete) are UI-only
 - Rate limiting not implemented
-- GChat adapter: inbound normalization works, outbound/auth are stubs
-- Teams adapter: full stub
+- GChat adapter: inbound normalization works, outbound/auth are stubs (Phase 4)
+- Teams adapter: full stub (Phase 5)
+- Marketing site / landing pages not built (Phase 2.5)
+- Outlook calendar integration not built (Phase 5 — Google Calendar done)
+- Email notification preferences have no frontend settings page (API ready)

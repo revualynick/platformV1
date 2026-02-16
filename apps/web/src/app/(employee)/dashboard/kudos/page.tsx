@@ -1,9 +1,10 @@
 import { auth } from "@/lib/auth";
-import { getKudos, getOrgConfig } from "@/lib/api";
+import { getKudos, getOrgConfig, getUsers } from "@/lib/api";
 import {
   kudosReceived as mockReceived,
   kudosGiven as mockGiven,
 } from "@/lib/mock-data";
+import { SendKudosModal } from "@/components/send-kudos-modal";
 
 const valueColors: Record<string, string> = {
   Ownership: "bg-terracotta/10 text-terracotta",
@@ -27,18 +28,30 @@ async function loadKudosData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return { received: mockReceived, given: mockGiven };
+    return { received: mockReceived, given: mockGiven, users: [], values: [] };
   }
 
   try {
-    const [kudosResult, orgResult] = await Promise.allSettled([
+    const [kudosResult, orgResult, usersResult] = await Promise.allSettled([
       getKudos(userId),
       getOrgConfig(),
+      getUsers(),
     ]);
 
     const valuesMap = new Map<string, string>();
+    const valuesList: Array<{ id: string; name: string }> = [];
     if (orgResult.status === "fulfilled") {
-      orgResult.value.coreValues.forEach((v) => valuesMap.set(v.id, v.name));
+      orgResult.value.coreValues.forEach((v) => {
+        valuesMap.set(v.id, v.name);
+        valuesList.push({ id: v.id, name: v.name });
+      });
+    }
+
+    const usersList: Array<{ id: string; name: string }> = [];
+    if (usersResult.status === "fulfilled") {
+      usersResult.value.data
+        .filter((u) => u.id !== userId && u.isActive)
+        .forEach((u) => usersList.push({ id: u.id, name: u.name }));
     }
 
     if (kudosResult.status === "fulfilled" && kudosResult.value.data.length > 0) {
@@ -47,7 +60,7 @@ async function loadKudosData() {
         .filter((k) => k.receiverId === userId)
         .map((k) => ({
           id: k.id,
-          from: "Colleague", // Names not resolved yet
+          from: k.giverName,
           to: "You",
           date: new Date(k.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           message: k.message,
@@ -59,25 +72,25 @@ async function loadKudosData() {
         .map((k) => ({
           id: k.id,
           from: "You",
-          to: "Colleague",
+          to: k.receiverName,
           date: new Date(k.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           message: k.message,
           value: k.coreValueId ? (valuesMap.get(k.coreValueId) ?? "Recognition") : "Recognition",
         }));
 
       if (received.length > 0 || given.length > 0) {
-        return { received, given };
+        return { received, given, users: usersList, values: valuesList };
       }
     }
 
-    return { received: mockReceived, given: mockGiven };
+    return { received: mockReceived, given: mockGiven, users: usersList, values: valuesList };
   } catch {
-    return { received: mockReceived, given: mockGiven };
+    return { received: mockReceived, given: mockGiven, users: [], values: [] };
   }
 }
 
 export default async function KudosPage() {
-  const { received, given } = await loadKudosData();
+  const { received, given, users, values } = await loadKudosData();
 
   // Determine top value from received kudos
   const valueCounts: Record<string, number> = {};
@@ -249,9 +262,7 @@ export default async function KudosPage() {
             <p className="text-sm text-stone-500">
               Recognize a colleague&apos;s great work
             </p>
-            <button className="mt-3 rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light">
-              Send Kudos
-            </button>
+            <SendKudosModal users={users} values={values} />
           </div>
         </div>
       </div>

@@ -741,6 +741,60 @@ export const aiDiscoveredThemes = [
   },
 ];
 
+// Shared 1:1 notes (for /dashboard/one-on-ones and /team/members/[userId])
+export const oneOnOneEntries = [
+  {
+    id: "oo1",
+    managerId: "p2",
+    employeeId: "p3",
+    authorId: "p2",
+    authorName: "Jordan Wells",
+    content: "Great progress on the API migration. Let's discuss the rollback strategy in more detail next week and make sure the runbook is documented.",
+    createdAt: "2026-01-27T10:00:00Z",
+    updatedAt: "2026-01-27T10:00:00Z",
+  },
+  {
+    id: "oo2",
+    managerId: "p2",
+    employeeId: "p3",
+    authorId: "p3",
+    authorName: "Sarah Chen",
+    content: "Agreed on the runbook. Also wanted to flag — I'm feeling stretched between the migration and onboarding docs. Could we shift the onboarding deadline by a week?",
+    createdAt: "2026-01-28T14:30:00Z",
+    updatedAt: "2026-01-28T14:30:00Z",
+  },
+  {
+    id: "oo3",
+    managerId: "p2",
+    employeeId: "p3",
+    authorId: "p2",
+    authorName: "Jordan Wells",
+    content: "Absolutely, let's push the onboarding docs to Feb 7. Prioritize the migration. Also — your presentation at the Q4 review was excellent. The VP specifically mentioned it.",
+    createdAt: "2026-02-03T09:15:00Z",
+    updatedAt: "2026-02-03T11:00:00Z",
+  },
+  {
+    id: "oo4",
+    managerId: "p2",
+    employeeId: "p3",
+    authorId: "p3",
+    authorName: "Sarah Chen",
+    content: "Thanks for the kind words! For next 1:1 — I want to discuss the tech lead track. I've been thinking about what skills I'd need to develop and would love your perspective.",
+    createdAt: "2026-02-10T11:00:00Z",
+    updatedAt: "2026-02-10T11:00:00Z",
+  },
+  {
+    id: "oo5",
+    managerId: "p2",
+    employeeId: "p3",
+    authorId: "p2",
+    authorName: "Jordan Wells",
+    content: "Love that you're thinking about this proactively. Let's put together a development plan. I see strong potential — your cross-team communication and technical depth are already at that level. Main growth area: delegation and letting go of individual contributor instincts.",
+    createdAt: "2026-02-14T10:30:00Z",
+    updatedAt: "2026-02-14T10:30:00Z",
+  },
+];
+
 // Escalation audit trail (for /settings/escalations)
 export const escalationDetails = [
   {

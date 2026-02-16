@@ -11,6 +11,7 @@ import {
 } from "@revualy/db";
 import { getOrgSession } from "@revualy/db";
 import type { InteractionType, ChatPlatform } from "@revualy/shared";
+import { findBestSlot } from "./availability.js";
 
 /**
  * Run the daily scheduling pass for an org.
@@ -109,15 +110,17 @@ export async function runSchedulingPass(
       subjectId = user.id;
     }
 
-    // Select questionnaire
-    const questionnaire = selectQuestionnaire(availableQuestionnaires, interactionType);
+    // Select questionnaire (prefer team-scoped for this user's team)
+    const questionnaire = selectQuestionnaire(availableQuestionnaires, interactionType, user.teamId);
     if (!questionnaire) {
       skipped++;
       continue;
     }
 
-    // Calculate optimal send time
-    const sendAt = calculateSendTime(
+    // Calculate optimal send time (calendar-aware with fallback)
+    const sendAt = await calculateSendTime(
+      db,
+      user.id,
       now,
       user.timezone,
       prefs?.preferredInteractionTime ?? "10:00",
@@ -243,8 +246,9 @@ async function selectReviewSubject(
 // ── Questionnaire selection ──────────────────────────────
 
 function selectQuestionnaire(
-  available: Array<{ id: string; category: string; source: string }>,
+  available: Array<{ id: string; category: string; source: string; teamScope: string | null }>,
   interactionType: InteractionType,
+  userTeamId: string | null,
 ): { id: string } | null {
   // Match questionnaire category to interaction type
   const matching = available.filter((q) => q.category === interactionType);
@@ -254,7 +258,13 @@ function selectQuestionnaire(
     return available.length > 0 ? available[0] : null;
   }
 
-  // Prefer built-in, then custom, then imported
+  // Prefer team-scoped questionnaires for this user's team
+  if (userTeamId) {
+    const teamScoped = matching.filter((q) => q.teamScope === userTeamId);
+    if (teamScoped.length > 0) return teamScoped[0];
+  }
+
+  // Fallback: prefer built-in, then custom, then imported
   const sorted = matching.sort((a, b) => {
     const priority: Record<string, number> = { built_in: 0, custom: 1, imported: 2 };
     return (priority[a.source] ?? 3) - (priority[b.source] ?? 3);
@@ -265,11 +275,26 @@ function selectQuestionnaire(
 
 // ── Send time calculation ────────────────────────────────
 
-function calculateSendTime(
+async function calculateSendTime(
+  db: TenantDb,
+  userId: string,
   now: Date,
   userTimezone: string,
   preferredTime: string, // "HH:mm"
-): Date {
+): Promise<Date> {
+  // Try calendar-aware scheduling first
+  try {
+    const bestSlot = await findBestSlot(db, userId, now);
+    if (bestSlot && bestSlot > now) {
+      // Add slight jitter (0-5 min)
+      const jitter = Math.floor(Math.random() * 5) * 60 * 1000;
+      return new Date(bestSlot.getTime() + jitter);
+    }
+  } catch {
+    // Calendar data unavailable — fall through to preferred time
+  }
+
+  // Fallback: use preferred time + jitter
   const [hours, minutes] = preferredTime.split(":").map(Number);
 
   // Simple timezone offset calculation

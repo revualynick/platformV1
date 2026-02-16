@@ -354,20 +354,29 @@ export const userRelationships = pgTable(
 
 // ── Questionnaires ────────────────────────────────────
 
-export const questionnaires = pgTable("questionnaires", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 255 }).notNull(),
-  category: varchar("category", { length: 50 }).notNull(), // peer_review | self_reflection | three_sixty | pulse_check
-  source: varchar("source", { length: 50 }).notNull().default("custom"), // built_in | custom | imported
-  verbatim: boolean("verbatim").notNull().default(false),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const questionnaires = pgTable(
+  "questionnaires",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    category: varchar("category", { length: 50 }).notNull(), // peer_review | self_reflection | three_sixty | pulse_check
+    source: varchar("source", { length: 50 }).notNull().default("custom"), // built_in | custom | imported
+    verbatim: boolean("verbatim").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdByUserId: uuid("created_by_user_id"), // null = org-wide (admin), set = manager-owned
+    teamScope: uuid("team_scope"), // FK to teams added via migration, null = org-wide
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_questionnaires_created_by").on(table.createdByUserId),
+    index("idx_questionnaires_team_scope").on(table.teamScope),
+  ],
+);
 
 export const questionnaireThemes = pgTable(
   "questionnaire_themes",
@@ -432,6 +441,130 @@ export const pulseCheckTriggers = pgTable("pulse_check_triggers", {
     .notNull()
     .defaultNow(),
 });
+
+// ── Notification Preferences ──────────────────────────
+
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    type: varchar("type", { length: 50 }).notNull(), // weekly_digest | flag_alert | nudge | leaderboard_update
+    enabled: boolean("enabled").notNull().default(true),
+    channel: varchar("channel", { length: 20 }).notNull().default("email"), // email | in_app (future)
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_notification_pref_user_type").on(table.userId, table.type),
+    index("idx_notification_preferences_user_id").on(table.userId),
+  ],
+);
+
+// ── Calendar Tokens ───────────────────────────────────
+
+export const calendarTokens = pgTable(
+  "calendar_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    provider: varchar("provider", { length: 20 }).notNull(), // google | outlook
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_calendar_token_user_provider").on(table.userId, table.provider),
+    index("idx_calendar_tokens_user_id").on(table.userId),
+  ],
+);
+
+// ── One-on-One Entries (Shared 1:1 Notes) ─────────────
+
+export const oneOnOneEntries = pgTable(
+  "one_on_one_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    managerId: uuid("manager_id")
+      .notNull()
+      .references(() => users.id),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => users.id),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_one_on_one_entries_pair").on(table.managerId, table.employeeId),
+    index("idx_one_on_one_entries_created_at").on(table.createdAt),
+  ],
+);
+
+export const oneOnOneEntryRevisions = pgTable(
+  "one_on_one_entry_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => oneOnOneEntries.id, { onDelete: "cascade" }),
+    previousContent: text("previous_content").notNull(),
+    editedAt: timestamp("edited_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_one_on_one_revisions_entry_id").on(table.entryId),
+  ],
+);
+
+// ── Calendar Events ────────────────────────────────────
+
+// ── Manager Notes ─────────────────────────────────────
+
+export const managerNotes = pgTable(
+  "manager_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    managerId: uuid("manager_id")
+      .notNull()
+      .references(() => users.id),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_manager_notes_manager_subject").on(table.managerId, table.subjectId),
+  ],
+);
 
 // ── Calendar Events ────────────────────────────────────
 

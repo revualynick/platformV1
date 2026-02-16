@@ -99,6 +99,56 @@ export const updateRelationshipSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+// ── Notifications ─────────────────────────────────────
+
+export const updateNotificationPrefSchema = z.object({
+  type: z.enum(["weekly_digest", "flag_alert", "nudge", "leaderboard_update"]),
+  enabled: z.boolean(),
+  channel: z.enum(["email"]).optional(),
+});
+
+// ── Kudos ─────────────────────────────────────────────
+
+export const createKudosSchema = z.object({
+  receiverId: uuid,
+  message: z.string().min(1).max(5000),
+  coreValueId: uuid.optional(),
+});
+
+export const kudosQuerySchema = z.object({
+  userId: uuid.optional(),
+});
+
+// ── Manager Notes ────────────────────────────────────
+
+export const createManagerNoteSchema = z.object({
+  subjectId: uuid,
+  content: z.string().min(1).max(10000),
+});
+
+export const updateManagerNoteSchema = z.object({
+  content: z.string().min(1).max(10000),
+});
+
+export const managerNoteQuerySchema = z.object({
+  subjectId: uuid,
+});
+
+// ── One-on-One Notes ─────────────────────────────────
+
+export const createOneOnOneEntrySchema = z.object({
+  partnerId: uuid,
+  content: z.string().min(1).max(10000),
+});
+
+export const updateOneOnOneEntrySchema = z.object({
+  content: z.string().min(1).max(10000),
+});
+
+export const oneOnOneQuerySchema = z.object({
+  partnerId: uuid,
+});
+
 // ── Params ─────────────────────────────────────────────
 
 export const idParamSchema = z.object({

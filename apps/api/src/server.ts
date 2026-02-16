@@ -12,6 +12,10 @@ import { escalationRoutes } from "./modules/escalation/routes.js";
 import { relationshipsRoutes } from "./modules/relationships/routes.js";
 import { conversationRoutes } from "./modules/conversation/routes.js";
 import { calibrationRoutes } from "./modules/calibration/routes.js";
+import { notificationRoutes } from "./modules/notifications/routes.js";
+import { integrationsRoutes } from "./modules/integrations/routes.js";
+import { managerRoutes } from "./modules/manager/routes.js";
+import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis } from "./workers/index.js";
 import { createLLMGateway } from "@revualy/ai-core";
@@ -59,6 +63,10 @@ async function buildApp() {
   await app.register(relationshipsRoutes, { prefix: "/api/v1" });
   await app.register(conversationRoutes, { prefix: "/api/v1/conversations" });
   await app.register(calibrationRoutes, { prefix: "/api/v1" });
+  await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
+  await app.register(integrationsRoutes, { prefix: "/api/v1/integrations" });
+  await app.register(managerRoutes, { prefix: "/api/v1/manager" });
+  await app.register(oneOnOneRoutes, { prefix: "/api/v1/one-on-one-notes" });
 
   // Webhook routes
   await app.register(chatRoutes, { prefix: "/webhooks" });
@@ -97,6 +105,21 @@ async function start() {
 
   app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification)");
 
+  // ── Repeatable cron jobs ───────────────────────────────
+  // Weekly digest: Monday 9:00 AM UTC
+  await queues.notificationQueue.add(
+    "schedule_weekly_digests",
+    { type: "schedule_weekly_digests", orgId: "dev-org" },
+    { repeat: { pattern: "0 9 * * 1" }, jobId: "weekly-digest-cron" },
+  );
+
+  // Calendar sync: every 15 minutes
+  await queues.calendarSyncQueue.add(
+    "calendar-sync",
+    { orgId: "dev-org" },
+    { repeat: { pattern: "*/15 * * * *" }, jobId: "calendar-sync-cron" },
+  );
+
   // ── Graceful shutdown ────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`${signal} received — shutting down`);
@@ -105,10 +128,12 @@ async function start() {
       workers.analysisWorker.close(),
       workers.schedulerWorker.close(),
       workers.notificationWorker.close(),
+      workers.calendarSyncWorker.close(),
       queues.conversationQueue.close(),
       queues.analysisQueue.close(),
       queues.schedulerQueue.close(),
       queues.notificationQueue.close(),
+      queues.calendarSyncQueue.close(),
     ]);
     await app.close();
     process.exit(0);

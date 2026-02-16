@@ -424,6 +424,8 @@ export interface KudosRow {
   id: string;
   giverId: string;
   receiverId: string;
+  giverName: string;
+  receiverName: string;
   message: string;
   coreValueId: string | null;
   source: string;
@@ -433,5 +435,163 @@ export interface KudosRow {
 export async function getKudos(userId: string) {
   return apiFetch<{ data: KudosRow[]; userId: string }>(
     `/api/v1/kudos?userId=${userId}`,
+  );
+}
+
+export async function createKudos(data: {
+  receiverId: string;
+  message: string;
+  coreValueId?: string;
+}) {
+  return apiFetch<KudosRow>("/api/v1/kudos", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Manager ───────────────────────────────────────────
+
+export interface ManagerQuestionnaireRow extends QuestionnaireRow {
+  createdByUserId: string | null;
+  teamScope: string | null;
+}
+
+export async function getManagerQuestionnaires() {
+  return apiFetch<{ data: ManagerQuestionnaireRow[] }>(
+    "/api/v1/manager/questionnaires",
+  );
+}
+
+export async function createManagerQuestionnaire(data: {
+  name: string;
+  category: string;
+  source?: string;
+  verbatim?: boolean;
+  themes?: Array<{
+    intent: string;
+    dataGoal: string;
+    examplePhrasings?: string[];
+    coreValueId?: string;
+  }>;
+}) {
+  return apiFetch<ManagerQuestionnaireRow>("/api/v1/manager/questionnaires", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getManagerOrgChart() {
+  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
+    "/api/v1/manager/org-chart",
+  );
+}
+
+export async function createManagerRelationship(data: {
+  fromUserId: string;
+  toUserId: string;
+  label?: string;
+  tags?: string[];
+  strength?: number;
+  source?: string;
+}) {
+  return apiFetch("/api/v1/manager/relationships", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Manager Notes ────────────────────────────────────
+
+export interface ManagerNoteRow {
+  id: string;
+  managerId: string;
+  subjectId: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getManagerNotes(subjectId: string) {
+  return apiFetch<{ data: ManagerNoteRow[] }>(
+    `/api/v1/manager/notes?subjectId=${subjectId}`,
+  );
+}
+
+export async function createManagerNote(data: {
+  subjectId: string;
+  content: string;
+}) {
+  return apiFetch<ManagerNoteRow>("/api/v1/manager/notes", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateManagerNote(
+  id: string,
+  data: { content: string },
+) {
+  return apiFetch<ManagerNoteRow>(`/api/v1/manager/notes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteManagerNote(id: string) {
+  return apiFetch<{ id: string; deleted: true }>(
+    `/api/v1/manager/notes/${id}`,
+    { method: "DELETE" },
+  );
+}
+
+// ── One-on-One Notes ────────────────────────────────
+
+export interface OneOnOneEntryRow {
+  id: string;
+  managerId: string;
+  employeeId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OneOnOneRevisionRow {
+  id: string;
+  entryId: string;
+  previousContent: string;
+  editedAt: string;
+}
+
+export async function getOneOnOneNotes(partnerId: string) {
+  return apiFetch<{ data: OneOnOneEntryRow[] }>(
+    `/api/v1/one-on-one-notes?partnerId=${partnerId}`,
+  );
+}
+
+export async function createOneOnOneNote(data: {
+  partnerId: string;
+  content: string;
+}) {
+  return apiFetch<OneOnOneEntryRow>("/api/v1/one-on-one-notes", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateOneOnOneNote(
+  id: string,
+  data: { content: string },
+) {
+  return apiFetch<OneOnOneEntryRow>(`/api/v1/one-on-one-notes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getOneOnOneNoteHistory(id: string) {
+  return apiFetch<{ data: OneOnOneRevisionRow[] }>(
+    `/api/v1/one-on-one-notes/${id}/history`,
   );
 }

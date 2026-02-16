@@ -1,6 +1,16 @@
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { getTenantDb } from "@revualy/db";
+import {
+  users,
+  feedbackEntries,
+  kudos,
+  engagementScores,
+  escalations,
+  notificationPreferences,
+  calendarTokens,
+} from "@revualy/db";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
@@ -11,6 +21,16 @@ import {
 } from "../lib/conversation-orchestrator.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
+import { sendEmail } from "../lib/email.js";
+import { syncCalendarForUser } from "../lib/calendar-sync.js";
+import {
+  weeklyDigestTemplate,
+  flagAlertTemplate,
+  nudgeTemplate,
+  type WeeklyDigestData,
+  type FlagAlertData,
+  type NudgeData,
+} from "../lib/email-templates.js";
 
 export interface WorkerConfig {
   redisUrl: string;
@@ -36,6 +56,7 @@ export function createQueues(redisUrl: string) {
     analysisQueue: new Queue("analysis", { connection }),
     schedulerQueue: new Queue("scheduler", { connection }),
     notificationQueue: new Queue("notification", { connection }),
+    calendarSyncQueue: new Queue("calendar-sync", { connection }),
   };
 }
 
@@ -218,19 +239,217 @@ export function createWorkers(config: WorkerConfig) {
     { connection },
   );
 
-  // Notification worker — sends digests, leaderboard updates
+  // Notification worker — sends digests, alerts, nudges
   const notificationWorker = new Worker(
     "notification",
     async (job) => {
       const { type } = job.data as { type: string };
+
       switch (type) {
-        case "weekly_digest":
-          // TODO Phase 4: Generate and send weekly digest
+        case "schedule_weekly_digests": {
+          // Dispatcher: enqueue individual digest jobs per active user
+          const { orgId } = job.data as { orgId: string };
+          const db = getTenantDb(orgId, process.env.TENANT_DATABASE_URL ?? "");
+
+          const activeUsers = await db
+            .select({ id: users.id, email: users.email })
+            .from(users)
+            .where(and(eq(users.isActive, true), eq(users.onboardingCompleted, true)));
+
+          for (const user of activeUsers) {
+            await queues.notificationQueue.add("weekly_digest", {
+              type: "weekly_digest",
+              orgId,
+              userId: user.id,
+              email: user.email,
+            });
+          }
+          job.log(`Dispatched ${activeUsers.length} weekly digest jobs`);
           break;
+        }
+
+        case "weekly_digest": {
+          const data = job.data as {
+            orgId: string;
+            userId: string;
+            email: string;
+          };
+          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+
+          // Check preference
+          const [pref] = await db
+            .select()
+            .from(notificationPreferences)
+            .where(
+              and(
+                eq(notificationPreferences.userId, data.userId),
+                eq(notificationPreferences.type, "weekly_digest"),
+              ),
+            );
+          if (pref && !pref.enabled) {
+            job.log(`Digest disabled for user ${data.userId}`);
+            break;
+          }
+
+          // Gather data for the past week
+          const now = new Date();
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+          const [user] = await db.select().from(users).where(eq(users.id, data.userId));
+          if (!user) break;
+
+          const [feedbackReceived, feedbackGiven, kudosRows, engRows] = await Promise.all([
+            db.select().from(feedbackEntries).where(
+              and(eq(feedbackEntries.subjectId, data.userId), gte(feedbackEntries.createdAt, weekAgo)),
+            ),
+            db.select().from(feedbackEntries).where(
+              and(eq(feedbackEntries.reviewerId, data.userId), gte(feedbackEntries.createdAt, weekAgo)),
+            ),
+            db.select().from(kudos).where(
+              and(eq(kudos.receiverId, data.userId), gte(kudos.createdAt, weekAgo)),
+            ),
+            db.select().from(engagementScores).where(eq(engagementScores.userId, data.userId))
+              .orderBy(desc(engagementScores.weekStarting)).limit(1),
+          ]);
+
+          const digestData: WeeklyDigestData = {
+            userName: user.name.split(" ")[0],
+            weekLabel: weekAgo.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              + " – " + now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            feedbackReceived: feedbackReceived.length,
+            feedbackGiven: feedbackGiven.length,
+            engagementScore: engRows[0]?.averageQualityScore ?? 0,
+            kudosReceived: kudosRows.length,
+            topValue: null, // Would require value scores join — simplified
+            streak: engRows[0]?.streak ?? 0,
+          };
+
+          const html = weeklyDigestTemplate(digestData);
+          await sendEmail({
+            to: data.email,
+            subject: `Your weekly review digest — ${digestData.weekLabel}`,
+            html,
+            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+          });
+          break;
+        }
+
+        case "flag_alert": {
+          const data = job.data as {
+            orgId: string;
+            managerId: string;
+            managerEmail: string;
+            managerName: string;
+            subjectName: string;
+            severity: string;
+            reason: string;
+            flaggedContent: string;
+            escalationId: string;
+          };
+
+          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+
+          // Check preference
+          const [pref] = await db
+            .select()
+            .from(notificationPreferences)
+            .where(
+              and(
+                eq(notificationPreferences.userId, data.managerId),
+                eq(notificationPreferences.type, "flag_alert"),
+              ),
+            );
+          if (pref && !pref.enabled) break;
+
+          const alertData: FlagAlertData = {
+            managerName: data.managerName.split(" ")[0],
+            subjectName: data.subjectName,
+            severity: data.severity,
+            reason: data.reason,
+            flaggedContent: data.flaggedContent,
+            escalationId: data.escalationId,
+          };
+
+          await sendEmail({
+            to: data.managerEmail,
+            subject: `Flag alert: ${data.subjectName} — ${data.severity}`,
+            html: flagAlertTemplate(alertData),
+            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+          });
+          break;
+        }
+
+        case "nudge": {
+          const data = job.data as {
+            orgId: string;
+            userId: string;
+            email: string;
+            userName: string;
+            interactionsPending: number;
+            targetThisWeek: number;
+          };
+
+          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+
+          // Check preference
+          const [pref] = await db
+            .select()
+            .from(notificationPreferences)
+            .where(
+              and(
+                eq(notificationPreferences.userId, data.userId),
+                eq(notificationPreferences.type, "nudge"),
+              ),
+            );
+          if (pref && !pref.enabled) break;
+
+          const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+          const nudgeData: NudgeData = {
+            userName: data.userName.split(" ")[0],
+            interactionsPending: data.interactionsPending,
+            targetThisWeek: data.targetThisWeek,
+            dayOfWeek: days[new Date().getUTCDay()],
+          };
+
+          await sendEmail({
+            to: data.email,
+            subject: `Friendly reminder: ${data.interactionsPending} review${data.interactionsPending !== 1 ? "s" : ""} this week`,
+            html: nudgeTemplate(nudgeData),
+            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+          });
+          break;
+        }
+
         case "leaderboard_update":
-          // TODO Phase 4: Compute and publish leaderboard
+          // TODO Phase 5: Compute and publish leaderboard
           break;
       }
+    },
+    { connection },
+  );
+
+  // Calendar sync worker — syncs events for users with connected calendars
+  const calendarSyncWorker = new Worker(
+    "calendar-sync",
+    async (job) => {
+      const { orgId } = job.data as { orgId: string };
+      const db = getTenantDb(orgId, process.env.TENANT_DATABASE_URL ?? "");
+
+      // Get all users with calendar tokens
+      const tokens = await db
+        .select({ userId: calendarTokens.userId })
+        .from(calendarTokens);
+
+      let synced = 0;
+      for (const token of tokens) {
+        try {
+          const result = await syncCalendarForUser(db, token.userId);
+          synced += result.synced;
+        } catch (err) {
+          job.log(`Calendar sync failed for user ${token.userId}: ${err}`);
+        }
+      }
+      job.log(`Synced ${synced} events for ${tokens.length} users`);
     },
     { connection },
   );
@@ -240,5 +459,6 @@ export function createWorkers(config: WorkerConfig) {
     analysisWorker,
     schedulerWorker,
     notificationWorker,
+    calendarSyncWorker,
   };
 }

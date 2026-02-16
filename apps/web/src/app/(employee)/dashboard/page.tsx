@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getEngagementScores, getFeedback, getOrgConfig } from "@/lib/api";
+import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneNotes } from "@/lib/api";
+import type { OneOnOneEntryRow } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
@@ -9,7 +10,9 @@ import {
   engagementHistory as mockHistory,
   valuesScores as mockValuesScores,
   upcomingInteraction,
+  oneOnOneEntries as mockOneOnOneEntries,
 } from "@/lib/mock-data";
+import Link from "next/link";
 
 const sentimentColors: Record<string, string> = {
   positive: "bg-positive/10 text-positive",
@@ -33,14 +36,17 @@ async function loadDashboardData() {
       interactionsThisWeek: 3,
       recentFeedback: mockFeedback,
       valuesScores: mockValuesScores,
+      oneOnOneEntries: mockOneOnOneEntries as OneOnOneEntryRow[],
+      hasManager: true,
     };
   }
 
   try {
-    const [engResult, fbResult, orgResult] = await Promise.allSettled([
+    const [engResult, fbResult, orgResult, meResult] = await Promise.allSettled([
       getEngagementScores(userId),
       getFeedback(userId),
       getOrgConfig(),
+      getCurrentUser(),
     ]);
 
     // Engagement data
@@ -106,6 +112,22 @@ async function loadDashboardData() {
       }
     }
 
+    // 1:1 notes — fetch if user has a manager
+    let oneOnOneEntries: OneOnOneEntryRow[] = mockOneOnOneEntries as OneOnOneEntryRow[];
+    let hasManager = true;
+    const managerId = meResult.status === "fulfilled" ? meResult.value.managerId : null;
+    if (!managerId) {
+      hasManager = false;
+      oneOnOneEntries = [];
+    } else {
+      try {
+        const ooResult = await getOneOnOneNotes(managerId);
+        oneOnOneEntries = ooResult.data;
+      } catch {
+        // Keep mock fallback
+      }
+    }
+
     return {
       userName,
       engagementHistory,
@@ -115,6 +137,8 @@ async function loadDashboardData() {
       interactionsThisWeek,
       recentFeedback,
       valuesScores,
+      oneOnOneEntries,
+      hasManager,
     };
   } catch {
     return {
@@ -126,6 +150,8 @@ async function loadDashboardData() {
       interactionsThisWeek: 3,
       recentFeedback: mockFeedback,
       valuesScores: mockValuesScores,
+      oneOnOneEntries: mockOneOnOneEntries as OneOnOneEntryRow[],
+      hasManager: true,
     };
   }
 }
@@ -235,6 +261,68 @@ export default async function EmployeeDashboard() {
           </div>
           <ValuesRadar data={data.valuesScores} />
         </div>
+      </div>
+
+      {/* 1:1 Notes preview */}
+      <div
+        className="card-enter mb-8"
+        style={{ animationDelay: "550ms" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-base font-semibold text-stone-800">1:1 Notes</h3>
+          <Link
+            href="/dashboard/one-on-ones"
+            className="text-xs font-medium text-forest hover:text-forest/80"
+          >
+            View all &rarr;
+          </Link>
+        </div>
+        {!data.hasManager ? (
+          <div
+            className="rounded-2xl border border-stone-200/60 bg-white p-5 text-center"
+            style={{ boxShadow: "var(--shadow-sm)" }}
+          >
+            <p className="text-sm text-stone-400">No manager assigned.</p>
+          </div>
+        ) : data.oneOnOneEntries.length === 0 ? (
+          <div
+            className="rounded-2xl border border-stone-200/60 bg-white p-5 text-center"
+            style={{ boxShadow: "var(--shadow-sm)" }}
+          >
+            <p className="text-sm text-stone-400">No 1:1 notes yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {data.oneOnOneEntries.slice(-2).map((entry) => {
+              const isManager = entry.authorId === entry.managerId;
+              const borderColor = isManager ? "border-l-forest" : "border-l-terracotta";
+              const initials = entry.authorName.split(" ").map((n) => n[0]).join("");
+
+              return (
+                <div
+                  key={entry.id}
+                  className={`rounded-xl border border-stone-200/60 border-l-4 ${borderColor} bg-white p-4`}
+                  style={{ boxShadow: "var(--shadow-sm)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${
+                        isManager ? "bg-forest/10 text-forest" : "bg-terracotta/10 text-terracotta"
+                      }`}
+                    >
+                      {initials}
+                    </div>
+                    <span className="text-sm font-medium text-stone-800">{entry.authorName}</span>
+                    <span className="text-xs text-stone-400">
+                      {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm text-stone-600">{entry.content}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Recent feedback */}
