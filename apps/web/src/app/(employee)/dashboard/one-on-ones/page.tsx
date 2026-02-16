@@ -1,11 +1,12 @@
 import { auth } from "@/lib/auth";
-import { getOneOnOneNotes, getCurrentUser } from "@/lib/api";
+import { getOneOnOneNotes, getCurrentUser, getUser } from "@/lib/api";
 import { OneOnOneTimeline } from "@/components/one-on-one-timeline";
 import { oneOnOneEntries as mockEntries } from "@/lib/mock-data";
 import type { OneOnOneEntryRow } from "@/lib/api";
 import {
   addOneOnOneEntry,
   editOneOnOneEntry,
+  deleteOneOnOneEntry,
   fetchOneOnOneHistory,
 } from "./actions";
 
@@ -35,12 +36,15 @@ async function loadOneOnOneData() {
       };
     }
 
-    const result = await getOneOnOneNotes(managerId);
+    const [result, managerResult] = await Promise.allSettled([
+      getOneOnOneNotes(managerId),
+      getUser(managerId),
+    ]);
     return {
-      entries: result.data,
+      entries: result.status === "fulfilled" ? result.value.data : [] as OneOnOneEntryRow[],
       currentUserId: userId,
       managerId,
-      managerName: null as string | null, // Name comes from entry data
+      managerName: managerResult.status === "fulfilled" ? managerResult.value.name : null,
     };
   } catch {
     return {
@@ -108,6 +112,7 @@ export default async function OneOnOnesPage() {
           partnerName={managerName}
           addAction={addOneOnOneEntry}
           editAction={editOneOnOneEntry}
+          deleteAction={deleteOneOnOneEntry}
           getHistoryAction={fetchOneOnOneHistory}
         />
       </div>

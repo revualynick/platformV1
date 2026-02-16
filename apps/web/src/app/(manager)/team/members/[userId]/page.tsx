@@ -21,7 +21,7 @@ import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
 import { NotesSection } from "./notes-section";
 import { OneOnOneTimeline } from "@/components/one-on-one-timeline";
-import { addSharedNote, editSharedNote, fetchSharedNoteHistory } from "./actions";
+import { addSharedNote, editSharedNote, deleteSharedNote, fetchSharedNoteHistory } from "./actions";
 import {
   teamMembers as mockTeamMembers,
   engagementHistory as mockEngagementHistory,
@@ -451,6 +451,7 @@ export default async function EmployeeDetailPage({
             partnerName={employee.name}
             addAction={addSharedNote}
             editAction={editSharedNote}
+            deleteAction={deleteSharedNote}
             getHistoryAction={fetchSharedNoteHistory}
           />
         </div>

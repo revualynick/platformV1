@@ -147,6 +147,7 @@ export const updateOneOnOneEntrySchema = z.object({
 
 export const oneOnOneQuerySchema = z.object({
   partnerId: uuid,
+  search: z.string().max(500).optional(),
 });
 
 // ── Params ─────────────────────────────────────────────

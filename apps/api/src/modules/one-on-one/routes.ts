@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, ilike } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import { users, oneOnOneEntries, oneOnOneEntryRevisions } from "@revualy/db";
 import { requireAuth } from "../../lib/rbac.js";
@@ -62,6 +62,14 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const conditions = [
+      eq(oneOnOneEntries.managerId, pair.managerId),
+      eq(oneOnOneEntries.employeeId, pair.employeeId),
+    ];
+    if (query.search) {
+      conditions.push(ilike(oneOnOneEntries.content, `%${query.search}%`));
+    }
+
     const entries = await db
       .select({
         id: oneOnOneEntries.id,
@@ -75,12 +83,7 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       })
       .from(oneOnOneEntries)
       .innerJoin(users, eq(users.id, oneOnOneEntries.authorId))
-      .where(
-        and(
-          eq(oneOnOneEntries.managerId, pair.managerId),
-          eq(oneOnOneEntries.employeeId, pair.employeeId),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(asc(oneOnOneEntries.createdAt));
 
     return reply.send({ data: entries });
@@ -198,5 +201,34 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(oneOnOneEntryRevisions.editedAt));
 
     return reply.send({ data: revisions });
+  });
+
+  // DELETE /:id — Delete an entry (only the author can delete)
+  app.delete("/:id", async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db } = request.tenant;
+    const userId = request.tenant.userId!;
+
+    const [existing] = await db
+      .select()
+      .from(oneOnOneEntries)
+      .where(eq(oneOnOneEntries.id, id));
+
+    if (!existing) {
+      return reply.code(404).send({ error: "Entry not found" });
+    }
+
+    if (existing.authorId !== userId) {
+      return reply.code(403).send({ error: "You can only delete your own entries" });
+    }
+
+    if (existing.managerId !== userId && existing.employeeId !== userId) {
+      return reply.code(403).send({ error: "Access denied" });
+    }
+
+    // Revisions cascade-delete via FK constraint
+    await db.delete(oneOnOneEntries).where(eq(oneOnOneEntries.id, id));
+
+    return reply.send({ success: true });
   });
 };

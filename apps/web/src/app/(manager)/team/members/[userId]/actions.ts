@@ -6,6 +6,7 @@ import {
   deleteManagerNote,
   createOneOnOneNote,
   updateOneOnOneNote,
+  deleteOneOnOneNote,
   getOneOnOneNoteHistory,
 } from "@/lib/api";
 import type { OneOnOneRevisionRow } from "@/lib/api";
@@ -97,6 +98,23 @@ export async function editSharedNote(formData: FormData) {
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to update shared note" };
+  }
+}
+
+export async function deleteSharedNote(formData: FormData) {
+  const entryId = formData.get("entryId") as string;
+  const partnerId = formData.get("partnerId") as string;
+
+  if (!entryId) {
+    return { error: "Entry ID is required" };
+  }
+
+  try {
+    await deleteOneOnOneNote(entryId);
+    if (partnerId) revalidatePath(`/team/members/${partnerId}`);
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to delete shared note" };
   }
 }
 

@@ -564,10 +564,21 @@ export interface OneOnOneRevisionRow {
   editedAt: string;
 }
 
-export async function getOneOnOneNotes(partnerId: string) {
+export async function getOneOnOneNotes(
+  partnerId: string,
+  opts?: { search?: string },
+) {
+  const params = new URLSearchParams({ partnerId });
+  if (opts?.search) params.set("search", opts.search);
   return apiFetch<{ data: OneOnOneEntryRow[] }>(
-    `/api/v1/one-on-one-notes?partnerId=${partnerId}`,
+    `/api/v1/one-on-one-notes?${params}`,
   );
+}
+
+export async function deleteOneOnOneNote(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/v1/one-on-one-notes/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function createOneOnOneNote(data: {

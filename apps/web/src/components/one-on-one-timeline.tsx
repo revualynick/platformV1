@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import { useTransition, useState, useMemo } from "react";
 import type { OneOnOneEntryRow, OneOnOneRevisionRow } from "@/lib/api";
 
 interface OneOnOneTimelineProps {
@@ -10,6 +10,7 @@ interface OneOnOneTimelineProps {
   partnerName: string;
   addAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
   editAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
+  deleteAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
   getHistoryAction: (entryId: string) => Promise<{ data: OneOnOneRevisionRow[] }>;
 }
 
@@ -20,6 +21,7 @@ export function OneOnOneTimeline({
   partnerName,
   addAction,
   editAction,
+  deleteAction,
   getHistoryAction,
 }: OneOnOneTimelineProps) {
   const [isPending, startTransition] = useTransition();
@@ -29,6 +31,17 @@ export function OneOnOneTimeline({
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
   const [revisions, setRevisions] = useState<OneOnOneRevisionRow[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredEntries = useMemo(() => {
+    if (!searchQuery.trim()) return entries;
+    const q = searchQuery.toLowerCase();
+    return entries.filter(
+      (e) =>
+        e.content.toLowerCase().includes(q) ||
+        e.authorName.toLowerCase().includes(q),
+    );
+  }, [entries, searchQuery]);
 
   function handleAdd() {
     if (!newContent.trim()) return;
@@ -51,6 +64,16 @@ export function OneOnOneTimeline({
       await editAction(formData);
       setEditingId(null);
       setEditContent("");
+    });
+  }
+
+  function handleDelete(entryId: string) {
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    const formData = new FormData();
+    formData.set("entryId", entryId);
+    formData.set("partnerId", partnerId);
+    startTransition(async () => {
+      await deleteAction(formData);
     });
   }
 
@@ -84,21 +107,42 @@ export function OneOnOneTimeline({
     return entry.updatedAt !== entry.createdAt;
   }
 
-  // Determine which user is the manager based on entry data
   function isManagerEntry(entry: OneOnOneEntryRow) {
     return entry.authorId === entry.managerId;
   }
 
   return (
     <div>
+      {/* Search */}
+      {entries.length > 0 && (
+        <div className="mb-4">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notes..."
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:border-forest/40 focus:outline-none focus:ring-2 focus:ring-forest/10"
+          />
+          {searchQuery.trim() && (
+            <p className="mt-1.5 text-xs text-stone-400">
+              {filteredEntries.length} of {entries.length} notes
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Timeline entries */}
-      {entries.length === 0 ? (
+      {filteredEntries.length === 0 && !searchQuery.trim() ? (
         <p className="mb-6 text-sm text-stone-400">
           No shared notes yet. Start your 1:1 notes with {partnerName} below.
         </p>
+      ) : filteredEntries.length === 0 && searchQuery.trim() ? (
+        <p className="mb-6 text-sm text-stone-400">
+          No notes matching &ldquo;{searchQuery}&rdquo;
+        </p>
       ) : (
         <div className="mb-6 space-y-3">
-          {entries.map((entry) => {
+          {filteredEntries.map((entry) => {
             const isOwn = entry.authorId === currentUserId;
             const isManager = isManagerEntry(entry);
             const borderColor = isManager
@@ -214,15 +258,24 @@ export function OneOnOneTimeline({
                         )}
                       </div>
                       {isOwn && (
-                        <button
-                          onClick={() => {
-                            setEditingId(entry.id);
-                            setEditContent(entry.content);
-                          }}
-                          className="rounded-lg px-2.5 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingId(entry.id);
+                              setEditContent(entry.content);
+                            }}
+                            className="rounded-lg px-2.5 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            disabled={isPending}
+                            className="rounded-lg px-2.5 py-1 text-xs font-medium text-stone-400 hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
