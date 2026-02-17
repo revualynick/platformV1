@@ -97,7 +97,7 @@ function broadcastPresence(room: Room) {
   sendJson(room.employeeSocket, presence);
 }
 
-function cleanupRoom(sessionId: string) {
+async function cleanupRoom(sessionId: string) {
   const room = rooms.get(sessionId);
   if (!room) return;
   if (!room.managerSocket && !room.employeeSocket) {
@@ -105,8 +105,13 @@ function cleanupRoom(sessionId: string) {
       clearTimeout(room.persistTimer);
       room.persistTimer = null;
     }
-    // Final persist before cleanup
-    persistNotes(room).catch(() => {});
+    // Final persist before cleanup — await to prevent data loss
+    try {
+      await persistNotes(room);
+    } catch (err) {
+      // Log but don't block cleanup
+      console.error(`[WS] Failed to persist notes for session ${sessionId}:`, err);
+    }
     rooms.delete(sessionId);
   }
 }

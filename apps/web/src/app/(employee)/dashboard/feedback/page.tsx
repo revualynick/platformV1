@@ -4,13 +4,7 @@ import {
   allFeedback as mockFeedback,
   valuesScores as mockValuesScores,
 } from "@/lib/mock-data";
-
-const sentimentColors: Record<string, { bg: string; text: string; label: string }> = {
-  positive: { bg: "bg-positive/10", text: "text-positive", label: "Positive" },
-  neutral: { bg: "bg-amber/10", text: "text-warning", label: "Neutral" },
-  negative: { bg: "bg-danger/10", text: "text-danger", label: "Negative" },
-  mixed: { bg: "bg-stone-100", text: "text-stone-600", label: "Mixed" },
-};
+import { sentimentColors } from "@/lib/style-constants";
 
 type FeedbackItem = {
   id: string;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { OneOnOneSession, OneOnOneActionItem } from "@/lib/api";
+import { sessionStatusStyles as statusStyles } from "@/lib/style-constants";
 
 interface SessionWithItems extends OneOnOneSession {
   agendaItems?: Array<{ id: string; text: string; covered: boolean }>;
@@ -13,12 +14,6 @@ interface SessionListProps {
   linkPrefix: string; // e.g. "/dashboard/one-on-ones" or "/team/members/[userId]/one-on-one"
   partnerName: string;
 }
-
-const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
-  active: { bg: "bg-positive/10", text: "text-positive", label: "Live" },
-  scheduled: { bg: "bg-sky-50", text: "text-sky-600", label: "Scheduled" },
-  completed: { bg: "bg-stone-100", text: "text-stone-500", label: "Completed" },
-};
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", {

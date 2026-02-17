@@ -4,6 +4,18 @@ import { users } from "@revualy/db";
 
 type Role = "employee" | "manager" | "admin";
 
+/**
+ * Extract authenticated userId from request, throwing 401 if not present.
+ * Use this instead of `request.tenant.userId!` non-null assertions.
+ */
+export function getAuthenticatedUserId(request: FastifyRequest): string {
+  const { userId } = request.tenant;
+  if (!userId) {
+    throw Object.assign(new Error("Authentication required"), { statusCode: 401 });
+  }
+  return userId;
+}
+
 const ROLE_HIERARCHY: Record<Role, number> = {
   employee: 0,
   manager: 1,

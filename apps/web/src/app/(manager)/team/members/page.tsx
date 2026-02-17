@@ -4,12 +4,7 @@ import { getUsers, getEngagementScores } from "@/lib/api";
 import {
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
-
-const trendIcons: Record<string, { icon: string; color: string }> = {
-  up: { icon: "\u25B2", color: "text-positive" },
-  stable: { icon: "\u2014", color: "text-stone-400" },
-  down: { icon: "\u25BC", color: "text-danger" },
-};
+import { trendIcons } from "@/lib/style-constants";
 
 type TeamMember = {
   id: string;

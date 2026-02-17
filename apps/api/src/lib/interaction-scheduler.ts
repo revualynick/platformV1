@@ -9,7 +9,6 @@ import {
   userRelationships,
   questionnaires,
 } from "@revualy/db";
-import { getOrgSession } from "@revualy/db";
 import type { InteractionType, ChatPlatform } from "@revualy/shared";
 import { findBestSlot } from "./availability.js";
 

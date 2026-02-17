@@ -1,30 +1,5 @@
 import { escalationDetails } from "@/lib/mock-data";
-
-const severityStyles = {
-  coaching: {
-    bg: "bg-amber/10",
-    text: "text-warning",
-    dot: "bg-warning",
-    label: "Coaching",
-  },
-  warning: {
-    bg: "bg-terracotta/10",
-    text: "text-terracotta",
-    dot: "bg-terracotta",
-    label: "Warning",
-  },
-  critical: {
-    bg: "bg-danger/10",
-    text: "text-danger",
-    dot: "bg-danger",
-    label: "Critical",
-  },
-};
-
-const statusStyles = {
-  open: { bg: "bg-terracotta/10", text: "text-terracotta", label: "Open" },
-  resolved: { bg: "bg-positive/10", text: "text-positive", label: "Resolved" },
-};
+import { severityStyles, escalationStatusStyles as statusStyles } from "@/lib/style-constants";
 
 export default function EscalationsPage() {
   const openCount = escalationDetails.filter(

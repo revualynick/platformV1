@@ -39,7 +39,7 @@ export class SlackAdapter implements ChatAdapter {
 
     // Reject requests older than 5 minutes (replay protection)
     const now = Math.floor(Date.now() / 1000);
-    if (Math.abs(now - parseInt(timestamp)) > 300) {
+    if (Math.abs(now - parseInt(timestamp, 10)) > 300) {
       return { isValid: false };
     }
 

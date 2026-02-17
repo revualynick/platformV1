@@ -37,7 +37,7 @@ export type ConversationStatus =
   | "closed"
   | "expired";
 
-export type EscalationSeverity = "coaching" | "warning" | "critical";
+export type EscalationSeverity = "low" | "medium" | "high" | "critical";
 
 export type FeedbackSentiment = "positive" | "neutral" | "negative" | "mixed";
 

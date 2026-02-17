@@ -441,12 +441,19 @@ export function createWorkers(config: WorkerConfig) {
         .from(calendarTokens);
 
       let synced = 0;
-      for (const token of tokens) {
-        try {
-          const result = await syncCalendarForUser(db, token.userId);
-          synced += result.synced;
-        } catch (err) {
-          job.log(`Calendar sync failed for user ${token.userId}: ${err}`);
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+        const batch = tokens.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map((t) => syncCalendarForUser(db, t.userId)),
+        );
+        for (let j = 0; j < results.length; j++) {
+          const r = results[j];
+          if (r.status === "fulfilled") {
+            synced += r.value.synced;
+          } else {
+            job.log(`Calendar sync failed for user ${batch[j].userId}: ${r.reason}`);
+          }
         }
       }
       job.log(`Synced ${synced} events for ${tokens.length} users`);

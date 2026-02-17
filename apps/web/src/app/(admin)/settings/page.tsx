@@ -5,43 +5,11 @@ import {
   escalations,
 } from "@/lib/mock-data";
 import { ValuesCard } from "./values-card";
-
-const severityStyles = {
-  coaching: {
-    bg: "bg-amber/10",
-    text: "text-warning",
-    dot: "bg-warning",
-    label: "Coaching",
-  },
-  warning: {
-    bg: "bg-terracotta/10",
-    text: "text-terracotta",
-    dot: "bg-terracotta",
-    label: "Warning",
-  },
-  critical: {
-    bg: "bg-danger/10",
-    text: "text-danger",
-    dot: "bg-danger",
-    label: "Critical",
-  },
-};
-
-const statusStyles = {
-  connected: { text: "text-positive", label: "Connected", dot: "bg-positive" },
-  disconnected: {
-    text: "text-stone-400",
-    label: "Not connected",
-    dot: "bg-stone-300",
-  },
-};
-
-const platformIcons: Record<string, string> = {
-  slack: "💬",
-  google_chat: "🟢",
-  teams: "🟣",
-  google_calendar: "📅",
-};
+import {
+  severityStyles,
+  integrationStatusStyles as statusStyles,
+  platformIcons,
+} from "@/lib/style-constants";
 
 async function loadValues() {
   try {

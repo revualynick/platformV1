@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, eq, inArray } from "drizzle-orm";
 import { createTenantClient } from "./tenant.js";
 import {
   users,
@@ -66,7 +66,7 @@ async function seed() {
     .update(teams)
     .set({ parentTeamId: engineering.id })
     .where(
-      (await import("drizzle-orm")).inArray(teams.id, [
+      inArray(teams.id, [
         corePlatform.id,
         dataML.id,
         infra.id,
@@ -127,7 +127,6 @@ async function seed() {
   const u = (name: string) => userMap.get(name)!;
 
   // Set reporting structure
-  const { eq } = await import("drizzle-orm");
   const reportingLines: [string, string][] = [
     ["Alex Thompson", "Dana Whitfield"],
     ["Jordan Wells", "Alex Thompson"],

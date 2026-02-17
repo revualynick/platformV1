@@ -25,6 +25,7 @@ interface RevualyUser {
   role: string;
   teamId: string | null;
   orgId: string;
+  onboardingCompleted: boolean;
 }
 
 /** Look up a Revualy user by email via the API */
@@ -98,6 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (user as Record<string, unknown>).role = revualyUser.role;
         (user as Record<string, unknown>).orgId = revualyUser.orgId;
         (user as Record<string, unknown>).teamId = revualyUser.teamId;
+        (user as Record<string, unknown>).onboardingCompleted = revualyUser.onboardingCompleted;
       }
       return true;
     },
@@ -113,6 +115,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = u.role as string;
           token.orgId = u.orgId as string;
           token.teamId = u.teamId as string | null;
+          token.onboardingCompleted = u.onboardingCompleted as boolean;
         } else {
           // Credentials flow — look up by email
           const revualyUser = await lookupUserByEmail(user.email!);
@@ -121,6 +124,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.role = revualyUser.role;
             token.orgId = revualyUser.orgId;
             token.teamId = revualyUser.teamId;
+            token.onboardingCompleted = revualyUser.onboardingCompleted;
           }
         }
       }
@@ -133,6 +137,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.role = token.role as string;
       session.orgId = token.orgId as string;
       session.teamId = token.teamId as string | null;
+      session.user.onboardingCompleted = (token.onboardingCompleted as boolean) ?? true;
       return session;
     },
   },

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getEngagementScores } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
@@ -7,11 +8,7 @@ import {
   engagementHistory as mockHistory,
   currentUser as mockUser,
 } from "@/lib/mock-data";
-
-const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
-  complete: { bg: "bg-positive/10", text: "text-positive", label: "Complete" },
-  partial: { bg: "bg-amber/10", text: "text-warning", label: "Partial" },
-};
+import { engagementStatusStyles as statusStyles } from "@/lib/style-constants";
 
 type WeekDetail = {
   week: string;
@@ -197,7 +194,9 @@ export default async function EngagementPage() {
           </h3>
           <span className="text-xs text-stone-400">Last 6 weeks</span>
         </div>
-        <EngagementChart data={chartData} />
+        <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+          <EngagementChart data={chartData} />
+        </Suspense>
       </div>
 
       {/* Weekly history table */}

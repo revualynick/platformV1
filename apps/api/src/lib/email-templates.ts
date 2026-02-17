@@ -6,6 +6,16 @@ const BRAND = {
   light: "#F5F5F4",
 };
 
+/** Escape user-supplied text for safe HTML interpolation */
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 const APP_URL = process.env.APP_URL ?? "http://localhost:3001";
 
 function layout(title: string, body: string): string {
@@ -51,9 +61,9 @@ export interface WeeklyDigestData {
 export function weeklyDigestTemplate(data: WeeklyDigestData): string {
   const scoreColor = data.engagementScore >= 75 ? BRAND.forest : data.engagementScore >= 50 ? BRAND.terracotta : "#DC2626";
 
-  return layout(`Your weekly digest — ${data.weekLabel}`, `
-<p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">Hi ${data.userName},</p>
-<p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">Here's your peer review summary for <strong>${data.weekLabel}</strong>.</p>
+  return layout(`Your weekly digest — ${escapeHtml(data.weekLabel)}`, `
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">Hi ${escapeHtml(data.userName)},</p>
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">Here's your peer review summary for <strong>${escapeHtml(data.weekLabel)}</strong>.</p>
 
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
 <tr>
@@ -74,7 +84,7 @@ export function weeklyDigestTemplate(data: WeeklyDigestData): string {
 </tr>
 </table>
 
-${data.kudosReceived > 0 ? `<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;">You received <strong>${data.kudosReceived} kudos</strong> this week${data.topValue ? ` — most recognized for <strong>${data.topValue}</strong>` : ""}.</p>` : ""}
+${data.kudosReceived > 0 ? `<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;">You received <strong>${data.kudosReceived} kudos</strong> this week${data.topValue ? ` — most recognized for <strong>${escapeHtml(data.topValue)}</strong>` : ""}.</p>` : ""}
 ${data.streak > 0 ? `<p style="color:${BRAND.stone};font-size:14px;margin:0 0 16px;">Current streak: <strong>${data.streak} weeks</strong> of consistent engagement.</p>` : ""}
 
 <table cellpadding="0" cellspacing="0" style="margin-top:16px;">
@@ -100,15 +110,15 @@ export function flagAlertTemplate(data: FlagAlertData): string {
   const severityColor = data.severity === "critical" ? "#DC2626" : data.severity === "warning" ? BRAND.terracotta : "#D97706";
   const severityLabel = data.severity.charAt(0).toUpperCase() + data.severity.slice(1);
 
-  return layout(`Flag alert: ${data.subjectName}`, `
-<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${data.managerName},</p>
+  return layout(`Flag alert: ${escapeHtml(data.subjectName)}`, `
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${escapeHtml(data.managerName)},</p>
 <p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">Revualy has detected a potential concern in a recent feedback interaction.</p>
 
 <div style="background:${BRAND.light};border-left:4px solid ${severityColor};border-radius:0 12px 12px 0;padding:16px 20px;margin-bottom:24px;">
 <div style="font-size:12px;font-weight:700;color:${severityColor};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${severityLabel}</div>
-<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Subject:</strong> ${data.subjectName}</p>
-<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Reason:</strong> ${data.reason}</p>
-${data.flaggedContent ? `<p style="color:#78716C;font-size:13px;font-style:italic;margin:8px 0 0;border-top:1px solid #E7E5E4;padding-top:8px;">"${data.flaggedContent}"</p>` : ""}
+<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Subject:</strong> ${escapeHtml(data.subjectName)}</p>
+<p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Reason:</strong> ${escapeHtml(data.reason)}</p>
+${data.flaggedContent ? `<p style="color:#78716C;font-size:13px;font-style:italic;margin:8px 0 0;border-top:1px solid #E7E5E4;padding-top:8px;">"${escapeHtml(data.flaggedContent)}"</p>` : ""}
 </div>
 
 <table cellpadding="0" cellspacing="0">
@@ -130,7 +140,7 @@ export interface NudgeData {
 
 export function nudgeTemplate(data: NudgeData): string {
   return layout("Friendly reminder: peer reviews this week", `
-<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${data.userName},</p>
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${escapeHtml(data.userName)},</p>
 <p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;">You have <strong>${data.interactionsPending} peer review${data.interactionsPending !== 1 ? "s" : ""}</strong> remaining this week (target: ${data.targetThisWeek}). It's ${data.dayOfWeek} — a great time to catch up!</p>
 
 <p style="color:#78716C;font-size:14px;margin:0 0 24px;">Quick, thoughtful feedback makes a real difference for your teammates. Even a few sentences help.</p>

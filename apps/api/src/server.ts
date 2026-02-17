@@ -44,8 +44,12 @@ async function buildApp() {
   });
 
   // Plugins
+  const corsOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3001";
+  const origins = corsOrigin.includes(",")
+    ? corsOrigin.split(",").map((o) => o.trim())
+    : corsOrigin;
   await app.register(cors, {
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
+    origin: origins,
     credentials: true,
   });
   await app.register(cookie);

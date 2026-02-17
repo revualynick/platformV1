@@ -55,10 +55,17 @@ export function SessionEditor({
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        console.warn("[WS] Received malformed message, ignoring");
+        return;
+      }
+      if (!msg || typeof msg.type !== "string") return;
       switch (msg.type) {
         case "presence":
-          setEmployeeConnected(msg.employeeConnected);
+          setEmployeeConnected(msg.employeeConnected as boolean);
           break;
         case "edit_request":
           setEditRequest(true);
@@ -67,7 +74,7 @@ export function SessionEditor({
         case "content_sync":
           // Manager is the writer, so this is just for reconnection
           if (msg.content && !notes) {
-            setNotes(msg.content);
+            setNotes(msg.content as string);
           }
           break;
       }

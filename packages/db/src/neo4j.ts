@@ -12,7 +12,10 @@ export function initNeo4j(
 ): Driver {
   const u = uri ?? process.env.NEO4J_URI ?? "bolt://localhost:7687";
   const user = username ?? process.env.NEO4J_USERNAME ?? "neo4j";
-  const pass = password ?? process.env.NEO4J_PASSWORD ?? "revualy";
+  const pass = password ?? process.env.NEO4J_PASSWORD;
+  if (!pass) {
+    throw new Error("NEO4J_PASSWORD environment variable is required");
+  }
   driver = neo4j.driver(u, neo4j.auth.basic(user, pass));
   return driver;
 }
@@ -208,21 +211,31 @@ export async function getRelationshipWeb(
     if (!result.records.length) return { nodes: [], edges: [] };
 
     const record = result.records[0];
-    const center = record.get("center").properties;
-    const neighbors = (record.get("neighbors") ?? []).map(
-      (n: { properties: Record<string, unknown> }) => n.properties,
-    );
-    const hop2s = (record.get("hop2s") ?? []).map(
-      (n: { properties: Record<string, unknown> }) => n.properties,
-    );
+
+    // Build a map from Neo4j internal node ID → user UUID
+    // so we can resolve relationship start/end to actual user IDs
+    type RawNode = { identity: { low: number }; properties: Record<string, unknown> };
+    const centerNode = record.get("center") as RawNode;
+    const neighborNodes = (record.get("neighbors") ?? []) as RawNode[];
+    const hop2Nodes = (record.get("hop2s") ?? []) as RawNode[];
+
+    const internalIdToUuid = new Map<number, string>();
+    const allNodes = [centerNode, ...neighborNodes, ...hop2Nodes];
+    allNodes.forEach((n) => {
+      if (n?.identity?.low != null && n?.properties?.id) {
+        internalIdToUuid.set(n.identity.low, n.properties.id as string);
+      }
+    });
 
     const nodeMap = new Map<string, { id: string; name: string; role: string; teamId: string | null }>();
-    [center, ...neighbors, ...hop2s].forEach((n) => {
-      nodeMap.set(n.id as string, {
-        id: n.id as string,
-        name: (n.name as string) ?? "",
-        role: (n.role as string) ?? "",
-        teamId: (n.teamId as string | null) ?? null,
+    allNodes.forEach((n) => {
+      if (!n?.properties?.id) return;
+      const p = n.properties;
+      nodeMap.set(p.id as string, {
+        id: p.id as string,
+        name: (p.name as string) ?? "",
+        role: (p.role as string) ?? "",
+        teamId: (p.teamId as string | null) ?? null,
       });
     });
 
@@ -243,12 +256,18 @@ export async function getRelationshipWeb(
       end: { low: number };
       properties: Record<string, unknown>;
     }) => {
-      const key = `${r.start.low}-${r.type}-${r.end.low}`;
+      // Resolve Neo4j internal IDs to user UUIDs
+      const fromUuid = internalIdToUuid.get(r.start.low);
+      const toUuid = internalIdToUuid.get(r.end.low);
+      if (!fromUuid || !toUuid) return; // Skip edges with unresolvable nodes
+
+      const key = `${fromUuid}-${r.type}-${toUuid}`;
       if (seenEdges.has(key)) return;
       seenEdges.add(key);
+
       edges.push({
-        from: (r.properties.fromUserId ?? r.start.low.toString()) as string,
-        to: (r.properties.toUserId ?? r.end.low.toString()) as string,
+        from: fromUuid,
+        to: toUuid,
         type: r.type,
         strength: (r.properties.strength as number) ?? 1,
         source: (r.properties.source as string) ?? "manual",

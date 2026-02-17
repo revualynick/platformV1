@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import {
@@ -28,18 +29,7 @@ import {
   flaggedItems as mockFlaggedItems,
   oneOnOneSessions as mockOneOnOneSessions,
 } from "@/lib/mock-data";
-
-const sentimentStyles: Record<string, { bg: string; text: string }> = {
-  positive: { bg: "bg-forest/10", text: "text-forest" },
-  neutral: { bg: "bg-stone-100", text: "text-stone-600" },
-  negative: { bg: "bg-danger/10", text: "text-danger" },
-};
-
-const severityStyles: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  coaching: { bg: "bg-amber/10", text: "text-warning", border: "border-amber/20", label: "Coaching" },
-  warning: { bg: "bg-terracotta/10", text: "text-terracotta", border: "border-terracotta/20", label: "Warning" },
-  critical: { bg: "bg-danger/10", text: "text-danger", border: "border-danger/20", label: "Critical" },
-};
+import { sentimentStyles, severityStyles } from "@/lib/style-constants";
 
 type MockFeedbackEntry = {
   id: string;
@@ -306,7 +296,9 @@ export default async function EmployeeDetailPage({
           <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
             Engagement Trend
           </h3>
-          <EngagementChart data={engagementHistory} />
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <EngagementChart data={engagementHistory} />
+          </Suspense>
         </div>
         <div
           className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
@@ -315,7 +307,9 @@ export default async function EmployeeDetailPage({
           <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
             Values Alignment
           </h3>
-          <ValuesRadar data={valuesScores} />
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <ValuesRadar data={valuesScores} />
+          </Suspense>
         </div>
       </div>
 

@@ -7,7 +7,7 @@ import {
   oneOnOneActionItems,
   oneOnOneAgendaItems,
 } from "@revualy/db";
-import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
@@ -78,7 +78,8 @@ const itemIdParamSchema = idParamSchema;
 export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST / — Create/schedule a session (manager only)
   app.post("/", { preHandler: requireRole("manager") }, async (request, reply) => {
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createSessionSchema, request.body);
 
     // Verify this manager manages the employee
@@ -94,7 +95,7 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
     const [created] = await db
       .insert(oneOnOneSessions)
       .values({
-        managerId: userId!,
+        managerId: userId,
         employeeId: body.employeeId,
         scheduledAt: new Date(body.scheduledAt),
       })
@@ -105,14 +106,15 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
 
   // GET / — List sessions for a pair
   app.get("/", { preHandler: requireAuth }, async (request, reply) => {
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const query = parseBody(sessionQuerySchema, request.query);
 
     const conditions = [];
 
     if (query.employeeId) {
       // If employeeId specified, verify pair access
-      const pair = await resolveOneOnOnePair(db, userId!, query.employeeId);
+      const pair = await resolveOneOnOnePair(db, userId, query.employeeId);
       if (!pair) {
         return reply.code(403).send({ error: "Access denied" });
       }
@@ -125,8 +127,8 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       const { or } = await import("drizzle-orm");
       conditions.push(
         or(
-          eq(oneOnOneSessions.managerId, userId!),
-          eq(oneOnOneSessions.employeeId, userId!),
+          eq(oneOnOneSessions.managerId, userId),
+          eq(oneOnOneSessions.employeeId, userId),
         )!,
       );
     }
@@ -159,9 +161,10 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // GET /:id — Session detail with agenda + action items
   app.get("/:id", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -185,10 +188,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /:id — Update session (manager only for status changes)
   app.patch("/:id", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(updateSessionSchema, request.body);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -255,10 +259,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST /:id/action-items
   app.post("/:id/action-items", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createActionItemSchema, request.body);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -280,11 +285,12 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /:id/action-items/:itemId
   app.patch("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const itemId = (request.params as Record<string, string>).itemId;
     const body = parseBody(updateActionItemSchema, request.body);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -320,10 +326,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // DELETE /:id/action-items/:itemId
   app.delete("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const itemId = (request.params as Record<string, string>).itemId;
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -345,10 +352,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST /:id/agenda
   app.post("/:id/agenda", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createAgendaItemSchema, request.body);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -369,11 +377,12 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /:id/agenda/:itemId
   app.patch("/:id/agenda/:itemId", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const itemId = (request.params as Record<string, string>).itemId;
     const body = parseBody(updateAgendaItemSchema, request.body);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -403,9 +412,10 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST /:id/generate-agenda — Trigger AI agenda generation (manager only)
   app.post("/:id/generate-agenda", { preHandler: requireRole("manager") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
@@ -448,14 +458,15 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST /:id/ws-token — Generate a short-lived token for WebSocket auth
   app.post("/:id/ws-token", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId, orgId } = request.tenant;
+    const { db, orgId } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
 
-    const session = await verifySessionAccess(db, id, userId!);
+    const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
     }
 
-    const token = generateWsToken(userId!, orgId, id);
+    const token = generateWsToken(userId, orgId, id);
     return reply.send({ token });
   });
 };

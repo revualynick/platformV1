@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getUsers, getEngagementScores, getFlaggedItems } from "@/lib/api";
 import { TeamTrendChart } from "@/components/charts/team-trend-chart";
@@ -7,18 +8,7 @@ import {
   leaderboard as mockLeaderboard,
   teamEngagementTrend as mockTrend,
 } from "@/lib/mock-data";
-
-const trendIcons: Record<string, { icon: string; color: string }> = {
-  up: { icon: "\u25B2", color: "text-positive" },
-  stable: { icon: "\u2014", color: "text-stone-400" },
-  down: { icon: "\u25BC", color: "text-danger" },
-};
-
-const severityStyles: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  coaching: { bg: "bg-amber/10", text: "text-warning", border: "border-amber/20", label: "Coaching" },
-  warning: { bg: "bg-terracotta/10", text: "text-terracotta", border: "border-terracotta/20", label: "Warning" },
-  critical: { bg: "bg-danger/10", text: "text-danger", border: "border-danger/20", label: "Critical" },
-};
+import { trendIcons, severityStyles } from "@/lib/style-constants";
 
 type TeamMember = {
   id: string;
@@ -235,7 +225,9 @@ export default async function TeamDashboard() {
               Range: highest — avg — lowest
             </span>
           </div>
-          <TeamTrendChart data={trendData} />
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <TeamTrendChart data={trendData} />
+          </Suspense>
         </div>
 
         {/* Leaderboard */}

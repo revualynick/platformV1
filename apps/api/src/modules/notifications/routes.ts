@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and } from "drizzle-orm";
 import { notificationPreferences } from "@revualy/db";
-import { requireAuth } from "../../lib/rbac.js";
+import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
 import { parseBody, updateNotificationPrefSchema } from "../../lib/validation.js";
 
 const NOTIFICATION_TYPES = [
@@ -17,7 +17,7 @@ export const notificationRoutes: FastifyPluginAsync = async (app) => {
   // GET /notifications/preferences — List all preferences for current user
   app.get("/preferences", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
 
     const prefs = await db
       .select()
@@ -45,7 +45,7 @@ export const notificationRoutes: FastifyPluginAsync = async (app) => {
   // PATCH /notifications/preferences — Upsert a single preference
   app.patch("/preferences", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(updateNotificationPrefSchema, request.body);
 
     // Check if preference exists

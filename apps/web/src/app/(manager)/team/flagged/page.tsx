@@ -4,12 +4,7 @@ import {
   flaggedItems as mockFlaggedItems,
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
-
-const severityStyles: Record<string, { bg: string; text: string; border: string; dot: string; label: string }> = {
-  coaching: { bg: "bg-amber/10", text: "text-warning", border: "border-amber/20", dot: "bg-warning", label: "Coaching" },
-  warning: { bg: "bg-terracotta/10", text: "text-terracotta", border: "border-terracotta/20", dot: "bg-terracotta", label: "Warning" },
-  critical: { bg: "bg-danger/10", text: "text-danger", border: "border-danger/20", dot: "bg-danger", label: "Critical" },
-};
+import { severityStyles } from "@/lib/style-constants";
 
 type FlaggedItem = {
   id: string;

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { escalations, escalationNotes, users } from "@revualy/db";
-import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
@@ -14,7 +14,8 @@ import {
 export const escalationRoutes: FastifyPluginAsync = async (app) => {
   // POST / — File an escalation (any authenticated user)
   app.post("/", { preHandler: requireAuth }, async (request, reply) => {
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createEscalationSchema, request.body);
 
     const [created] = await db
@@ -35,7 +36,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
     await db.insert(escalationNotes).values({
       escalationId: created.id,
       action: "Escalation filed",
-      performedBy: userId!,
+      performedBy: userId,
       content: `Escalation filed with severity: ${body.severity}`,
     });
 
@@ -74,7 +75,8 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
   // GET /:id — Escalation detail + audit notes (reporter or admin)
   app.get("/:id", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
 
     const [row] = await db
       .select()
@@ -89,7 +91,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
       const [user] = await db
         .select({ role: users.role })
         .from(users)
-        .where(eq(users.id, userId!));
+        .where(eq(users.id, userId));
       if (!user || user.role !== "admin") {
         return reply.code(403).send({ error: "Insufficient permissions" });
       }
@@ -110,7 +112,8 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("admin") },
     async (request, reply) => {
       const { id } = parseBody(idParamSchema, request.params);
-      const { db, userId } = request.tenant;
+      const { db } = request.tenant;
+      const userId = getAuthenticatedUserId(request);
       const body = parseBody(updateEscalationSchema, request.body);
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -137,7 +140,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
       await db.insert(escalationNotes).values({
         escalationId: id,
         action: `Status changed to ${body.status ?? "updated"}`,
-        performedBy: userId!,
+        performedBy: userId,
         content: body.resolution ?? "",
       });
 
@@ -151,7 +154,8 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireAuth },
     async (request, reply) => {
       const { id } = parseBody(idParamSchema, request.params);
-      const { db, userId } = request.tenant;
+      const { db } = request.tenant;
+      const userId = getAuthenticatedUserId(request);
       const body = parseBody(createEscalationNoteSchema, request.body);
 
       // Verify escalation exists and user has access
@@ -167,7 +171,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
         const [user] = await db
           .select({ role: users.role })
           .from(users)
-          .where(eq(users.id, userId!));
+          .where(eq(users.id, userId));
         if (!user || user.role !== "admin") {
           return reply.code(403).send({ error: "Insufficient permissions" });
         }
@@ -178,7 +182,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
         .values({
           escalationId: id,
           action: body.action,
-          performedBy: userId!,
+          performedBy: userId,
           content: body.content,
         })
         .returning();

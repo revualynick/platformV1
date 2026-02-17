@@ -50,6 +50,12 @@ export class LLMGateway {
     request: LLMCompletionRequest,
     provider?: LLMProvider,
   ): Promise<LLMCompletionResponse> {
+    if (!request.messages || request.messages.length === 0) {
+      throw new Error("LLM completion request must have at least one message");
+    }
+    if (request.maxTokens != null && request.maxTokens <= 0) {
+      throw new Error("maxTokens must be a positive number");
+    }
     const target = provider ?? this.defaultProvider;
     const adapter = this.providers.get(target);
     if (!adapter) {
@@ -82,6 +88,12 @@ export function createLLMGateway(config: LLMGatewayConfig): LLMGateway {
       : config.provider === "openai"
         ? OPENAI_DEFAULTS
         : undefined;
+
+  if (!defaults && !config.models?.fast && !config.models?.standard && !config.models?.advanced) {
+    throw new Error(
+      `Provider "${config.provider}" has no default model names. Provide explicit model names via config.models.`,
+    );
+  }
 
   const models: Record<ModelTier, string> = {
     fast: config.models?.fast ?? defaults?.fast ?? config.provider,

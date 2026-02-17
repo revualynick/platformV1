@@ -9,7 +9,7 @@ import {
   teams,
   managerNotes,
 } from "@revualy/db";
-import { requireRole } from "../../lib/rbac.js";
+import { requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
@@ -73,7 +73,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // GET /manager/questionnaires — My team's + org-wide questionnaires
   app.get("/questionnaires", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
 
     // Get manager's team
     const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -120,7 +120,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // POST /manager/questionnaires — Create a team-scoped questionnaire
   app.post("/questionnaires", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createQuestionnaireSchema, request.body);
 
     // Get manager's team for scope
@@ -165,7 +165,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/questionnaires/:id", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(updateQuestionnaireSchema, request.body);
 
     // Ownership check
@@ -201,7 +201,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // GET /manager/org-chart — Scoped reporting tree + relationships
   app.get("/org-chart", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
 
     // Get full reporting tree
     const tree = await getReportingTree(db, userId);
@@ -297,7 +297,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // POST /manager/relationships — Create (both users must be in reporting tree)
   app.post("/relationships", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createRelationshipSchema, request.body);
 
     const tree = await getReportingTree(db, userId);
@@ -330,7 +330,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // GET /manager/notes?subjectId=X — List notes for an employee
   app.get("/notes", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const query = parseBody(managerNoteQuerySchema, request.query);
 
     const notes = await db
@@ -350,7 +350,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   // POST /manager/notes — Create a note (subject must be in reporting tree)
   app.post("/notes", async (request, reply) => {
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(createManagerNoteSchema, request.body);
 
     const tree = await getReportingTree(db, userId);
@@ -374,7 +374,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/notes/:id", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const body = parseBody(updateManagerNoteSchema, request.body);
 
     const [existing] = await db
@@ -400,7 +400,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
   app.delete("/notes/:id", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
 
     const [existing] = await db
       .select()

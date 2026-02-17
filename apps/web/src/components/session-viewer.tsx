@@ -37,19 +37,26 @@ export function SessionViewer({
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        console.warn("[WS] Received malformed message, ignoring");
+        return;
+      }
+      if (!msg || typeof msg.type !== "string") return;
       switch (msg.type) {
         case "content_sync":
-          setNotes(msg.content);
+          setNotes(msg.content as string);
           break;
         case "presence":
-          setManagerConnected(msg.managerConnected);
+          setManagerConnected(msg.managerConnected as boolean);
           break;
         case "agenda_updated":
-          setAgendaState((prev) => new Map(prev).set(msg.itemId, msg.covered));
+          setAgendaState((prev) => new Map(prev).set(msg.itemId as string, msg.covered as boolean));
           break;
         case "action_updated":
-          setActionState((prev) => new Map(prev).set(msg.itemId, msg.completed));
+          setActionState((prev) => new Map(prev).set(msg.itemId as string, msg.completed as boolean));
           break;
         case "session_ended":
           // Reload page on session end

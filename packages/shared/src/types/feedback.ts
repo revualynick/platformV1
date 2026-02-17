@@ -42,13 +42,21 @@ export interface Kudos {
 
 export interface Escalation {
   id: UUID;
-  feedbackEntryId: UUID;
+  feedbackEntryId: UUID | null;
+  reporterId: UUID;
+  subjectId: UUID;
+  type: string;
   severity: EscalationSeverity;
+  status: "open" | "investigating" | "resolved" | "dismissed";
   reason: string;
+  description: string | null;
   flaggedContent: string;
+  resolution: string | null;
   resolvedAt: ISODateTime | null;
   resolvedBy: UUID | null;
+  resolvedById: UUID | null;
   createdAt: ISODateTime;
+  updatedAt: ISODateTime;
 }
 
 export interface EscalationAuditEntry {

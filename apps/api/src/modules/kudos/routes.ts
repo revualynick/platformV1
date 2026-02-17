@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, or, desc, inArray } from "drizzle-orm";
 import { kudos, users } from "@revualy/db";
-import { requireAuth } from "../../lib/rbac.js";
+import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
   createKudosSchema,
@@ -15,7 +15,7 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (request, reply) => {
     const { db } = request.tenant;
     const query = parseBody(kudosQuerySchema, request.query);
-    const userId = query.userId ?? request.tenant.userId!;
+    const userId = query.userId ?? getAuthenticatedUserId(request);
 
     // Fetch kudos for this user (given or received), newest first
     const rows = await db
@@ -58,7 +58,7 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
     const [created] = await db
       .insert(kudos)
       .values({
-        giverId: request.tenant.userId!,
+        giverId: getAuthenticatedUserId(request),
         receiverId: body.receiverId,
         message: body.message,
         coreValueId: body.coreValueId,

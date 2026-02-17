@@ -58,28 +58,34 @@ export async function syncCalendarForUser(
   // 3. Fetch events from Google
   const events = await fetchCalendarEvents(accessToken);
 
-  // 4. Upsert events into calendar_events
-  for (const event of events) {
-    await db
-      .insert(calendarEvents)
-      .values({
-        userId,
-        externalEventId: event.externalEventId,
-        title: event.title,
-        attendees: event.attendees,
-        startAt: event.startAt,
-        endAt: event.endAt,
-        source: "google",
-      })
-      .onConflictDoUpdate({
-        target: [calendarEvents.userId, calendarEvents.externalEventId],
-        set: {
-          title: event.title,
-          attendees: event.attendees,
-          startAt: event.startAt,
-          endAt: event.endAt,
-        },
-      });
+  // 4. Upsert events into calendar_events (batched)
+  if (events.length > 0) {
+    const BATCH = 50;
+    for (let i = 0; i < events.length; i += BATCH) {
+      const batch = events.slice(i, i + BATCH);
+      await db
+        .insert(calendarEvents)
+        .values(
+          batch.map((event) => ({
+            userId,
+            externalEventId: event.externalEventId,
+            title: event.title,
+            attendees: event.attendees,
+            startAt: event.startAt,
+            endAt: event.endAt,
+            source: "google",
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [calendarEvents.userId, calendarEvents.externalEventId],
+          set: {
+            title: sql`excluded.title`,
+            attendees: sql`excluded.attendees`,
+            startAt: sql`excluded.start_at`,
+            endAt: sql`excluded.end_at`,
+          },
+        });
+    }
   }
 
   // 5. Infer relationships from co-attendees
@@ -112,9 +118,7 @@ export async function syncCalendarForUser(
       .select()
       .from(userRelationships)
       .where(
-        and(
-          sql`((${userRelationships.fromUserId} = ${userId} AND ${userRelationships.toUserId} = ${otherId}) OR (${userRelationships.fromUserId} = ${otherId} AND ${userRelationships.toUserId} = ${userId}))`,
-        ),
+        sql`((${userRelationships.fromUserId} = ${userId} AND ${userRelationships.toUserId} = ${otherId}) OR (${userRelationships.fromUserId} = ${otherId} AND ${userRelationships.toUserId} = ${userId}))`,
       );
 
     if (existing.length === 0) {

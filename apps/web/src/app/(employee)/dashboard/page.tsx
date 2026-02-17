@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneSessions } from "@/lib/api";
 import type { OneOnOneSession } from "@/lib/api";
@@ -13,13 +14,7 @@ import {
   oneOnOneSessions as mockOneOnOneSessions,
 } from "@/lib/mock-data";
 import Link from "next/link";
-
-const sentimentColors: Record<string, string> = {
-  positive: "bg-positive/10 text-positive",
-  neutral: "bg-amber/10 text-warning",
-  negative: "bg-danger/10 text-danger",
-  mixed: "bg-stone-100 text-stone-600",
-};
+import { sentimentColorFlat, dashboardSessionStatusStyles } from "@/lib/style-constants";
 
 async function loadDashboardData() {
   const session = await auth();
@@ -42,11 +37,12 @@ async function loadDashboardData() {
   }
 
   try {
-    const [engResult, fbResult, orgResult, meResult] = await Promise.allSettled([
+    const [engResult, fbResult, orgResult, meResult, ooResult] = await Promise.allSettled([
       getEngagementScores(userId),
       getFeedback(userId),
       getOrgConfig(),
       getCurrentUser(),
+      getOneOnOneSessions({ employeeId: userId }),
     ]);
 
     // Engagement data
@@ -112,20 +108,14 @@ async function loadDashboardData() {
       }
     }
 
-    // 1:1 sessions — fetch if user has a manager
+    // 1:1 sessions — use parallel result, filter based on manager
     let oneOnOneSessions: OneOnOneSession[] = mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[];
-    let hasManager = true;
     const managerId = meResult.status === "fulfilled" ? meResult.value.managerId : null;
-    if (!managerId) {
-      hasManager = false;
+    const hasManager = !!managerId;
+    if (!hasManager) {
       oneOnOneSessions = [];
-    } else {
-      try {
-        const ooResult = await getOneOnOneSessions({ employeeId: userId });
-        oneOnOneSessions = ooResult.data;
-      } catch {
-        // Keep mock fallback
-      }
+    } else if (ooResult.status === "fulfilled") {
+      oneOnOneSessions = ooResult.value.data;
     }
 
     return {
@@ -248,7 +238,9 @@ export default async function EmployeeDashboard() {
             <h3 className="font-display text-base font-semibold text-stone-800">Engagement Trend</h3>
             <span className="text-xs text-stone-400">Last 6 weeks</span>
           </div>
-          <EngagementChart data={data.engagementHistory} />
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <EngagementChart data={data.engagementHistory} />
+          </Suspense>
         </div>
 
         <div
@@ -259,7 +251,9 @@ export default async function EmployeeDashboard() {
             <h3 className="font-display text-base font-semibold text-stone-800">Values Alignment</h3>
             <span className="text-xs text-stone-400">Avg scores</span>
           </div>
-          <ValuesRadar data={data.valuesScores} />
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <ValuesRadar data={data.valuesScores} />
+          </Suspense>
         </div>
       </div>
 
@@ -294,11 +288,6 @@ export default async function EmployeeDashboard() {
         ) : (() => {
           const nextSession = data.oneOnOneSessions.find((s) => s.status === "active" || s.status === "scheduled");
           const lastSession = [...data.oneOnOneSessions].reverse().find((s) => s.status === "completed");
-          const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
-            active: { bg: "bg-positive/10", text: "text-positive", label: "Live Now" },
-            scheduled: { bg: "bg-sky-50", text: "text-sky-600", label: "Upcoming" },
-            completed: { bg: "bg-stone-100", text: "text-stone-500", label: "Completed" },
-          };
 
           return (
             <div className="space-y-3">
@@ -309,8 +298,8 @@ export default async function EmployeeDashboard() {
                   style={{ boxShadow: "var(--shadow-sm)" }}
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusStyles[nextSession.status].bg} ${statusStyles[nextSession.status].text}`}>
-                      {statusStyles[nextSession.status].label}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${dashboardSessionStatusStyles[nextSession.status].bg} ${dashboardSessionStatusStyles[nextSession.status].text}`}>
+                      {dashboardSessionStatusStyles[nextSession.status].label}
                     </span>
                     <span className="text-sm font-medium text-stone-800">
                       {new Date(nextSession.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -381,7 +370,7 @@ export default async function EmployeeDashboard() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize ${sentimentColors[fb.sentiment] ?? sentimentColors.neutral}`}>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize ${sentimentColorFlat[fb.sentiment] ?? sentimentColorFlat.neutral}`}>
                     {fb.sentiment}
                   </span>
                   <span className="text-xs tabular-nums text-stone-400">Score: {fb.engagementScore}</span>

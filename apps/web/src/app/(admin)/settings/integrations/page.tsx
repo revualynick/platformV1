@@ -1,20 +1,5 @@
 import { integrations } from "@/lib/mock-data";
-
-const statusStyles = {
-  connected: { text: "text-positive", label: "Connected", dot: "bg-positive" },
-  disconnected: {
-    text: "text-stone-400",
-    label: "Not connected",
-    dot: "bg-stone-300",
-  },
-};
-
-const platformIcons: Record<string, string> = {
-  slack: "💬",
-  google_chat: "🟢",
-  teams: "🟣",
-  google_calendar: "📅",
-};
+import { integrationStatusStyles as statusStyles, platformIcons } from "@/lib/style-constants";
 
 const platformDescriptions: Record<string, string> = {
   slack:
