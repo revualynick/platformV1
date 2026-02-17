@@ -544,65 +544,145 @@ export async function deleteManagerNote(id: string) {
   );
 }
 
-// ── One-on-One Notes ────────────────────────────────
+// ── One-on-One Sessions ─────────────────────────────
 
-export interface OneOnOneEntryRow {
+export interface OneOnOneSession {
   id: string;
   managerId: string;
   employeeId: string;
-  authorId: string;
-  authorName: string;
-  content: string;
+  status: "scheduled" | "active" | "completed";
+  scheduledAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  notes: string;
+  summary: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface OneOnOneRevisionRow {
+export interface OneOnOneActionItem {
   id: string;
-  entryId: string;
-  previousContent: string;
-  editedAt: string;
+  sessionId: string;
+  text: string;
+  assigneeId: string | null;
+  dueDate: string | null;
+  completed: boolean;
+  completedAt: string | null;
+  sortOrder: number;
+  createdAt: string;
 }
 
-export async function getOneOnOneNotes(
-  partnerId: string,
-  opts?: { search?: string },
-) {
-  const params = new URLSearchParams({ partnerId });
-  if (opts?.search) params.set("search", opts.search);
-  return apiFetch<{ data: OneOnOneEntryRow[] }>(
-    `/api/v1/one-on-one-notes?${params}`,
+export interface OneOnOneAgendaItem {
+  id: string;
+  sessionId: string;
+  text: string;
+  source: "ai" | "manual";
+  covered: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface OneOnOneSessionDetail extends OneOnOneSession {
+  agendaItems: OneOnOneAgendaItem[];
+  actionItems: OneOnOneActionItem[];
+}
+
+export async function getOneOnOneSessions(opts?: {
+  employeeId?: string;
+  status?: string;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.employeeId) params.set("employeeId", opts.employeeId);
+  if (opts?.status) params.set("status", opts.status);
+  const qs = params.toString() ? `?${params}` : "";
+  return apiFetch<{ data: OneOnOneSession[] }>(
+    `/api/v1/one-on-one-sessions${qs}`,
   );
 }
 
-export async function deleteOneOnOneNote(id: string) {
-  return apiFetch<{ success: boolean }>(`/api/v1/one-on-one-notes/${id}`, {
-    method: "DELETE",
-  });
+export async function getOneOnOneSession(id: string) {
+  return apiFetch<OneOnOneSessionDetail>(
+    `/api/v1/one-on-one-sessions/${id}`,
+  );
 }
 
-export async function createOneOnOneNote(data: {
-  partnerId: string;
-  content: string;
+export async function createOneOnOneSession(data: {
+  employeeId: string;
+  scheduledAt: string;
 }) {
-  return apiFetch<OneOnOneEntryRow>("/api/v1/one-on-one-notes", {
+  return apiFetch<OneOnOneSession>("/api/v1/one-on-one-sessions", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export async function updateOneOnOneNote(
+export async function updateOneOnOneSession(
   id: string,
-  data: { content: string },
+  data: {
+    status?: string;
+    notes?: string;
+    summary?: string;
+    scheduledAt?: string;
+  },
 ) {
-  return apiFetch<OneOnOneEntryRow>(`/api/v1/one-on-one-notes/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
+  return apiFetch<OneOnOneSessionDetail>(
+    `/api/v1/one-on-one-sessions/${id}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
 }
 
-export async function getOneOnOneNoteHistory(id: string) {
-  return apiFetch<{ data: OneOnOneRevisionRow[] }>(
-    `/api/v1/one-on-one-notes/${id}/history`,
+export async function addActionItem(
+  sessionId: string,
+  data: { text: string; assigneeId?: string; dueDate?: string },
+) {
+  return apiFetch<OneOnOneActionItem>(
+    `/api/v1/one-on-one-sessions/${sessionId}/action-items`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export async function updateActionItem(
+  sessionId: string,
+  itemId: string,
+  data: { text?: string; completed?: boolean; assigneeId?: string | null; dueDate?: string | null },
+) {
+  return apiFetch<OneOnOneActionItem>(
+    `/api/v1/one-on-one-sessions/${sessionId}/action-items/${itemId}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export async function deleteActionItem(sessionId: string, itemId: string) {
+  return apiFetch<{ success: boolean }>(
+    `/api/v1/one-on-one-sessions/${sessionId}/action-items/${itemId}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function addAgendaItem(
+  sessionId: string,
+  data: { text: string; source?: string },
+) {
+  return apiFetch<OneOnOneAgendaItem>(
+    `/api/v1/one-on-one-sessions/${sessionId}/agenda`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export async function updateAgendaItem(
+  sessionId: string,
+  itemId: string,
+  data: { covered?: boolean; text?: string },
+) {
+  return apiFetch<OneOnOneAgendaItem>(
+    `/api/v1/one-on-one-sessions/${sessionId}/agenda/${itemId}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export async function generateAgenda(sessionId: string) {
+  return apiFetch<{ data: OneOnOneAgendaItem[] }>(
+    `/api/v1/one-on-one-sessions/${sessionId}/generate-agenda`,
+    { method: "POST" },
   );
 }

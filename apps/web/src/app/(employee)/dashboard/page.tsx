@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneNotes } from "@/lib/api";
-import type { OneOnOneEntryRow } from "@/lib/api";
+import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneSessions } from "@/lib/api";
+import type { OneOnOneSession } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
@@ -10,7 +10,7 @@ import {
   engagementHistory as mockHistory,
   valuesScores as mockValuesScores,
   upcomingInteraction,
-  oneOnOneEntries as mockOneOnOneEntries,
+  oneOnOneSessions as mockOneOnOneSessions,
 } from "@/lib/mock-data";
 import Link from "next/link";
 
@@ -36,7 +36,7 @@ async function loadDashboardData() {
       interactionsThisWeek: 3,
       recentFeedback: mockFeedback,
       valuesScores: mockValuesScores,
-      oneOnOneEntries: mockOneOnOneEntries as OneOnOneEntryRow[],
+      oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
       hasManager: true,
     };
   }
@@ -112,17 +112,17 @@ async function loadDashboardData() {
       }
     }
 
-    // 1:1 notes — fetch if user has a manager
-    let oneOnOneEntries: OneOnOneEntryRow[] = mockOneOnOneEntries as OneOnOneEntryRow[];
+    // 1:1 sessions — fetch if user has a manager
+    let oneOnOneSessions: OneOnOneSession[] = mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[];
     let hasManager = true;
     const managerId = meResult.status === "fulfilled" ? meResult.value.managerId : null;
     if (!managerId) {
       hasManager = false;
-      oneOnOneEntries = [];
+      oneOnOneSessions = [];
     } else {
       try {
-        const ooResult = await getOneOnOneNotes(managerId);
-        oneOnOneEntries = ooResult.data;
+        const ooResult = await getOneOnOneSessions({ employeeId: userId });
+        oneOnOneSessions = ooResult.data;
       } catch {
         // Keep mock fallback
       }
@@ -137,7 +137,7 @@ async function loadDashboardData() {
       interactionsThisWeek,
       recentFeedback,
       valuesScores,
-      oneOnOneEntries,
+      oneOnOneSessions,
       hasManager,
     };
   } catch {
@@ -150,7 +150,7 @@ async function loadDashboardData() {
       interactionsThisWeek: 3,
       recentFeedback: mockFeedback,
       valuesScores: mockValuesScores,
-      oneOnOneEntries: mockOneOnOneEntries as OneOnOneEntryRow[],
+      oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
       hasManager: true,
     };
   }
@@ -263,13 +263,13 @@ export default async function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* 1:1 Notes preview */}
+      {/* 1:1 Sessions preview */}
       <div
         className="card-enter mb-8"
         style={{ animationDelay: "550ms" }}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display text-base font-semibold text-stone-800">1:1 Notes</h3>
+          <h3 className="font-display text-base font-semibold text-stone-800">1:1 Sessions</h3>
           <Link
             href="/dashboard/one-on-ones"
             className="text-xs font-medium text-forest hover:text-forest/80"
@@ -284,45 +284,72 @@ export default async function EmployeeDashboard() {
           >
             <p className="text-sm text-stone-400">No manager assigned.</p>
           </div>
-        ) : data.oneOnOneEntries.length === 0 ? (
+        ) : data.oneOnOneSessions.length === 0 ? (
           <div
             className="rounded-2xl border border-stone-200/60 bg-white p-5 text-center"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
-            <p className="text-sm text-stone-400">No 1:1 notes yet.</p>
+            <p className="text-sm text-stone-400">No 1:1 sessions yet.</p>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {data.oneOnOneEntries.slice(-2).map((entry) => {
-              const isManager = entry.authorId === entry.managerId;
-              const borderColor = isManager ? "border-l-forest" : "border-l-terracotta";
-              const initials = entry.authorName.split(" ").map((n) => n[0]).join("");
+        ) : (() => {
+          const nextSession = data.oneOnOneSessions.find((s) => s.status === "active" || s.status === "scheduled");
+          const lastSession = [...data.oneOnOneSessions].reverse().find((s) => s.status === "completed");
+          const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
+            active: { bg: "bg-positive/10", text: "text-positive", label: "Live Now" },
+            scheduled: { bg: "bg-sky-50", text: "text-sky-600", label: "Upcoming" },
+            completed: { bg: "bg-stone-100", text: "text-stone-500", label: "Completed" },
+          };
 
-              return (
-                <div
-                  key={entry.id}
-                  className={`rounded-xl border border-stone-200/60 border-l-4 ${borderColor} bg-white p-4`}
+          return (
+            <div className="space-y-3">
+              {nextSession && (
+                <Link
+                  href={`/dashboard/one-on-ones/${nextSession.id}`}
+                  className="block rounded-xl border border-stone-200/60 border-l-4 border-l-forest bg-white p-4 transition-all hover:shadow-md"
                   style={{ boxShadow: "var(--shadow-sm)" }}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div
-                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${
-                        isManager ? "bg-forest/10 text-forest" : "bg-terracotta/10 text-terracotta"
-                      }`}
-                    >
-                      {initials}
-                    </div>
-                    <span className="text-sm font-medium text-stone-800">{entry.authorName}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusStyles[nextSession.status].bg} ${statusStyles[nextSession.status].text}`}>
+                      {statusStyles[nextSession.status].label}
+                    </span>
+                    <span className="text-sm font-medium text-stone-800">
+                      {new Date(nextSession.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
                     <span className="text-xs text-stone-400">
-                      {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {new Date(nextSession.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                     </span>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm text-stone-600">{entry.content}</p>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  {nextSession.summary ? (
+                    <p className="mt-2 line-clamp-2 text-sm text-stone-600">{nextSession.summary}</p>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-400 italic">
+                      {nextSession.status === "active" ? "Session in progress..." : "Upcoming session"}
+                    </p>
+                  )}
+                </Link>
+              )}
+              {lastSession && (
+                <Link
+                  href={`/dashboard/one-on-ones/${lastSession.id}`}
+                  className="block rounded-xl border border-stone-200/60 bg-white p-4 transition-all hover:shadow-md"
+                  style={{ boxShadow: "var(--shadow-sm)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-500">
+                      Last Session
+                    </span>
+                    <span className="text-sm font-medium text-stone-800">
+                      {new Date(lastSession.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  {lastSession.summary && (
+                    <p className="mt-2 line-clamp-2 text-sm text-stone-600">{lastSession.summary}</p>
+                  )}
+                </Link>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Recent feedback */}

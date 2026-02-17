@@ -134,20 +134,49 @@ export const managerNoteQuerySchema = z.object({
   subjectId: uuid,
 });
 
-// ── One-on-One Notes ─────────────────────────────────
+// ── One-on-One Sessions ──────────────────────────────
 
-export const createOneOnOneEntrySchema = z.object({
-  partnerId: uuid,
-  content: z.string().min(1).max(10000),
+export const createSessionSchema = z.object({
+  employeeId: uuid,
+  scheduledAt: z.string().datetime(),
 });
 
-export const updateOneOnOneEntrySchema = z.object({
-  content: z.string().min(1).max(10000),
+export const updateSessionSchema = z.object({
+  status: z.enum(["scheduled", "active", "completed"]).optional(),
+  notes: z.string().max(100000).optional(),
+  summary: z.string().max(10000).optional(),
+  scheduledAt: z.string().datetime().optional(),
 });
 
-export const oneOnOneQuerySchema = z.object({
-  partnerId: uuid,
-  search: z.string().max(500).optional(),
+export const sessionQuerySchema = z.object({
+  employeeId: uuid.optional(),
+  status: z.enum(["scheduled", "active", "completed"]).optional(),
+});
+
+export const createActionItemSchema = z.object({
+  text: z.string().min(1).max(2000),
+  assigneeId: uuid.optional(),
+  dueDate: z.string().optional(), // YYYY-MM-DD
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+export const updateActionItemSchema = z.object({
+  text: z.string().min(1).max(2000).optional(),
+  assigneeId: uuid.nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  completed: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+export const createAgendaItemSchema = z.object({
+  text: z.string().min(1).max(2000),
+  source: z.enum(["ai", "manual"]).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+export const updateAgendaItemSchema = z.object({
+  covered: z.boolean().optional(),
+  text: z.string().min(1).max(2000).optional(),
 });
 
 // ── Params ─────────────────────────────────────────────

@@ -6,11 +6,11 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phase 1 (Foundation), Phase 2 (Core Loop), and Phase 3 (Intelligence) are complete.** See `docs/plan.md` for full checklists.
+**Phase 1 (Foundation), Phase 2 (Core Loop), Phase 3 (Intelligence) complete. Phase 4 in progress.** See `docs/plan.md` for full checklists.
 
-Phase 3 added: Kudos system (full CRUD + modal), email notifications (Resend + templates + preferences + cron), Google Calendar sync (OAuth + availability engine + relationship inference), manager question bank + sub-org chart (scoped CRUD + BFS reporting tree + CSS tree page).
+Phase 4 progress: 1:1 meeting sessions (replaced old chat-style notes). Session model with real-time WebSocket sync, AI agenda generation, action items, and agenda tracking. `@fastify/websocket` installed.
 
-**Next up:** Phase 4 (Google Chat adapter + beta launch). Phase 2.5 (marketing site) is also unbuilt.
+**Next up:** Remaining Phase 4 items (Google Chat adapter, escalation pipeline, leaderboard, beta launch).
 
 ## Repo structure
 ```
@@ -45,12 +45,13 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Error handling:** Global Fastify `setErrorHandler` — 400 for validation, 500 for everything else
 - **Frontend API calls:** Server-side `lib/api.ts` with `Promise.allSettled` + mock fallback
 - **BullMQ:** Workers share queue instances from `createQueues()`. Never create ad-hoc `new Queue()` inside workers.
-- **Redis state:** Conversation state via `SETEX`/`GET`/`DEL`, 24h TTL, key `conv:{id}`
+- **Redis state:** Conversation state via `SETEX`/`GET`/`DEL`, 24h TTL, key `conv:{id}`. WebSocket notes: `1on1:content:{sessionId}`, 24h TTL.
+- **WebSocket:** `@fastify/websocket` for 1:1 sessions. In-memory room map + Redis cache for reconnection. Dedicated ioredis instance (not BullMQ's).
 - **Drizzle:** Can't chain `.where()` — build conditions array, then `.where(and(...conditions))`
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
-## Known gaps (as of Phase 3 complete)
+## Known gaps (as of Phase 4 — 1:1 sessions complete)
 - Leaderboard endpoint returns empty (needs Redis sorted sets — Phase 4)
 - Escalation module returns empty (needs audit trail — Phase 4)
 - Reflections page is pure mock (no self-reflection API — Phase 5)
@@ -58,6 +59,6 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - Rate limiting not implemented
 - GChat adapter: inbound normalization works, outbound/auth are stubs (Phase 4)
 - Teams adapter: full stub (Phase 5)
-- Marketing site / landing pages not built (Phase 2.5)
 - Outlook calendar integration not built (Phase 5 — Google Calendar done)
 - Email notification preferences have no frontend settings page (API ready)
+- 1:1 agenda generator is data-only (no LLM prioritization yet — upgradable later)

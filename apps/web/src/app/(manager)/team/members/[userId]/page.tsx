@@ -7,28 +7,26 @@ import {
   getFlaggedItems,
   getManagerNotes,
   getUsers,
-  getOneOnOneNotes,
+  getOneOnOneSessions,
 } from "@/lib/api";
 import type {
   UserRow,
   EngagementScoreRow,
   FeedbackEntryRow,
   ManagerNoteRow,
-  OneOnOneEntryRow,
+  OneOnOneSession,
 } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
 import { NotesSection } from "./notes-section";
-import { OneOnOneTimeline } from "@/components/one-on-one-timeline";
-import { addSharedNote, editSharedNote, deleteSharedNote, fetchSharedNoteHistory } from "./actions";
 import {
   teamMembers as mockTeamMembers,
   engagementHistory as mockEngagementHistory,
   valuesScores as mockValuesScores,
   recentFeedback as mockFeedback,
   flaggedItems as mockFlaggedItems,
-  oneOnOneEntries as mockOneOnOneEntries,
+  oneOnOneSessions as mockOneOnOneSessions,
 } from "@/lib/mock-data";
 
 const sentimentStyles: Record<string, { bg: string; text: string }> = {
@@ -85,7 +83,7 @@ async function loadEmployeeData(userId: string) {
       (f) => f.subjectName === mockMember.name,
     ) as MockFlaggedItem[],
     notes: [] as ManagerNoteRow[],
-    oneOnOneNotes: mockOneOnOneEntries as OneOnOneEntryRow[],
+    oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
     currentUserId: managerId ?? "p2",
     isDirectReport: true,
   };
@@ -108,7 +106,7 @@ async function loadEmployeeData(userId: string) {
       getFlaggedItems(),
       getManagerNotes(userId),
       getUsers({ managerId }),
-      getOneOnOneNotes(userId),
+      getOneOnOneSessions({ employeeId: userId }),
     ]);
 
     // Employee profile
@@ -203,10 +201,10 @@ async function loadEmployeeData(userId: string) {
       notes = notesResult.value.data;
     }
 
-    // One-on-one notes
-    let oneOnOneNotes: OneOnOneEntryRow[] = defaults.oneOnOneNotes;
+    // One-on-one sessions
+    let oneOnOneSessions: OneOnOneSession[] = defaults.oneOnOneSessions as OneOnOneSession[];
     if (oneOnOneResult.status === "fulfilled") {
-      oneOnOneNotes = oneOnOneResult.value.data;
+      oneOnOneSessions = oneOnOneResult.value.data;
     }
 
     // Verify this is a direct report
@@ -225,7 +223,7 @@ async function loadEmployeeData(userId: string) {
       feedback,
       flaggedItems,
       notes,
-      oneOnOneNotes,
+      oneOnOneSessions,
       currentUserId: managerId,
       isDirectReport,
     };
@@ -241,7 +239,7 @@ export default async function EmployeeDetailPage({
 }) {
   const { userId } = await params;
   const data = await loadEmployeeData(userId);
-  const { employee, engagementScore, streak, responseRate, engagementHistory, valuesScores, feedback, flaggedItems, notes, oneOnOneNotes, currentUserId } = data;
+  const { employee, engagementScore, streak, responseRate, engagementHistory, valuesScores, feedback, flaggedItems, notes, oneOnOneSessions, currentUserId } = data;
 
   const initials = employee.name
     .split(" ")
@@ -429,32 +427,85 @@ export default async function EmployeeDetailPage({
         </div>
       )}
 
-      {/* Shared 1:1 Notes */}
+      {/* 1:1 Sessions */}
       <div
         className="card-enter mb-8"
         style={{ animationDelay: "500ms" }}
       >
-        <h3 className="mb-2 font-display text-base font-semibold text-stone-800">
-          Shared 1:1 Notes
-        </h3>
-        <p className="mb-4 text-xs text-stone-400">
-          Visible to both you and {employee.name}. Both can add entries, but only edit your own.
-        </p>
-        <div
-          className="rounded-2xl border border-stone-200/60 bg-white p-5"
-          style={{ boxShadow: "var(--shadow-sm)" }}
-        >
-          <OneOnOneTimeline
-            entries={oneOnOneNotes}
-            currentUserId={currentUserId}
-            partnerId={userId}
-            partnerName={employee.name}
-            addAction={addSharedNote}
-            editAction={editSharedNote}
-            deleteAction={deleteSharedNote}
-            getHistoryAction={fetchSharedNoteHistory}
-          />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-base font-semibold text-stone-800">
+            1:1 Sessions
+          </h3>
+          <Link
+            href={`/team/members/${userId}/one-on-one`}
+            className="text-xs font-medium text-forest hover:text-forest/80"
+          >
+            View all &rarr;
+          </Link>
         </div>
+        {oneOnOneSessions.length === 0 ? (
+          <Link
+            href={`/team/members/${userId}/one-on-one`}
+            className="block rounded-2xl border-2 border-dashed border-stone-200 bg-white/50 p-6 text-center transition-all hover:border-forest/30"
+            style={{ boxShadow: "var(--shadow-sm)" }}
+          >
+            <p className="text-sm text-stone-400">No sessions yet. Click to schedule one.</p>
+          </Link>
+        ) : (() => {
+          const nextSession = oneOnOneSessions.find((s) => s.status === "active" || s.status === "scheduled");
+          const lastSession = [...oneOnOneSessions].reverse().find((s) => s.status === "completed");
+          const statusBadge: Record<string, { bg: string; text: string; label: string }> = {
+            active: { bg: "bg-positive/10", text: "text-positive", label: "Live Now" },
+            scheduled: { bg: "bg-sky-50", text: "text-sky-600", label: "Upcoming" },
+            completed: { bg: "bg-stone-100", text: "text-stone-500", label: "Last Session" },
+          };
+
+          return (
+            <div className="space-y-3">
+              {nextSession && (
+                <Link
+                  href={`/team/members/${userId}/one-on-one/${nextSession.id}`}
+                  className="block rounded-2xl border border-stone-200/60 border-l-4 border-l-forest bg-white p-5 transition-all hover:shadow-md"
+                  style={{ boxShadow: "var(--shadow-sm)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusBadge[nextSession.status].bg} ${statusBadge[nextSession.status].text}`}>
+                      {statusBadge[nextSession.status].label}
+                    </span>
+                    <span className="text-sm font-medium text-stone-800">
+                      {new Date(nextSession.scheduledAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </span>
+                    <span className="text-xs text-stone-400">
+                      {new Date(nextSession.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  {nextSession.summary && (
+                    <p className="mt-2 line-clamp-2 text-sm text-stone-600">{nextSession.summary}</p>
+                  )}
+                </Link>
+              )}
+              {lastSession && (
+                <Link
+                  href={`/team/members/${userId}/one-on-one/${lastSession.id}`}
+                  className="block rounded-2xl border border-stone-200/60 bg-white p-5 transition-all hover:shadow-md"
+                  style={{ boxShadow: "var(--shadow-sm)" }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-500">
+                      Last Session
+                    </span>
+                    <span className="text-sm font-medium text-stone-800">
+                      {new Date(lastSession.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                  {lastSession.summary && (
+                    <p className="mt-2 line-clamp-2 text-sm text-stone-600">{lastSession.summary}</p>
+                  )}
+                </Link>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Manager notes */}

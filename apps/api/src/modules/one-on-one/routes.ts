@@ -1,234 +1,446 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, asc, desc, ilike } from "drizzle-orm";
+import { eq, and, asc, desc } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
-import { users, oneOnOneEntries, oneOnOneEntryRevisions } from "@revualy/db";
-import { requireAuth } from "../../lib/rbac.js";
+import {
+  users,
+  oneOnOneSessions,
+  oneOnOneActionItems,
+  oneOnOneAgendaItems,
+} from "@revualy/db";
+import { requireAuth, requireRole } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
-  createOneOnOneEntrySchema,
-  updateOneOnOneEntrySchema,
-  oneOnOneQuerySchema,
+  createSessionSchema,
+  updateSessionSchema,
+  sessionQuerySchema,
+  createActionItemSchema,
+  updateActionItemSchema,
+  createAgendaItemSchema,
+  updateAgendaItemSchema,
 } from "../../lib/validation.js";
+import { generateAgenda } from "../../lib/agenda-generator.js";
 
 /**
- * Resolves the manager/employee pair from the current user and their partner.
- * Returns the pair IDs or null if the two users are not in a manager-employee relationship.
+ * Verify user is the manager or employee for a session.
+ */
+async function verifySessionAccess(
+  db: TenantDb,
+  sessionId: string,
+  userId: string,
+) {
+  const [session] = await db
+    .select()
+    .from(oneOnOneSessions)
+    .where(eq(oneOnOneSessions.id, sessionId));
+
+  if (!session) return null;
+  if (session.managerId !== userId && session.employeeId !== userId) return null;
+  return session;
+}
+
+/**
+ * Resolve pair: verify the current user is the manager of employeeId.
  */
 async function resolveOneOnOnePair(
   db: TenantDb,
   userId: string,
-  partnerId: string,
+  employeeId: string,
 ): Promise<{ managerId: string; employeeId: string } | null> {
-  // Fetch both users
+  const [employee] = await db
+    .select({ id: users.id, managerId: users.managerId })
+    .from(users)
+    .where(eq(users.id, employeeId));
+
+  if (!employee) return null;
+
+  // Current user is the employee's manager
+  if (employee.managerId === userId) {
+    return { managerId: userId, employeeId };
+  }
+
+  // Current user is the employee, check if userId is the manager
   const [currentUser] = await db
     .select({ id: users.id, managerId: users.managerId })
     .from(users)
     .where(eq(users.id, userId));
 
-  const [partner] = await db
-    .select({ id: users.id, managerId: users.managerId })
-    .from(users)
-    .where(eq(users.id, partnerId));
-
-  if (!currentUser || !partner) return null;
-
-  // Current user's manager is the partner → partner is manager
-  if (currentUser.managerId === partnerId) {
-    return { managerId: partnerId, employeeId: userId };
-  }
-
-  // Partner's manager is the current user → current user is manager
-  if (partner.managerId === userId) {
-    return { managerId: userId, employeeId: partnerId };
+  if (currentUser && currentUser.managerId === employeeId) {
+    return { managerId: employeeId, employeeId: userId };
   }
 
   return null;
 }
 
+const itemIdParamSchema = idParamSchema;
+
 export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
-  app.addHook("preHandler", requireAuth);
+  // POST / — Create/schedule a session (manager only)
+  app.post("/", { preHandler: requireRole("manager") }, async (request, reply) => {
+    const { db, userId } = request.tenant;
+    const body = parseBody(createSessionSchema, request.body);
 
-  // GET /?partnerId=X — List entries for a manager-employee pair
-  app.get("/", async (request, reply) => {
-    const { db } = request.tenant;
-    const userId = request.tenant.userId!;
-    const query = parseBody(oneOnOneQuerySchema, request.query);
+    // Verify this manager manages the employee
+    const [employee] = await db
+      .select({ id: users.id, managerId: users.managerId })
+      .from(users)
+      .where(eq(users.id, body.employeeId));
 
-    const pair = await resolveOneOnOnePair(db, userId, query.partnerId);
-    if (!pair) {
-      return reply.code(403).send({
-        error: "You can only view 1:1 notes with your manager or direct report",
-      });
-    }
-
-    const conditions = [
-      eq(oneOnOneEntries.managerId, pair.managerId),
-      eq(oneOnOneEntries.employeeId, pair.employeeId),
-    ];
-    if (query.search) {
-      conditions.push(ilike(oneOnOneEntries.content, `%${query.search}%`));
-    }
-
-    const entries = await db
-      .select({
-        id: oneOnOneEntries.id,
-        managerId: oneOnOneEntries.managerId,
-        employeeId: oneOnOneEntries.employeeId,
-        authorId: oneOnOneEntries.authorId,
-        authorName: users.name,
-        content: oneOnOneEntries.content,
-        createdAt: oneOnOneEntries.createdAt,
-        updatedAt: oneOnOneEntries.updatedAt,
-      })
-      .from(oneOnOneEntries)
-      .innerJoin(users, eq(users.id, oneOnOneEntries.authorId))
-      .where(and(...conditions))
-      .orderBy(asc(oneOnOneEntries.createdAt));
-
-    return reply.send({ data: entries });
-  });
-
-  // POST / — Create a new entry
-  app.post("/", async (request, reply) => {
-    const { db } = request.tenant;
-    const userId = request.tenant.userId!;
-    const body = parseBody(createOneOnOneEntrySchema, request.body);
-
-    const pair = await resolveOneOnOnePair(db, userId, body.partnerId);
-    if (!pair) {
-      return reply.code(403).send({
-        error: "You can only add 1:1 notes with your manager or direct report",
-      });
+    if (!employee || employee.managerId !== userId) {
+      return reply.code(403).send({ error: "You can only create sessions with your direct reports" });
     }
 
     const [created] = await db
-      .insert(oneOnOneEntries)
+      .insert(oneOnOneSessions)
       .values({
-        managerId: pair.managerId,
-        employeeId: pair.employeeId,
-        authorId: userId,
-        content: body.content,
+        managerId: userId!,
+        employeeId: body.employeeId,
+        scheduledAt: new Date(body.scheduledAt),
       })
       .returning();
 
-    // Fetch author name for response
-    const [author] = await db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, userId));
-
-    return reply.code(201).send({
-      ...created,
-      authorName: author?.name ?? "Unknown",
-    });
+    return reply.code(201).send(created);
   });
 
-  // PATCH /:id — Edit an entry (only the author can edit)
-  app.patch("/:id", async (request, reply) => {
+  // GET / — List sessions for a pair
+  app.get("/", { preHandler: requireAuth }, async (request, reply) => {
+    const { db, userId } = request.tenant;
+    const query = parseBody(sessionQuerySchema, request.query);
+
+    const conditions = [];
+
+    if (query.employeeId) {
+      // If employeeId specified, verify pair access
+      const pair = await resolveOneOnOnePair(db, userId!, query.employeeId);
+      if (!pair) {
+        return reply.code(403).send({ error: "Access denied" });
+      }
+      conditions.push(eq(oneOnOneSessions.managerId, pair.managerId));
+      conditions.push(eq(oneOnOneSessions.employeeId, pair.employeeId));
+    } else {
+      // Return all sessions where user is manager or employee
+      // Build with OR — but drizzle doesn't support OR easily in conditions array
+      // So we'll do two queries and merge
+      const { or } = await import("drizzle-orm");
+      conditions.push(
+        or(
+          eq(oneOnOneSessions.managerId, userId!),
+          eq(oneOnOneSessions.employeeId, userId!),
+        )!,
+      );
+    }
+
+    if (query.status) {
+      conditions.push(eq(oneOnOneSessions.status, query.status));
+    }
+
+    const sessions = await db
+      .select({
+        id: oneOnOneSessions.id,
+        managerId: oneOnOneSessions.managerId,
+        employeeId: oneOnOneSessions.employeeId,
+        status: oneOnOneSessions.status,
+        scheduledAt: oneOnOneSessions.scheduledAt,
+        startedAt: oneOnOneSessions.startedAt,
+        endedAt: oneOnOneSessions.endedAt,
+        notes: oneOnOneSessions.notes,
+        summary: oneOnOneSessions.summary,
+        createdAt: oneOnOneSessions.createdAt,
+        updatedAt: oneOnOneSessions.updatedAt,
+      })
+      .from(oneOnOneSessions)
+      .where(and(...conditions))
+      .orderBy(desc(oneOnOneSessions.scheduledAt));
+
+    return reply.send({ data: sessions });
+  });
+
+  // GET /:id — Session detail with agenda + action items
+  app.get("/:id", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
-    const userId = request.tenant.userId!;
-    const body = parseBody(updateOneOnOneEntrySchema, request.body);
+    const { db, userId } = request.tenant;
 
-    const [existing] = await db
-      .select()
-      .from(oneOnOneEntries)
-      .where(eq(oneOnOneEntries.id, id));
-
-    if (!existing) {
-      return reply.code(404).send({ error: "Entry not found" });
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
     }
 
-    // Only the author can edit their own entry
-    if (existing.authorId !== userId) {
-      return reply.code(403).send({ error: "You can only edit your own entries" });
+    const [agendaItems, actionItems] = await Promise.all([
+      db
+        .select()
+        .from(oneOnOneAgendaItems)
+        .where(eq(oneOnOneAgendaItems.sessionId, id))
+        .orderBy(asc(oneOnOneAgendaItems.sortOrder)),
+      db
+        .select()
+        .from(oneOnOneActionItems)
+        .where(eq(oneOnOneActionItems.sessionId, id))
+        .orderBy(asc(oneOnOneActionItems.sortOrder)),
+    ]);
+
+    return reply.send({ ...session, agendaItems, actionItems });
+  });
+
+  // PATCH /:id — Update session (manager only for status changes)
+  app.patch("/:id", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+    const body = parseBody(updateSessionSchema, request.body);
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
     }
 
-    // Verify the current user is part of this pair
-    if (existing.managerId !== userId && existing.employeeId !== userId) {
-      return reply.code(403).send({ error: "Access denied" });
+    // Only manager can change status
+    if (body.status && session.managerId !== userId) {
+      return reply.code(403).send({ error: "Only the manager can change session status" });
     }
 
-    // Save old content as a revision
-    await db.insert(oneOnOneEntryRevisions).values({
-      entryId: id,
-      previousContent: existing.content,
-    });
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Update the entry
+    if (body.notes !== undefined) updates.notes = body.notes;
+    if (body.summary !== undefined) updates.summary = body.summary;
+    if (body.scheduledAt !== undefined) updates.scheduledAt = new Date(body.scheduledAt);
+
+    if (body.status === "active" && session.status === "scheduled") {
+      updates.status = "active";
+      updates.startedAt = new Date();
+
+      // Auto-generate agenda on session start
+      const agendaItems = await generateAgenda(db, session.managerId, session.employeeId);
+      if (agendaItems.length > 0) {
+        await db.insert(oneOnOneAgendaItems).values(
+          agendaItems.map((item, i) => ({
+            sessionId: id,
+            text: item.text,
+            source: item.source as "ai" | "manual",
+            sortOrder: i,
+          })),
+        );
+      }
+    } else if (body.status === "completed" && session.status === "active") {
+      updates.status = "completed";
+      updates.endedAt = new Date();
+    } else if (body.status) {
+      updates.status = body.status;
+    }
+
     const [updated] = await db
-      .update(oneOnOneEntries)
-      .set({ content: body.content, updatedAt: new Date() })
-      .where(eq(oneOnOneEntries.id, id))
+      .update(oneOnOneSessions)
+      .set(updates)
+      .where(eq(oneOnOneSessions.id, id))
       .returning();
 
-    const [author] = await db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, updated.authorId));
+    // Return full session detail
+    const [agendaItems, actionItems] = await Promise.all([
+      db
+        .select()
+        .from(oneOnOneAgendaItems)
+        .where(eq(oneOnOneAgendaItems.sessionId, id))
+        .orderBy(asc(oneOnOneAgendaItems.sortOrder)),
+      db
+        .select()
+        .from(oneOnOneActionItems)
+        .where(eq(oneOnOneActionItems.sessionId, id))
+        .orderBy(asc(oneOnOneActionItems.sortOrder)),
+    ]);
 
-    return reply.send({
-      ...updated,
-      authorName: author?.name ?? "Unknown",
-    });
+    return reply.send({ ...updated, agendaItems, actionItems });
   });
 
-  // GET /:id/history — List revisions for an entry
-  app.get("/:id/history", async (request, reply) => {
+  // ── Action Items ──────────────────────────────────────
+
+  // POST /:id/action-items
+  app.post("/:id/action-items", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const { db, userId } = request.tenant;
+    const body = parseBody(createActionItemSchema, request.body);
 
-    // Verify entry exists and user is part of the pair
-    const [entry] = await db
-      .select()
-      .from(oneOnOneEntries)
-      .where(eq(oneOnOneEntries.id, id));
-
-    if (!entry) {
-      return reply.code(404).send({ error: "Entry not found" });
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
     }
 
-    if (entry.managerId !== userId && entry.employeeId !== userId) {
-      return reply.code(403).send({ error: "Access denied" });
-    }
+    const [created] = await db
+      .insert(oneOnOneActionItems)
+      .values({
+        sessionId: id,
+        text: body.text,
+        assigneeId: body.assigneeId,
+        dueDate: body.dueDate,
+        sortOrder: body.sortOrder ?? 0,
+      })
+      .returning();
 
-    const revisions = await db
-      .select()
-      .from(oneOnOneEntryRevisions)
-      .where(eq(oneOnOneEntryRevisions.entryId, id))
-      .orderBy(desc(oneOnOneEntryRevisions.editedAt));
-
-    return reply.send({ data: revisions });
+    return reply.code(201).send(created);
   });
 
-  // DELETE /:id — Delete an entry (only the author can delete)
-  app.delete("/:id", async (request, reply) => {
+  // PATCH /:id/action-items/:itemId
+  app.patch("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
-    const userId = request.tenant.userId!;
+    const { db, userId } = request.tenant;
+    const itemId = (request.params as Record<string, string>).itemId;
+    const body = parseBody(updateActionItemSchema, request.body);
 
-    const [existing] = await db
-      .select()
-      .from(oneOnOneEntries)
-      .where(eq(oneOnOneEntries.id, id));
-
-    if (!existing) {
-      return reply.code(404).send({ error: "Entry not found" });
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
     }
 
-    if (existing.authorId !== userId) {
-      return reply.code(403).send({ error: "You can only delete your own entries" });
+    const updates: Record<string, unknown> = {};
+    if (body.text !== undefined) updates.text = body.text;
+    if (body.assigneeId !== undefined) updates.assigneeId = body.assigneeId;
+    if (body.dueDate !== undefined) updates.dueDate = body.dueDate;
+    if (body.sortOrder !== undefined) updates.sortOrder = body.sortOrder;
+    if (body.completed !== undefined) {
+      updates.completed = body.completed;
+      updates.completedAt = body.completed ? new Date() : null;
     }
 
-    if (existing.managerId !== userId && existing.employeeId !== userId) {
-      return reply.code(403).send({ error: "Access denied" });
+    const [updated] = await db
+      .update(oneOnOneActionItems)
+      .set(updates)
+      .where(
+        and(
+          eq(oneOnOneActionItems.id, itemId),
+          eq(oneOnOneActionItems.sessionId, id),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Action item not found" });
     }
 
-    // Revisions cascade-delete via FK constraint
-    await db.delete(oneOnOneEntries).where(eq(oneOnOneEntries.id, id));
+    return reply.send(updated);
+  });
+
+  // DELETE /:id/action-items/:itemId
+  app.delete("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+    const itemId = (request.params as Record<string, string>).itemId;
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
+    }
+
+    await db
+      .delete(oneOnOneActionItems)
+      .where(
+        and(
+          eq(oneOnOneActionItems.id, itemId),
+          eq(oneOnOneActionItems.sessionId, id),
+        ),
+      );
 
     return reply.send({ success: true });
+  });
+
+  // ── Agenda Items ──────────────────────────────────────
+
+  // POST /:id/agenda
+  app.post("/:id/agenda", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+    const body = parseBody(createAgendaItemSchema, request.body);
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
+    }
+
+    const [created] = await db
+      .insert(oneOnOneAgendaItems)
+      .values({
+        sessionId: id,
+        text: body.text,
+        source: body.source ?? "manual",
+        sortOrder: body.sortOrder ?? 0,
+      })
+      .returning();
+
+    return reply.code(201).send(created);
+  });
+
+  // PATCH /:id/agenda/:itemId
+  app.patch("/:id/agenda/:itemId", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+    const itemId = (request.params as Record<string, string>).itemId;
+    const body = parseBody(updateAgendaItemSchema, request.body);
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (body.covered !== undefined) updates.covered = body.covered;
+    if (body.text !== undefined) updates.text = body.text;
+
+    const [updated] = await db
+      .update(oneOnOneAgendaItems)
+      .set(updates)
+      .where(
+        and(
+          eq(oneOnOneAgendaItems.id, itemId),
+          eq(oneOnOneAgendaItems.sessionId, id),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Agenda item not found" });
+    }
+
+    return reply.send(updated);
+  });
+
+  // POST /:id/generate-agenda — Trigger AI agenda generation (manager only)
+  app.post("/:id/generate-agenda", { preHandler: requireRole("manager") }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
+    }
+
+    if (session.managerId !== userId) {
+      return reply.code(403).send({ error: "Only the manager can generate agenda" });
+    }
+
+    const agendaItems = await generateAgenda(db, session.managerId, session.employeeId);
+    if (agendaItems.length > 0) {
+      // Get current max sort order
+      const existing = await db
+        .select({ sortOrder: oneOnOneAgendaItems.sortOrder })
+        .from(oneOnOneAgendaItems)
+        .where(eq(oneOnOneAgendaItems.sessionId, id))
+        .orderBy(desc(oneOnOneAgendaItems.sortOrder))
+        .limit(1);
+
+      const baseOrder = existing.length > 0 ? existing[0].sortOrder + 1 : 0;
+
+      await db.insert(oneOnOneAgendaItems).values(
+        agendaItems.map((item, i) => ({
+          sessionId: id,
+          text: item.text,
+          source: item.source as "ai" | "manual",
+          sortOrder: baseOrder + i,
+        })),
+      );
+    }
+
+    const allItems = await db
+      .select()
+      .from(oneOnOneAgendaItems)
+      .where(eq(oneOnOneAgendaItems.sessionId, id))
+      .orderBy(asc(oneOnOneAgendaItems.sortOrder));
+
+    return reply.send({ data: allItems });
   });
 };

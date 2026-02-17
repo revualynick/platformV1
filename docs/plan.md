@@ -372,6 +372,13 @@ revualy/
 **New migrations:** 0002 (notification_preferences), 0003 (calendar_tokens), 0004 (questionnaire scope columns)
 
 ### Phase 4: Google Chat Adapter + Beta Launch (Weeks 13-16)
+- [x] **1:1 Meeting Sessions** — replaced chat-style notes with real-time live sessions
+  - Database: `one_on_one_sessions`, `one_on_one_action_items`, `one_on_one_agenda_items` (migration 0007)
+  - REST API: full CRUD for sessions, action items, agenda items (10 endpoints)
+  - Agenda generator: auto-populates from open action items, flagged feedback, kudos, team questionnaire themes
+  - WebSocket (`@fastify/websocket`): real-time notes relay, presence, request-edit, Redis-backed persistence
+  - Frontend: `SessionEditor` (manager), `SessionViewer` (employee), `SessionList`, schedule form
+  - Pages: manager `/team/members/[userId]/one-on-one`, employee `/dashboard/one-on-ones/[sessionId]`
 - **Google Chat adapter** (via Chat API + Pub/Sub for events, Cards v2 for rich messages)
 - Google Workspace app setup + admin installation at beta company
 - Escalation pipeline + HR feed

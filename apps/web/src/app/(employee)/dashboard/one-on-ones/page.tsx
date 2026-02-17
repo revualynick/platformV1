@@ -1,14 +1,8 @@
 import { auth } from "@/lib/auth";
-import { getOneOnOneNotes, getCurrentUser, getUser } from "@/lib/api";
-import { OneOnOneTimeline } from "@/components/one-on-one-timeline";
-import { oneOnOneEntries as mockEntries } from "@/lib/mock-data";
-import type { OneOnOneEntryRow } from "@/lib/api";
-import {
-  addOneOnOneEntry,
-  editOneOnOneEntry,
-  deleteOneOnOneEntry,
-  fetchOneOnOneHistory,
-} from "./actions";
+import { getOneOnOneSessions, getCurrentUser, getUser } from "@/lib/api";
+import type { OneOnOneSession } from "@/lib/api";
+import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
+import { SessionList } from "@/components/session-list";
 
 async function loadOneOnOneData() {
   const session = await auth();
@@ -16,10 +10,9 @@ async function loadOneOnOneData() {
 
   if (!userId) {
     return {
-      entries: mockEntries as OneOnOneEntryRow[],
-      currentUserId: "p3",
-      managerId: "p2",
+      sessions: mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
       managerName: "Jordan Wells",
+      hasManager: true,
     };
   }
 
@@ -29,29 +22,27 @@ async function loadOneOnOneData() {
 
     if (!managerId) {
       return {
-        entries: [] as OneOnOneEntryRow[],
-        currentUserId: userId,
-        managerId: null,
+        sessions: [] as OneOnOneSession[],
         managerName: null,
+        hasManager: false,
       };
     }
 
-    const [result, managerResult] = await Promise.allSettled([
-      getOneOnOneNotes(managerId),
+    const [sessionsResult, managerResult] = await Promise.allSettled([
+      getOneOnOneSessions({ employeeId: userId }),
       getUser(managerId),
     ]);
+
     return {
-      entries: result.status === "fulfilled" ? result.value.data : [] as OneOnOneEntryRow[],
-      currentUserId: userId,
-      managerId,
-      managerName: managerResult.status === "fulfilled" ? managerResult.value.name : null,
+      sessions: sessionsResult.status === "fulfilled" ? sessionsResult.value.data : [],
+      managerName: managerResult.status === "fulfilled" ? managerResult.value.name : "Your Manager",
+      hasManager: true,
     };
   } catch {
     return {
-      entries: mockEntries as OneOnOneEntryRow[],
-      currentUserId: "p3",
-      managerId: "p2",
+      sessions: mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
       managerName: "Jordan Wells",
+      hasManager: true,
     };
   }
 }
@@ -59,21 +50,15 @@ async function loadOneOnOneData() {
 export default async function OneOnOnesPage() {
   const data = await loadOneOnOneData();
 
-  // Derive manager name from entries if available
-  const managerName =
-    data.managerName ??
-    data.entries.find((e) => e.authorId === e.managerId)?.authorName ??
-    "Your Manager";
-
-  if (!data.managerId) {
+  if (!data.hasManager) {
     return (
       <div className="max-w-3xl">
         <div className="mb-8">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
-            1:1 Notes
+            1:1 Sessions
           </h1>
           <p className="mt-1 text-sm text-stone-500">
-            Shared notes between you and your manager
+            Live meeting notes with your manager
           </p>
         </div>
         <div
@@ -93,27 +78,18 @@ export default async function OneOnOnesPage() {
     <div className="max-w-3xl">
       <div className="mb-8">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
-          1:1 Notes
+          1:1 Sessions
         </h1>
         <p className="mt-1 text-sm text-stone-500">
-          Shared notes with {managerName} — both of you can add entries, but
-          only edit your own
+          Live meeting notes with {data.managerName}
         </p>
       </div>
 
-      <div
-        className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
-        style={{ boxShadow: "var(--shadow-sm)" }}
-      >
-        <OneOnOneTimeline
-          entries={data.entries}
-          currentUserId={data.currentUserId}
-          partnerId={data.managerId}
-          partnerName={managerName}
-          addAction={addOneOnOneEntry}
-          editAction={editOneOnOneEntry}
-          deleteAction={deleteOneOnOneEntry}
-          getHistoryAction={fetchOneOnOneHistory}
+      <div className="card-enter">
+        <SessionList
+          sessions={data.sessions as any}
+          linkPrefix="/dashboard/one-on-ones"
+          partnerName={data.managerName ?? "Your Manager"}
         />
       </div>
     </div>

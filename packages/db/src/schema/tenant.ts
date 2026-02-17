@@ -493,10 +493,10 @@ export const calendarTokens = pgTable(
   ],
 );
 
-// ── One-on-One Entries (Shared 1:1 Notes) ─────────────
+// ── One-on-One Sessions ───────────────────────────────
 
-export const oneOnOneEntries = pgTable(
-  "one_on_one_entries",
+export const oneOnOneSessions = pgTable(
+  "one_on_one_sessions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     managerId: uuid("manager_id")
@@ -505,10 +505,12 @@ export const oneOnOneEntries = pgTable(
     employeeId: uuid("employee_id")
       .notNull()
       .references(() => users.id),
-    authorId: uuid("author_id")
-      .notNull()
-      .references(() => users.id),
-    content: text("content").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("scheduled"), // scheduled | active | completed
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    notes: text("notes").notNull().default(""),
+    summary: text("summary").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -517,25 +519,52 @@ export const oneOnOneEntries = pgTable(
       .defaultNow(),
   },
   (table) => [
-    index("idx_one_on_one_entries_pair").on(table.managerId, table.employeeId),
-    index("idx_one_on_one_entries_created_at").on(table.createdAt),
+    index("idx_one_on_one_sessions_pair").on(table.managerId, table.employeeId),
+    index("idx_one_on_one_sessions_status").on(table.status),
+    index("idx_one_on_one_sessions_scheduled_at").on(table.scheduledAt),
   ],
 );
 
-export const oneOnOneEntryRevisions = pgTable(
-  "one_on_one_entry_revisions",
+export const oneOnOneActionItems = pgTable(
+  "one_on_one_action_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    entryId: uuid("entry_id")
+    sessionId: uuid("session_id")
       .notNull()
-      .references(() => oneOnOneEntries.id, { onDelete: "cascade" }),
-    previousContent: text("previous_content").notNull(),
-    editedAt: timestamp("edited_at", { withTimezone: true })
+      .references(() => oneOnOneSessions.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    assigneeId: uuid("assignee_id").references(() => users.id),
+    dueDate: date("due_date"),
+    completed: boolean("completed").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    index("idx_one_on_one_revisions_entry_id").on(table.entryId),
+    index("idx_one_on_one_action_items_session").on(table.sessionId),
+    index("idx_one_on_one_action_items_assignee").on(table.assigneeId, table.completed),
+  ],
+);
+
+export const oneOnOneAgendaItems = pgTable(
+  "one_on_one_agenda_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => oneOnOneSessions.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    source: varchar("source", { length: 20 }).notNull().default("manual"), // ai | manual
+    covered: boolean("covered").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_one_on_one_agenda_items_session").on(table.sessionId),
   ],
 );
 

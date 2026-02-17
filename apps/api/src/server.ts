@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
+import websocket from "@fastify/websocket";
 import { authRoutes } from "./modules/auth/routes.js";
 import { chatRoutes, setConversationQueue } from "./modules/chat/routes.js";
 import { feedbackRoutes } from "./modules/feedback/routes.js";
@@ -16,6 +17,7 @@ import { notificationRoutes } from "./modules/notifications/routes.js";
 import { integrationsRoutes } from "./modules/integrations/routes.js";
 import { managerRoutes } from "./modules/manager/routes.js";
 import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
+import { registerOneOnOneWs } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis } from "./workers/index.js";
 import { createLLMGateway } from "@revualy/ai-core";
@@ -38,6 +40,7 @@ async function buildApp() {
     credentials: true,
   });
   await app.register(cookie);
+  await app.register(websocket);
   await app.register(tenantPlugin);
 
   // Global error handler for validation errors
@@ -66,7 +69,10 @@ async function buildApp() {
   await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
   await app.register(integrationsRoutes, { prefix: "/api/v1/integrations" });
   await app.register(managerRoutes, { prefix: "/api/v1/manager" });
-  await app.register(oneOnOneRoutes, { prefix: "/api/v1/one-on-one-notes" });
+  await app.register(oneOnOneRoutes, { prefix: "/api/v1/one-on-one-sessions" });
+
+  // WebSocket routes
+  registerOneOnOneWs(app, REDIS_URL);
 
   // Webhook routes
   await app.register(chatRoutes, { prefix: "/webhooks" });
