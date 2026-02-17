@@ -379,13 +379,22 @@ revualy/
   - WebSocket (`@fastify/websocket`): real-time notes relay, presence, request-edit, Redis-backed persistence
   - Frontend: `SessionEditor` (manager), `SessionViewer` (employee), `SessionList`, schedule form
   - Pages: manager `/team/members/[userId]/one-on-one`, employee `/dashboard/one-on-ones/[sessionId]`
-- **Google Chat adapter** (via Chat API + Pub/Sub for events, Cards v2 for rich messages)
+- [x] **Rate limiting** — `@fastify/rate-limit` with 100 req/min global limit, tenant-aware key generator
+- [x] **LLM gateway route injection** — `app.llm` and `app.adapters` decorated on FastifyInstance with TS declaration merging
+- [x] **Leaderboard API** — real DB query on `engagement_scores` + `users`, weighted composite score, ISO week grouping
+- [x] **Escalation pipeline** — expanded schema (migration 0008), standalone filing, full CRUD (5 endpoints), audit trail notes
+  - Types: harassment, bias, retaliation, other; Severities: low/medium/high/critical
+  - Statuses: open → investigating → resolved/dismissed
+  - Any user can file, admins manage, reporter + admin can view/add notes
+- [x] **Google Chat adapter** — verification token auth (no JWT), `sendMessage` via Chat API Cards v2, `resolveUser` via members API
+- [x] **Notification preferences page** — `/dashboard/settings` with toggle rows, server actions, sidebar nav link
+- [x] **Onboarding wizard** — 3-step flow (profile, notifications, calendar), middleware redirect, `PATCH /users/me/onboarding` endpoint
 - Google Workspace app setup + admin installation at beta company
-- Escalation pipeline + HR feed
-- Leaderboard + weekly digest + voucher tracking
-- Onboarding flow (AI get-to-know-you)
 - Demo chat interactions (animated preview + live interactive demo, deferred from Phase 3)
 - **Beta launch with Google Chat company**
+
+**New dependencies added (Phase 4):** `@fastify/rate-limit`
+**New migrations (Phase 4):** 0008 (escalation pipeline expansion)
 
 ### Phase 5: Advanced Features + Teams (Weeks 17-20)
 - Calibration engine

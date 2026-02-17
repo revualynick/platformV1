@@ -54,6 +54,24 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(updated);
   });
 
+  // PATCH /users/me/onboarding — Mark onboarding as complete
+  app.patch("/me/onboarding", async (request, reply) => {
+    const { db, userId } = request.tenant;
+
+    if (!userId) {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set({ onboardingCompleted: true, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!updated) return reply.code(404).send({ error: "User not found" });
+    return reply.send({ success: true });
+  });
+
   // GET /users/:id/engagement — Engagement scores for user
   app.get("/:id/engagement", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);

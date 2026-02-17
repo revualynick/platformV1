@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import websocket from "@fastify/websocket";
+import rateLimit from "@fastify/rate-limit";
 import { authRoutes } from "./modules/auth/routes.js";
 import { chatRoutes, setConversationQueue } from "./modules/chat/routes.js";
 import { feedbackRoutes } from "./modules/feedback/routes.js";
@@ -20,8 +21,16 @@ import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
 import { registerOneOnOneWs } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis } from "./workers/index.js";
-import { createLLMGateway } from "@revualy/ai-core";
+import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
 import { AdapterRegistry } from "@revualy/chat-core";
+
+// Declaration merging so routes can access app.llm and app.adapters
+declare module "fastify" {
+  interface FastifyInstance {
+    llm: LLMGateway;
+    adapters: AdapterRegistry;
+  }
+}
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -41,6 +50,12 @@ async function buildApp() {
   });
   await app.register(cookie);
   await app.register(websocket);
+  await app.register(rateLimit, {
+    max: 100,
+    timeWindow: "1 minute",
+    keyGenerator: (request) =>
+      request.tenant?.userId ?? request.ip,
+  });
   await app.register(tenantPlugin);
 
   // Global error handler for validation errors
@@ -101,6 +116,10 @@ async function start() {
     },
   });
   const adapters = new AdapterRegistry();
+
+  // Expose on app so route handlers can access app.llm / app.adapters
+  app.decorate("llm", llm);
+  app.decorate("adapters", adapters);
 
   const workers = createWorkers({
     redisUrl: REDIS_URL,

@@ -6,11 +6,11 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phase 1 (Foundation), Phase 2 (Core Loop), Phase 3 (Intelligence) complete. Phase 4 in progress.** See `docs/plan.md` for full checklists.
+**Phase 1 (Foundation), Phase 2 (Core Loop), Phase 3 (Intelligence) complete. Phase 4 mostly complete.** See `docs/plan.md` for full checklists.
 
-Phase 4 progress: 1:1 meeting sessions (replaced old chat-style notes). Session model with real-time WebSocket sync, AI agenda generation, action items, and agenda tracking. `@fastify/websocket` installed.
+Phase 4 complete: 1:1 sessions, rate limiting (`@fastify/rate-limit`), LLM gateway injection (`app.llm`/`app.adapters`), leaderboard API (DB-backed), escalation pipeline (5 endpoints + audit trail), Google Chat adapter (verification token + Chat API), notification preferences page (`/dashboard/settings`), onboarding wizard (3-step flow + middleware redirect).
 
-**Next up:** Remaining Phase 4 items (Google Chat adapter, escalation pipeline, leaderboard, beta launch).
+**Next up:** Google Workspace admin setup, demo chat interactions, beta launch.
 
 ## Repo structure
 ```
@@ -51,14 +51,12 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
-## Known gaps (as of Phase 4 — 1:1 sessions complete)
-- Leaderboard endpoint returns empty (needs Redis sorted sets — Phase 4)
-- Escalation module returns empty (needs audit trail — Phase 4)
+## Known gaps (as of Phase 4 — mostly complete)
 - Reflections page is pure mock (no self-reflection API — Phase 5)
 - LLM gateway has no provider SDKs wired (Anthropic/OpenAI)
-- Rate limiting not implemented
-- GChat adapter: inbound normalization works, outbound/auth are stubs (Phase 4)
+- GChat adapter: needs Google Workspace admin setup to test end-to-end
 - Teams adapter: full stub (Phase 5)
 - Outlook calendar integration not built (Phase 5 — Google Calendar done)
-- Email notification preferences have no frontend settings page (API ready)
 - 1:1 agenda generator is data-only (no LLM prioritization yet — upgradable later)
+- Demo chat interactions page not built (deferred from Phase 3)
+- Google Workspace app installation/admin setup pending beta company

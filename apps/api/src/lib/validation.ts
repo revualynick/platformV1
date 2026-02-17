@@ -179,6 +179,34 @@ export const updateAgendaItemSchema = z.object({
   text: z.string().min(1).max(2000).optional(),
 });
 
+// ── Escalations ──────────────────────────────────────
+
+export const createEscalationSchema = z.object({
+  subjectId: uuid.optional(),
+  feedbackEntryId: uuid.optional(),
+  type: z.enum(["harassment", "bias", "retaliation", "other"]).optional().default("other"),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  reason: z.string().min(1).max(5000),
+  description: z.string().max(10000).optional().default(""),
+  flaggedContent: z.string().max(10000).optional().default(""),
+});
+
+export const updateEscalationSchema = z.object({
+  status: z.enum(["open", "investigating", "resolved", "dismissed"]).optional(),
+  resolution: z.string().max(10000).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+});
+
+export const escalationQuerySchema = z.object({
+  status: z.enum(["open", "investigating", "resolved", "dismissed"]).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+});
+
+export const createEscalationNoteSchema = z.object({
+  content: z.string().min(1).max(10000),
+  action: z.string().min(1).max(100).optional().default("Note added"),
+});
+
 // ── Params ─────────────────────────────────────────────
 
 export const idParamSchema = z.object({

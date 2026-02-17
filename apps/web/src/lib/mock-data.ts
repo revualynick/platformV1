@@ -804,6 +804,14 @@ export const oneOnOneSessions = [
   },
 ];
 
+// Notification preferences (for /dashboard/settings)
+export const notificationPreferences = [
+  { id: "np1", userId: "u1", type: "weekly_digest" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+  { id: "np2", userId: "u1", type: "flag_alert" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+  { id: "np3", userId: "u1", type: "nudge" as const, enabled: false, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+  { id: "np4", userId: "u1", type: "leaderboard_update" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
+];
+
 // Escalation audit trail (for /settings/escalations)
 export const escalationDetails = [
   {

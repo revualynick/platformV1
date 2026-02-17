@@ -273,33 +273,47 @@ export const escalations = pgTable(
   "escalations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    feedbackEntryId: uuid("feedback_entry_id")
-      .notNull()
-      .references(() => feedbackEntries.id),
-    severity: varchar("severity", { length: 20 }).notNull(),
+    feedbackEntryId: uuid("feedback_entry_id").references(
+      () => feedbackEntries.id,
+    ),
+    reporterId: uuid("reporter_id").references(() => users.id),
+    subjectId: uuid("subject_id").references(() => users.id),
+    type: varchar("type", { length: 50 }).notNull().default("other"), // harassment | bias | retaliation | other
+    severity: varchar("severity", { length: 20 }).notNull(), // low | medium | high | critical
+    status: varchar("status", { length: 20 }).notNull().default("open"), // open | investigating | resolved | dismissed
     reason: text("reason").notNull(),
-    flaggedContent: text("flagged_content").notNull(),
+    description: text("description").notNull().default(""),
+    flaggedContent: text("flagged_content").notNull().default(""),
+    resolution: text("resolution"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by"),
+    resolvedById: uuid("resolved_by_id").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
     index("idx_escalations_feedback_entry_id").on(table.feedbackEntryId),
+    index("idx_escalations_status").on(table.status),
+    index("idx_escalations_subject_id").on(table.subjectId),
+    index("idx_escalations_reporter_id").on(table.reporterId),
     index("idx_escalations_created_at").on(table.createdAt),
   ],
 );
 
-export const escalationAuditLog = pgTable("escalation_audit_log", {
+export const escalationNotes = pgTable("escalation_notes", {
   id: uuid("id").primaryKey().defaultRandom(),
   escalationId: uuid("escalation_id")
     .notNull()
-    .references(() => escalations.id),
+    .references(() => escalations.id, { onDelete: "cascade" }),
   action: varchar("action", { length: 100 }).notNull(),
   performedBy: uuid("performed_by")
     .notNull()
     .references(() => users.id),
+  content: text("content").notNull().default(""),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

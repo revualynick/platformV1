@@ -13,7 +13,7 @@ import {
   conversations,
   conversationMessages,
   escalations,
-  escalationAuditLog,
+  escalationNotes,
   notificationPreferences,
   calendarTokens,
   calendarEvents,
@@ -33,7 +33,7 @@ async function seed() {
   await db.delete(calendarEvents);
   await db.delete(calendarTokens);
   await db.delete(notificationPreferences);
-  await db.delete(escalationAuditLog);
+  await db.delete(escalationNotes);
   await db.delete(escalations);
   await db.delete(engagementScores);
   await db.delete(kudos);

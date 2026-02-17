@@ -686,3 +686,40 @@ export async function generateAgenda(sessionId: string) {
     { method: "POST" },
   );
 }
+
+// ── Notification Preferences ────────────────────────
+
+export interface NotificationPreference {
+  id: string | null;
+  userId: string;
+  type: "weekly_digest" | "flag_alert" | "nudge" | "leaderboard_update";
+  enabled: boolean;
+  channel: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export async function getNotificationPreferences() {
+  return apiFetch<{ data: NotificationPreference[] }>(
+    "/api/v1/notifications/preferences",
+  );
+}
+
+export async function updateNotificationPreference(data: {
+  type: string;
+  enabled: boolean;
+  channel?: string;
+}) {
+  return apiFetch<NotificationPreference>(
+    "/api/v1/notifications/preferences",
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+// ── Users (onboarding) ──────────────────────────────
+
+export async function completeOnboarding() {
+  return apiFetch<{ success: boolean }>("/api/v1/users/me/onboarding", {
+    method: "PATCH",
+  });
+}

@@ -13,6 +13,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.0.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.2.0",
     "@revualy/ai-core": "workspace:*",
     "@revualy/chat-adapter-slack": "workspace:*",
