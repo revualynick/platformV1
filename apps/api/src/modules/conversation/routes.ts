@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, desc } from "drizzle-orm";
 import { conversations, conversationMessages } from "@revualy/db";
-import { requireAuth } from "../../lib/rbac.js";
+import { requireAuth, requireRole } from "../../lib/rbac.js";
 
 export const conversationRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -30,7 +30,7 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // POST /conversations/:id/close — Force-close a conversation (admin only)
-  app.post("/:id/close", async (request, reply) => {
+  app.post("/:id/close", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { db } = request.tenant;
 

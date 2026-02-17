@@ -2,12 +2,14 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as tenantSchema from "./schema/tenant.js";
 
-export type TenantDb = ReturnType<typeof createTenantClient>;
+type TenantClient = ReturnType<typeof createTenantClient>;
+export type TenantDb = TenantClient["db"];
 
 const MAX_POOL_SIZE = 50;
 
 interface PoolEntry {
   db: TenantDb;
+  sql: ReturnType<typeof postgres>;
   lastUsed: number;
 }
 
@@ -15,7 +17,8 @@ const tenantPool = new Map<string, PoolEntry>();
 
 export function createTenantClient(connectionString: string) {
   const sql = postgres(connectionString, { max: 5 });
-  return drizzle(sql, { schema: tenantSchema });
+  const db = drizzle(sql, { schema: tenantSchema });
+  return { db, sql };
 }
 
 /**
@@ -40,19 +43,28 @@ export function getTenantDb(orgId: string, connectionString: string): TenantDb {
       }
     }
     if (oldestKey) {
+      const evicted = tenantPool.get(oldestKey);
       tenantPool.delete(oldestKey);
+      // Close the underlying postgres connection pool
+      evicted?.sql.end({ timeout: 5 }).catch(() => {});
     }
   }
 
-  const db = createTenantClient(connectionString);
-  tenantPool.set(orgId, { db, lastUsed: Date.now() });
+  const { db, sql } = createTenantClient(connectionString);
+  tenantPool.set(orgId, { db, sql, lastUsed: Date.now() });
   return db;
 }
 
-export function closeTenantDb(orgId: string): void {
+export async function closeTenantDb(orgId: string): Promise<void> {
+  const entry = tenantPool.get(orgId);
   tenantPool.delete(orgId);
+  if (entry) {
+    await entry.sql.end({ timeout: 5 });
+  }
 }
 
-export function closeAllTenantDbs(): void {
+export async function closeAllTenantDbs(): Promise<void> {
+  const entries = [...tenantPool.values()];
   tenantPool.clear();
+  await Promise.allSettled(entries.map((e) => e.sql.end({ timeout: 5 })));
 }

@@ -25,7 +25,7 @@ const DB_URL =
 
 async function seed() {
   console.log("Seeding tenant database...");
-  const db = createTenantClient(DB_URL);
+  const { db, sql: pgSql } = createTenantClient(DB_URL);
 
   // ── Clean slate (idempotent) ─────────────────────────
   // Delete in reverse FK order to avoid constraint violations
@@ -312,6 +312,7 @@ async function seed() {
   console.log(`  ✓ ${engData.length * weeks.length} engagement score records`);
 
   console.log("\nSeed complete!");
+  await pgSql.end();
   process.exit(0);
 }
 

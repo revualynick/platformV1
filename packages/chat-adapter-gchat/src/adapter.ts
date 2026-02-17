@@ -57,6 +57,7 @@ export class GoogleChatAdapter implements ChatAdapter {
       const token = authHeader.replace("Bearer ", "");
       if (
         token.length > 0 &&
+        token.length === this.verificationToken.length &&
         crypto.timingSafeEqual(
           Buffer.from(token),
           Buffer.from(this.verificationToken),
@@ -146,21 +147,17 @@ export class GoogleChatAdapter implements ChatAdapter {
 
   async resolveUser(platformUserId: string): Promise<PlatformUser | null> {
     try {
-      // platformUserId is in the format "users/{userId}"
-      const response = await this.chatClient.spaces.members.get({
-        name: platformUserId,
-      });
-
-      const member = response.data.member;
-      if (!member) return null;
-
+      // platformUserId from Google Chat is in "users/{userId}" format.
+      // The People API or Directory API can look up user details.
+      // For now, return the platform ID as display name since
+      // spaces.members.get requires "spaces/{space}/members/{member}" format
+      // which we don't have from just the user ID.
       return {
         platformUserId,
-        displayName: member.displayName ?? "Unknown",
-        email: member.domainId ?? undefined,
+        displayName: platformUserId.replace("users/", ""),
+        email: undefined,
       };
     } catch {
-      // User not found or API error — return null gracefully
       return null;
     }
   }

@@ -60,7 +60,8 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
       .from(escalations)
       .leftJoin(users, eq(escalations.reporterId, users.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(escalations.createdAt));
+      .orderBy(desc(escalations.createdAt))
+      .limit(100);
 
     const data = rows.map((r) => ({
       ...r.escalation,

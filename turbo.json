@@ -3,7 +3,17 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", ".next/**"],
+      "env": [
+        "DATABASE_URL",
+        "INTERNAL_API_URL",
+        "INTERNAL_API_SECRET",
+        "NEXTAUTH_URL",
+        "NEXTAUTH_SECRET",
+        "AUTH_SECRET",
+        "NODE_ENV",
+        "NEXT_PUBLIC_WS_URL"
+      ]
     },
     "dev": {
       "cache": false,
@@ -13,7 +23,8 @@
       "dependsOn": ["^build"]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "outputs": []
     },
     "test": {
       "dependsOn": ["^build"]

@@ -16,7 +16,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     if (teamId) conditions.push(eq(users.teamId, teamId));
     if (managerId) conditions.push(eq(users.managerId, managerId));
 
-    const result = await db.select().from(users).where(and(...conditions));
+    const { limit = "200" } = request.query as { limit?: string };
+    const result = await db.select().from(users).where(and(...conditions)).limit(Math.min(parseInt(limit, 10) || 200, 500));
     return reply.send({ data: result });
   });
 
@@ -110,7 +111,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       .select()
       .from(engagementScores)
       .where(eq(engagementScores.userId, id))
-      .orderBy(engagementScores.weekStarting);
+      .orderBy(engagementScores.weekStarting)
+      .limit(52); // Max 1 year of weekly scores
 
     return reply.send({ data: scores, userId: id });
   });

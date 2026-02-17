@@ -23,25 +23,39 @@ import {
 
 /**
  * BFS from a manager through users.managerId to find all direct/indirect reports.
+ * Loads all active users once and traverses in memory to avoid N+1 queries.
  */
 async function getReportingTree(
   db: TenantDb,
   managerId: string,
 ): Promise<Set<string>> {
+  // Single query: load all active users' id + managerId
+  const allUsers = await db
+    .select({ id: users.id, managerId: users.managerId })
+    .from(users)
+    .where(eq(users.isActive, true));
+
+  // Build adjacency list: managerId → [reportIds]
+  const childrenOf = new Map<string, string[]>();
+  for (const u of allUsers) {
+    if (u.managerId) {
+      const list = childrenOf.get(u.managerId) ?? [];
+      list.push(u.id);
+      childrenOf.set(u.managerId, list);
+    }
+  }
+
+  // BFS in memory
   const tree = new Set<string>([managerId]);
   const queue = [managerId];
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    const reports = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(eq(users.managerId, current), eq(users.isActive, true)));
-
-    for (const report of reports) {
-      if (!tree.has(report.id)) {
-        tree.add(report.id);
-        queue.push(report.id);
+    const reports = childrenOf.get(current) ?? [];
+    for (const reportId of reports) {
+      if (!tree.has(reportId)) {
+        tree.add(reportId);
+        queue.push(reportId);
       }
     }
   }

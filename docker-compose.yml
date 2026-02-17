@@ -20,10 +20,11 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    command: redis-server --requirepass revualy_dev
     volumes:
       - ./docker-data/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "revualy_dev", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5

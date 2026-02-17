@@ -22,7 +22,8 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
       .select()
       .from(kudos)
       .where(or(eq(kudos.giverId, userId), eq(kudos.receiverId, userId)))
-      .orderBy(desc(kudos.createdAt));
+      .orderBy(desc(kudos.createdAt))
+      .limit(100);
 
     // Batch-fetch user names for all givers/receivers
     const userIds = new Set<string>();

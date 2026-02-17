@@ -32,9 +32,15 @@ importers:
       '@revualy/ai-core':
         specifier: workspace:*
         version: link:../../packages/ai-core
+      '@revualy/chat-adapter-gchat':
+        specifier: workspace:*
+        version: link:../../packages/chat-adapter-gchat
       '@revualy/chat-adapter-slack':
         specifier: workspace:*
         version: link:../../packages/chat-adapter-slack
+      '@revualy/chat-adapter-teams':
+        specifier: workspace:*
+        version: link:../../packages/chat-adapter-teams
       '@revualy/chat-core':
         specifier: workspace:*
         version: link:../../packages/chat-core
