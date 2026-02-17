@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getOneOnOneSessions, getOneOnOneSession, getUser } from "@/lib/api";
+import { getOneOnOneSessions, getOneOnOneSession, getUser, getWsToken } from "@/lib/api";
 import type { OneOnOneSession, OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionList } from "@/components/session-list";
@@ -67,9 +67,15 @@ export default async function ManagerOneOnOnePage({
   const data = await loadData(userId);
 
   const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
-  const wsUrl = data.activeSession
-    ? `${WS_BASE}/ws/one-on-one/${data.activeSession.id}?userId=${data.currentUserId}&orgId=dev-org`
-    : null;
+  let wsUrl: string | null = null;
+  if (data.activeSession) {
+    try {
+      const { token } = await getWsToken(data.activeSession.id);
+      wsUrl = `${WS_BASE}/ws/one-on-one/${data.activeSession.id}?token=${token}`;
+    } catch {
+      // WS unavailable
+    }
+  }
 
   return (
     <div className="max-w-6xl">

@@ -33,7 +33,7 @@ async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
     const res = await fetch(`${API_URL}/api/v1/auth/lookup?email=${encodeURIComponent(email)}`, {
       headers: {
         "x-org-id": "dev-org",
-        "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "dev-secret",
+        "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "",
       },
     });
     if (!res.ok) return null;

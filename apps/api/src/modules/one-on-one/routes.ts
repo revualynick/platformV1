@@ -20,6 +20,7 @@ import {
   updateAgendaItemSchema,
 } from "../../lib/validation.js";
 import { generateAgenda } from "../../lib/agenda-generator.js";
+import { generateWsToken } from "../../lib/ws-auth.js";
 
 /**
  * Verify user is the manager or employee for a session.
@@ -442,5 +443,19 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(asc(oneOnOneAgendaItems.sortOrder));
 
     return reply.send({ data: allItems });
+  });
+
+  // POST /:id/ws-token — Generate a short-lived token for WebSocket auth
+  app.post("/:id/ws-token", { preHandler: requireAuth }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId, orgId } = request.tenant;
+
+    const session = await verifySessionAccess(db, id, userId!);
+    if (!session) {
+      return reply.code(404).send({ error: "Session not found" });
+    }
+
+    const token = generateWsToken(userId!, orgId, id);
+    return reply.send({ token });
   });
 };

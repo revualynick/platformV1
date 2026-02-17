@@ -32,10 +32,39 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // PATCH /users/:id — Update user profile/preferences
+  // - Users can edit their own profile (name, timezone, preferences)
+  // - Only admins can change role, teamId, or edit other users
   app.patch("/:id", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
+    const { db, userId } = request.tenant;
     const body = parseBody(updateUserSchema, request.body);
+
+    if (!userId) {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+
+    // Look up the caller's role from the DB (not headers) to prevent escalation
+    const [caller] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!caller) {
+      return reply.code(401).send({ error: "User not found" });
+    }
+
+    const isAdmin = caller.role === "admin";
+    const isSelf = id === userId;
+
+    // Non-admins can only edit their own profile
+    if (!isAdmin && !isSelf) {
+      return reply.code(403).send({ error: "You can only edit your own profile" });
+    }
+
+    // Only admins can change role or teamId
+    if (!isAdmin && (body.role !== undefined || body.teamId !== undefined)) {
+      return reply.code(403).send({ error: "Only admins can change role or team" });
+    }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) updates.name = body.name;

@@ -5,7 +5,13 @@
 import { auth } from "@/lib/auth";
 
 const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? "dev-secret";
+function getInternalSecret(): string {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    throw new Error("INTERNAL_API_SECRET env var is required");
+  }
+  return secret;
+}
 
 async function apiFetch<T>(
   path: string,
@@ -13,17 +19,15 @@ async function apiFetch<T>(
 ): Promise<T> {
   // Resolve auth session for tenant context
   const session = await auth();
-  const authHeaders: Record<string, string> = session
-    ? {
-        "x-org-id": session.orgId,
-        "x-user-id": session.user.id,
-        "x-internal-secret": INTERNAL_SECRET,
-      }
-    : {
-        // Dev fallback when no session (e.g. during development without auth)
-        "x-org-id": "dev-org",
-        "x-user-id": "dev-user",
-      };
+  if (!session) {
+    throw new Error("No auth session — cannot make API request");
+  }
+
+  const authHeaders: Record<string, string> = {
+    "x-org-id": session.orgId,
+    "x-user-id": session.user.id,
+    "x-internal-secret": getInternalSecret(),
+  };
 
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
@@ -677,6 +681,13 @@ export async function updateAgendaItem(
   return apiFetch<OneOnOneAgendaItem>(
     `/api/v1/one-on-one-sessions/${sessionId}/agenda/${itemId}`,
     { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export async function getWsToken(sessionId: string) {
+  return apiFetch<{ token: string }>(
+    `/api/v1/one-on-one-sessions/${sessionId}/ws-token`,
+    { method: "POST" },
   );
 }
 

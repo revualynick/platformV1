@@ -2,7 +2,10 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import { users } from "@revualy/db";
 
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? "dev-secret";
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
+if (!INTERNAL_SECRET) {
+  throw new Error("INTERNAL_API_SECRET env var is required");
+}
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   /**

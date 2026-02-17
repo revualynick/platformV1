@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and } from "drizzle-orm";
 import { calendarTokens } from "@revualy/db";
+import { encrypt, isEncryptionConfigured } from "@revualy/shared";
 import { requireAuth } from "../../lib/rbac.js";
 import { getAuthUrl, exchangeCode } from "../../lib/google-calendar.js";
 
@@ -30,6 +31,18 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     try {
       const tokens = await exchangeCode(code);
 
+      // Encrypt tokens if ENCRYPTION_KEY is configured
+      const storeAccessToken = isEncryptionConfigured()
+        ? encrypt(tokens.accessToken)
+        : tokens.accessToken;
+      const storeRefreshToken = isEncryptionConfigured()
+        ? encrypt(tokens.refreshToken)
+        : tokens.refreshToken;
+
+      if (!isEncryptionConfigured()) {
+        request.log.warn("ENCRYPTION_KEY not set — storing OAuth tokens in plaintext");
+      }
+
       // Upsert token (unique on userId + provider)
       const [existing] = await db
         .select()
@@ -45,8 +58,8 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
         await db
           .update(calendarTokens)
           .set({
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
+            accessToken: storeAccessToken,
+            refreshToken: storeRefreshToken,
             expiresAt: tokens.expiresAt,
             updatedAt: new Date(),
           })
@@ -55,8 +68,8 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
         await db.insert(calendarTokens).values({
           userId,
           provider: "google",
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
+          accessToken: storeAccessToken,
+          refreshToken: storeRefreshToken,
           expiresAt: tokens.expiresAt,
         });
       }

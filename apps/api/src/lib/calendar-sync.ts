@@ -6,6 +6,7 @@ import {
   users,
   userRelationships,
 } from "@revualy/db";
+import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared";
 import {
   fetchCalendarEvents,
   refreshAccessToken,
@@ -32,16 +33,22 @@ export async function syncCalendarForUser(
 
   if (!token) return { synced: 0, relationships: 0 };
 
-  // 2. Refresh token if expired
-  let accessToken = token.accessToken;
+  // 2. Decrypt stored tokens
+  const decryptIfNeeded = (val: string) =>
+    isEncryptionConfigured() ? decrypt(val) : val;
+  const encryptIfNeeded = (val: string) =>
+    isEncryptionConfigured() ? encrypt(val) : val;
+
+  // 3. Refresh token if expired
+  let accessToken = decryptIfNeeded(token.accessToken);
   if (token.expiresAt <= new Date()) {
-    const refreshed = await refreshAccessToken(token.refreshToken);
+    const refreshed = await refreshAccessToken(decryptIfNeeded(token.refreshToken));
     accessToken = refreshed.accessToken;
 
     await db
       .update(calendarTokens)
       .set({
-        accessToken: refreshed.accessToken,
+        accessToken: encryptIfNeeded(refreshed.accessToken),
         expiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })
