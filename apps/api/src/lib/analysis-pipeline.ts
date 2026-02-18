@@ -19,6 +19,7 @@ export async function runAnalysisPipeline(
   db: TenantDb,
   llm: LLMGateway,
   conversationId: string,
+  logger: Pick<Console, "error" | "warn" | "info"> = console,
 ): Promise<void> {
   // 1. Fetch conversation + messages
   const [conversation] = await db
@@ -75,7 +76,7 @@ export async function runAnalysisPipeline(
   results.forEach((r, i) => {
     if (r.status === "rejected") {
       const stepNames = ["sentiment", "engagement", "summary", "flags", "values"];
-      console.error(`Analysis step "${stepNames[i]}" failed for conversation ${conversationId}:`, r.reason);
+      logger.error(`Analysis step "${stepNames[i]}" failed for conversation ${conversationId}:`, r.reason);
     }
   });
 
@@ -194,8 +195,9 @@ ${content}`,
       wordCount,
       hasExamples: parsed.hasExamples ?? false,
     };
-  } catch {
-    // Fallback: heuristic scoring
+  } catch (err) {
+    // Fallback: heuristic scoring (LLM returned non-JSON)
+    console.error("[Analysis] scoreEngagement JSON parse failed, using heuristic fallback:", err);
     let score = 30;
     if (wordCount > 20) score += 15;
     if (wordCount > 50) score += 15;

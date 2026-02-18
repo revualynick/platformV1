@@ -300,6 +300,8 @@ export const escalations = pgTable(
     index("idx_escalations_subject_id").on(table.subjectId),
     index("idx_escalations_reporter_id").on(table.reporterId),
     index("idx_escalations_created_at").on(table.createdAt),
+    // Unique partial index on feedbackEntryId (applied via migration 0011)
+    // uniqueIndex("uq_escalation_feedback_entry").on(table.feedbackEntryId).where(sql`feedback_entry_id IS NOT NULL`),
   ],
 );
 
@@ -518,7 +520,7 @@ export const oneOnOneSessions = pgTable(
     employeeId: uuid("employee_id")
       .notNull()
       .references(() => users.id),
-    status: varchar("status", { length: 20 }).notNull().default("scheduled"), // scheduled | active | completed
+    status: varchar("status", { length: 20 }).notNull().default("scheduled"), // scheduled | active | completed | cancelled
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),

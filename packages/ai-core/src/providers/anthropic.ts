@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { performance } from "node:perf_hooks";
 import type {
+  LLMProvider,
   LLMProviderAdapter,
   LLMProviderConfig,
   LLMCompletionRequest,
@@ -9,7 +10,7 @@ import type {
 } from "../types.js";
 
 export class AnthropicAdapter implements LLMProviderAdapter {
-  readonly provider: string;
+  readonly provider: LLMProvider;
   private client: Anthropic;
   private models: LLMProviderConfig["models"];
 

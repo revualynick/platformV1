@@ -1,6 +1,6 @@
 import type { ModelTier } from "@revualy/shared";
 
-export type LLMProvider = string;
+export type LLMProvider = "anthropic" | "openai";
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant";

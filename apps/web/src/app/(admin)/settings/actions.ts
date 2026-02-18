@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import {
   createCoreValue,
   updateCoreValue,
@@ -10,10 +11,24 @@ import {
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
+const valueSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100, "Name too long"),
+  description: z.string().max(500, "Description too long").default(""),
+});
+
+const questionnaireSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200, "Name too long"),
+  category: z.string().min(1, "Category is required"),
+  source: z.string().max(50).default("custom"),
+});
+
 export async function addValue(formData: FormData): Promise<ActionResult> {
-  const name = formData.get("name") as string;
-  const description = (formData.get("description") as string) ?? "";
-  if (!name?.trim()) return { ok: false, error: "Name is required" };
+  const parsed = valueSchema.safeParse({
+    name: formData.get("name"),
+    description: formData.get("description") ?? "",
+  });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { name, description } = parsed.data;
 
   try {
     await createCoreValue({ name: name.trim(), description: description.trim() });
@@ -56,11 +71,13 @@ export async function removeValue(formData: FormData): Promise<ActionResult> {
 }
 
 export async function addQuestionnaire(formData: FormData): Promise<ActionResult> {
-  const name = formData.get("name") as string;
-  const category = formData.get("category") as string;
-  const source = (formData.get("source") as string) || "custom";
-  if (!name?.trim()) return { ok: false, error: "Name is required" };
-  if (!category) return { ok: false, error: "Category is required" };
+  const parsed = questionnaireSchema.safeParse({
+    name: formData.get("name"),
+    category: formData.get("category"),
+    source: formData.get("source") || "custom",
+  });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { name, category, source } = parsed.data;
 
   try {
     await createQuestionnaire({ name: name.trim(), category, source });

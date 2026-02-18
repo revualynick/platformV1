@@ -18,6 +18,10 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
     const userId = getAuthenticatedUserId(request);
     const body = parseBody(createEscalationSchema, request.body);
 
+    if (!body.feedbackEntryId && !body.subjectId) {
+      return reply.code(400).send({ error: "Either feedbackEntryId or subjectId is required" });
+    }
+
     const created = await db.transaction(async (tx) => {
       const [esc] = await tx
         .insert(escalations)

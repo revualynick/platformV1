@@ -117,7 +117,7 @@ async function start() {
   setDemoAnalysisQueue(queues.analysisQueue);
 
   // LLM gateway — provider determined by env vars
-  const llmProvider = process.env.LLM_PROVIDER ?? "anthropic";
+  const llmProvider = (process.env.LLM_PROVIDER ?? "anthropic") as import("@revualy/ai-core").LLMProvider;
   const llmApiKey =
     process.env.LLM_API_KEY ||
     (llmProvider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined) ||

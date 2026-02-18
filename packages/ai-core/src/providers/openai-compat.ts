@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { performance } from "node:perf_hooks";
 import type {
+  LLMProvider,
   LLMProviderAdapter,
   LLMProviderConfig,
   LLMCompletionRequest,
@@ -15,7 +16,7 @@ import type {
  * - Any OpenAI-compatible API
  */
 export class OpenAICompatAdapter implements LLMProviderAdapter {
-  readonly provider: string;
+  readonly provider: LLMProvider;
   private client: OpenAI;
   private models: LLMProviderConfig["models"];
 
@@ -35,6 +36,14 @@ export class OpenAICompatAdapter implements LLMProviderAdapter {
       role: msg.role,
       content: msg.content,
     }));
+
+    // OpenAI requires at least one message to mention "json" when using json_object response format
+    if (request.jsonMode) {
+      const mentionsJson = request.messages.some((m) => /json/i.test(m.content));
+      if (!mentionsJson) {
+        messages.unshift({ role: "system", content: "Respond ONLY with valid JSON. No markdown, no explanation." });
+      }
+    }
 
     const start = performance.now();
     const response = await this.client.chat.completions.create({
