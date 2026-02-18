@@ -38,6 +38,7 @@ export function SessionEditor({
 }: SessionEditorProps) {
   const [notes, setNotes] = useState(session.notes);
   const [employeeConnected, setEmployeeConnected] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const [editRequest, setEditRequest] = useState(false);
   const [newActionText, setNewActionText] = useState("");
   const [newAgendaText, setNewAgendaText] = useState("");
@@ -55,6 +56,8 @@ export function SessionEditor({
 
     const ws = new WebSocket(wsUrl, ["revualy-ws", wsToken]);
     wsRef.current = ws;
+
+    ws.onopen = () => { setWsConnected(true); };
 
     ws.onmessage = (event) => {
       let msg: Record<string, unknown>;
@@ -85,6 +88,7 @@ export function SessionEditor({
 
     ws.onclose = () => {
       wsRef.current = null;
+      setWsConnected(false);
     };
 
     // Keepalive
@@ -222,6 +226,11 @@ export function SessionEditor({
                 {employeeConnected ? `${employeeName} is watching` : `${employeeName} offline`}
               </span>
             </div>
+          )}
+          {isActive && !wsConnected && wsUrl && (
+            <span className="rounded-full bg-danger/10 px-2.5 py-0.5 text-[10px] font-semibold text-danger">
+              Connection lost
+            </span>
           )}
           {editRequest && (
             <span className="rounded-full bg-amber/10 px-2.5 py-0.5 text-[10px] font-semibold text-warning">

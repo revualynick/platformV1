@@ -11,6 +11,7 @@ interface Room {
   employeeSocket: WebSocket | null;
   lastContent: string;
   persistTimer: ReturnType<typeof setTimeout> | null;
+  stalenessTimer: ReturnType<typeof setTimeout> | null;
   sessionId: string;
   managerId: string;
   employeeId: string;
@@ -23,6 +24,7 @@ let wsRedis: Redis | null = null;
 const REDIS_KEY_PREFIX = "1on1:content:";
 const REDIS_TTL = 86400; // 24h
 const PERSIST_INTERVAL = 5000; // 5s
+const STALENESS_TIMEOUT = 300_000; // 5 minutes
 
 function getRoom(sessionId: string): Room | undefined {
   return rooms.get(sessionId);
@@ -41,6 +43,7 @@ function ensureRoom(
       employeeSocket: null,
       lastContent: "",
       persistTimer: null,
+      stalenessTimer: null,
       sessionId,
       managerId,
       employeeId,
@@ -97,22 +100,39 @@ function broadcastPresence(room: Room) {
   sendJson(room.employeeSocket, presence);
 }
 
-async function cleanupRoom(sessionId: string) {
+async function forceCleanupRoom(sessionId: string) {
+  const room = rooms.get(sessionId);
+  if (!room) return;
+  if (room.persistTimer) {
+    clearTimeout(room.persistTimer);
+    room.persistTimer = null;
+  }
+  if (room.stalenessTimer) {
+    clearTimeout(room.stalenessTimer);
+    room.stalenessTimer = null;
+  }
+  // Final persist before cleanup — await to prevent data loss
+  try {
+    await persistNotes(room);
+  } catch (err) {
+    console.error(`[WS] Failed to persist notes for session ${sessionId}:`, err);
+  }
+  rooms.delete(sessionId);
+}
+
+function handleDisconnect(sessionId: string) {
   const room = rooms.get(sessionId);
   if (!room) return;
   if (!room.managerSocket && !room.employeeSocket) {
-    if (room.persistTimer) {
-      clearTimeout(room.persistTimer);
-      room.persistTimer = null;
-    }
-    // Final persist before cleanup — await to prevent data loss
-    try {
-      await persistNotes(room);
-    } catch (err) {
-      // Log but don't block cleanup
-      console.error(`[WS] Failed to persist notes for session ${sessionId}:`, err);
-    }
-    rooms.delete(sessionId);
+    // Both gone — clean up immediately
+    forceCleanupRoom(sessionId);
+  } else {
+    // One side still connected — start staleness timer to force cleanup if the other side never reconnects
+    if (room.stalenessTimer) clearTimeout(room.stalenessTimer);
+    room.stalenessTimer = setTimeout(() => {
+      room.stalenessTimer = null;
+      forceCleanupRoom(sessionId);
+    }, STALENESS_TIMEOUT);
   }
 }
 
@@ -204,6 +224,12 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
         } else {
           room.lastContent = session.notes;
         }
+      }
+
+      // Cancel staleness timer on reconnect
+      if (room.stalenessTimer) {
+        clearTimeout(room.stalenessTimer);
+        room.stalenessTimer = null;
       }
 
       // Assign socket to the room
@@ -300,7 +326,7 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
           room.employeeSocket = null;
         }
         broadcastPresence(room);
-        cleanupRoom(sessionId);
+        handleDisconnect(sessionId);
       });
     },
   );
