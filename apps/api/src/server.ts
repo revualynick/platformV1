@@ -23,6 +23,8 @@ import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
 import { AdapterRegistry } from "@revualy/chat-core";
+import { SlackAdapter } from "@revualy/chat-adapter-slack";
+import { GoogleChatAdapter } from "@revualy/chat-adapter-gchat";
 
 // Declaration merging so routes can access app.llm and app.adapters
 declare module "fastify" {
@@ -129,6 +131,25 @@ async function start() {
     },
   });
   const adapters = new AdapterRegistry();
+
+  // Register chat adapters when credentials are available
+  if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_SIGNING_SECRET) {
+    adapters.register(new SlackAdapter({
+      botToken: process.env.SLACK_BOT_TOKEN,
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      appToken: process.env.SLACK_APP_TOKEN,
+    }));
+    app.log.info("Slack adapter registered");
+  }
+
+  if (process.env.GCHAT_SERVICE_ACCOUNT_KEY && process.env.GCHAT_VERIFICATION_TOKEN) {
+    adapters.register(new GoogleChatAdapter({
+      serviceAccountKeyJson: process.env.GCHAT_SERVICE_ACCOUNT_KEY,
+      projectId: process.env.GCHAT_PROJECT_ID ?? "",
+      verificationToken: process.env.GCHAT_VERIFICATION_TOKEN,
+    }));
+    app.log.info("Google Chat adapter registered");
+  }
 
   // Expose on app so route handlers can access app.llm / app.adapters
   app.decorate("llm", llm);

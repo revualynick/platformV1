@@ -195,6 +195,39 @@ Runs in parallel:
 
 ---
 
+## LLM Cost Model (100-Person Company)
+
+Based on 8 LLM call sites across conversation orchestration and the analysis pipeline. Assumes **3 conversations per person per week** (~1,300/month) with ~4 exchange rounds each.
+
+### Per-Conversation Token Usage
+
+| Call | Tier | Input | Output |
+|------|------|------:|-------:|
+| Opening question | standard | ~400 | ~80 |
+| Decision (×3 rounds) | fast | ~2,000 | ~15 |
+| Follow-up questions (×3) | standard | ~2,700 | ~240 |
+| Sentiment analysis | fast | ~1,700 | ~5 |
+| Engagement scoring | fast | ~1,800 | ~30 |
+| AI summary | standard | ~1,700 | ~150 |
+| Problematic language flags | standard | ~1,800 | ~100 |
+| Core values mapping | fast | ~2,200 | ~300 |
+
+### Monthly Cost Estimate
+
+| Tier | Model | Input Tokens | Output Tokens | Cost |
+|------|-------|-------------:|--------------:|-----:|
+| fast | Claude Haiku 4.5 ($1/$5 per MTok) | 10.0M | 455K | ~$12 |
+| standard | Claude Sonnet 4.6 ($3/$15 per MTok) | 8.6M | 741K | ~$37 |
+| | | | **Total** | **~$49/mo** |
+
+### Pricing
+
+At **$3/employee/month**, a 100-person company generates **$300/month revenue** against ~$49 in inference costs — **~83% gross margin** on AI spend. The analysis pipeline runs async via BullMQ and qualifies for Anthropic's batch API (50% discount), which could reduce inference costs to ~$30-35/month.
+
+The `advanced` tier (Opus) is not used in any current call site. Cost scales linearly with headcount.
+
+---
+
 ## Monorepo Structure
 
 ```
@@ -419,3 +452,125 @@ revualy/
 - **Leaderboard:** Run 10 scored interactions, verify top 3 ranking is correct
 - **Escalation:** Submit flagged feedback, verify it appears in HR feed and not in manager dashboard
 - **Calibration:** Seed biased reviewer data, verify leniency/severity detection fires
+
+---
+
+## Code Review Findings (2026-02-17)
+
+Full static analysis performed via OpenAI Codex across API, database/workers, shared packages, and frontend.
+
+**40 findings total** — 18 high/critical, 16 medium, 6 low/info.
+
+### Critical / High Severity
+
+#### API Security
+
+1. **OAuth account-linking vulnerability** — `apps/api/src/modules/integrations/routes.ts:22-69`
+   `/google/callback` trusts `state` as `userId` without verifying integrity. A forged callback can bind attacker tokens to another user.
+
+2. **Missing authorization on relationship endpoints** — `apps/api/src/modules/relationships/routes.ts:97-217`
+   Only uses `requireAuth`, but exposes org-wide graph reads and privileged mutations (create/update/delete relationships, reassign managers). Any authenticated employee can modify org structure.
+
+3. **Over-broad feedback access for managers** — `apps/api/src/modules/feedback/routes.ts:25-111`
+   Logic allows any non-employee role (including unrelated managers) to view/export any user's feedback. Missing manager-subject relationship check.
+
+4. **Conversation endpoints too broadly accessible** — `apps/api/src/modules/conversation/routes.ts:11-48`
+   Comments indicate admin/debug access, but routes only require auth, not admin role. Sensitive conversation content is readable by anyone.
+
+#### Database & Workers
+
+5. **Seed cleanup fails on FK constraints** — `packages/db/src/seed.ts:33-49`
+   Deletes parent tables before child tables; missing deletes for `feedback_value_scores`, `user_platform_identities`, etc.
+
+6. **Migration journal out of sync** — `packages/db/src/migrations/meta/_journal.json`
+   Only lists `0000`; migrations `0001`–`0008` exist on disk but aren't tracked. Deployment blocker for Drizzle migration runner.
+
+7. **Workers use single env connection for all tenants** — `apps/api/src/workers/index.ts:136-252`
+   `getTenantDb(orgId, process.env.TENANT_DATABASE_URL)` ignores org-specific DB mapping. Multi-tenant correctness risk.
+
+8. **No BullMQ retry/backoff policy** — `apps/api/src/workers/index.ts:55-59`
+   Queues created without `defaultJobOptions`. Transient failures kill jobs immediately.
+
+9. **Race condition in conversation state** — `apps/api/src/workers/index.ts:161-182`
+   Read-modify-write on Redis state without locking. Duplicate webhooks can overwrite state concurrently.
+
+10. **Redis connections never closed on shutdown** — `apps/api/src/workers/index.ts:76`, `apps/api/src/modules/one-on-one/ws.ts:117`
+    State Redis singleton and WebSocket Redis are created but never cleaned up in graceful shutdown.
+
+11. **Destructive migration with no backfill** — `packages/db/src/migrations/0007_replace_one_on_one_with_sessions.sql:5-6`
+    Drops old 1:1 tables outright with no data migration path.
+
+#### Shared Packages
+
+12. **Slack signature check crashes on length mismatch** — `packages/chat-adapter-slack/src/adapter.ts:53-55`
+    `crypto.timingSafeEqual` throws if buffer lengths differ. Malformed `x-slack-signature` causes 500 instead of 401.
+
+13. **Slack verification uses `JSON.stringify(body)` not raw bytes** — `packages/chat-adapter-slack/src/adapter.ts:46-47`
+    Slack signing requires exact raw body bytes; re-serializing can invalidate legitimate requests.
+
+14. **LLM gateway `embed()` always fails** — `packages/ai-core/src/gateway.ts:45-105`
+    Factory never registers `EmbeddingProviderAdapter`; any `embed()` call throws at runtime.
+
+15. **GChat auth is token equality only, no JWT validation** — `packages/chat-adapter-gchat/src/adapter.ts:49-70`
+    No issuer/audience/expiry/signature verification. Weak sender authenticity and replay resistance.
+
+#### Frontend
+
+16. **Hardcoded `x-org-id: "dev-org"` in auth** — `apps/web/src/lib/auth.ts:36`
+    Multi-tenant auth looks up users under wrong org context.
+
+17. **`INTERNAL_API_SECRET` falls back to `""`** — `apps/web/src/lib/auth.ts:37`
+    Auth proceeds misconfigured instead of failing closed.
+
+18. **Mock data fallback masks auth/production failures** — `apps/web/src/app/(employee)/dashboard/page.tsx:24,138`
+    Missing session or fetch failure silently shows fabricated data instead of redirecting.
+
+### Medium Severity
+
+#### API
+
+19. **Escalation writes not transactional** — `apps/api/src/modules/escalation/routes.ts:20-137` — Partial writes on failure.
+20. **Input validation gaps on route params** — `apps/api/src/modules/users/routes.ts:13-19` and others — Raw string casts instead of Zod.
+21. **Inconsistent API response shapes** — Mix of `{ data }`, raw objects, `{ success: true }` across endpoints.
+22. **DELETE action-item returns 200 even when item doesn't exist** — `apps/api/src/modules/one-on-one/routes.ts:331-340`
+23. **Full-table fetches with in-memory filtering** — `apps/api/src/modules/relationships/routes.ts:24-25`, `manager/routes.ts:33` — Won't scale.
+24. **Global error handler too coarse** — `apps/api/src/server.ts:62-67` — Only preserves 400; 401/403/404 become 500.
+
+#### Database & Workers
+
+25. **Unsafe `JSON.parse` in job handler** — `apps/api/src/workers/index.ts:88` — Corrupted Redis value crashes worker.
+26. **Redis URL parsing drops TLS/username/db-index** — `apps/api/src/workers/index.ts:42` — Breaks production Redis.
+27. **Missing unique constraint on `org_platform_configs(org_id, platform)`** — `packages/db/src/schema/control-plane.ts:30`
+28. **Duplicated resolver columns in escalation schema** — `packages/db/src/schema/tenant.ts:289-290`
+29. **Schema/migration FK drift** — `packages/db/src/schema/tenant.ts:380-381` — Missing `.references()` that exist in SQL.
+30. **Analysis pipeline writes not transactional** — `packages/db/src/lib/analysis-pipeline.ts:83-113`
+31. **Seed script hardcoded DB URL fallback** — `packages/db/src/seed.ts:24` — No `finally` cleanup.
+
+#### Shared Packages
+
+32. **Adapter registry allows silent override** — `packages/chat-core/src/registry.ts:13`
+33. **No retry/backoff in Slack/GChat send paths** — `packages/chat-adapter-slack/src/adapter.ts:107`, `packages/chat-adapter-gchat/src/adapter.ts:144`
+34. **Shared crypto key validation checks length but not hex validity** — `packages/shared/src/utils/crypto.ts:66-71`
+
+#### Frontend
+
+35. **No runtime validation on API responses** — `apps/web/src/lib/api.ts:49` — `res.json() as Promise<T>` trusts shape blindly.
+36. **Unsafe session type casts** — `apps/web/src/lib/auth.ts:136` — `as string`/`as boolean` without validation.
+37. **Server modules not marked `"server-only"`** — `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.ts`
+38. **No middleware role checks for `/team`, `/settings` routes** — `apps/web/src/middleware.ts:20`
+39. **Error details leak in API helper** — `apps/web/src/lib/api.ts:46` — Full backend response in thrown error.
+40. **Global `cache: "no-store"` on every fetch** — `apps/web/src/lib/api.ts:41` — Unnecessary perf cost.
+
+### Low / Info
+
+- No SQL injection vectors found (Drizzle parameterized queries throughout)
+- No `dangerouslySetInnerHTML` usage found
+- No circular dependencies in package graph
+- ESM import extensions consistent (`.js`)
+- No explicit `any` usage found in reviewed source
+- `@slack/bolt` appears unused in Slack adapter package
+- No down migrations for any migration file
+- `shared` package contains runtime crypto logic beyond just types
+
+
+continuing the plan for switching NextAuth.js from JWT to database-backed sessions. Let me read the key files to design the implementation plan.
