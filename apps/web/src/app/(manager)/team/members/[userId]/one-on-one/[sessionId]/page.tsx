@@ -60,12 +60,14 @@ export default async function ManagerSessionDetailPage({
   const { userId, sessionId } = await params;
   const data = await loadSession(userId, sessionId);
 
-  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
+  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;
-  if (data.session.status === "active") {
+  let wsToken: string | null = null;
+  if (data.session.status === "active" && WS_BASE) {
     try {
       const { token } = await getWsToken(sessionId);
-      wsUrl = `${WS_BASE}/ws/one-on-one/${sessionId}?token=${token}`;
+      wsUrl = `${WS_BASE}/ws/one-on-one/${sessionId}`;
+      wsToken = token;
     } catch {
       // WS unavailable
     }
@@ -86,6 +88,7 @@ export default async function ManagerSessionDetailPage({
           currentUserId={data.currentUserId}
           employeeName={data.employeeName}
           wsUrl={wsUrl}
+          wsToken={wsToken}
           startAction={startSession}
           endAction={endSession}
           addActionItemAction={addActionItemAction}

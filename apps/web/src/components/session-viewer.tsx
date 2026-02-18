@@ -8,6 +8,7 @@ interface SessionViewerProps {
   currentUserId: string;
   managerName: string;
   wsUrl: string | null;
+  wsToken: string | null;
 }
 
 export function SessionViewer({
@@ -15,6 +16,7 @@ export function SessionViewer({
   currentUserId,
   managerName,
   wsUrl,
+  wsToken,
 }: SessionViewerProps) {
   const [notes, setNotes] = useState(session.notes);
   const [managerConnected, setManagerConnected] = useState(false);
@@ -31,9 +33,9 @@ export function SessionViewer({
 
   // WebSocket connection for active sessions
   useEffect(() => {
-    if (!isActive || !wsUrl) return;
+    if (!isActive || !wsUrl || !wsToken) return;
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, ["revualy-ws", wsToken]);
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
@@ -41,21 +43,24 @@ export function SessionViewer({
       try {
         msg = JSON.parse(event.data);
       } catch {
-        console.warn("[WS] Received malformed message, ignoring");
         return;
       }
       if (!msg || typeof msg.type !== "string") return;
       switch (msg.type) {
         case "content_sync":
-          setNotes(msg.content as string);
+          if (typeof msg.content !== "string") return;
+          setNotes(msg.content);
           break;
         case "presence":
-          setManagerConnected(msg.managerConnected as boolean);
+          if (typeof msg.managerConnected !== "boolean") return;
+          setManagerConnected(msg.managerConnected);
           break;
         case "agenda_updated":
+          if (typeof msg.itemId !== "string" || typeof msg.covered !== "boolean") return;
           setAgendaState((prev) => new Map(prev).set(msg.itemId as string, msg.covered as boolean));
           break;
         case "action_updated":
+          if (typeof msg.itemId !== "string" || typeof msg.completed !== "boolean") return;
           setActionState((prev) => new Map(prev).set(msg.itemId as string, msg.completed as boolean));
           break;
         case "session_ended":
@@ -79,7 +84,7 @@ export function SessionViewer({
       clearInterval(pingInterval);
       ws.close();
     };
-  }, [isActive, wsUrl]);
+  }, [isActive, wsUrl, wsToken]);
 
   const handleRequestEdit = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

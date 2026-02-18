@@ -54,12 +54,19 @@ export default async function EmployeeSessionDetailPage({
   const { sessionId } = await params;
   const data = await loadSession(sessionId);
 
-  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
+  // Verify employee owns this session (#9 — session ownership check)
+  if (data.session.employeeId && data.session.employeeId !== data.currentUserId) {
+    redirect("/dashboard/one-on-ones");
+  }
+
+  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;
-  if (data.session.status === "active") {
+  let wsToken: string | null = null;
+  if (data.session.status === "active" && WS_BASE) {
     try {
       const { token } = await getWsToken(sessionId);
-      wsUrl = `${WS_BASE}/ws/one-on-one/${sessionId}?token=${token}`;
+      wsUrl = `${WS_BASE}/ws/one-on-one/${sessionId}`;
+      wsToken = token;
     } catch {
       // WS unavailable — session viewer will work in read-only mode
     }
@@ -80,6 +87,7 @@ export default async function EmployeeSessionDetailPage({
           currentUserId={data.currentUserId}
           managerName={data.managerName}
           wsUrl={wsUrl}
+          wsToken={wsToken}
         />
       </div>
     </div>

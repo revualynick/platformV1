@@ -66,12 +66,14 @@ export default async function ManagerOneOnOnePage({
   const { userId } = await params;
   const data = await loadData(userId);
 
-  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
+  const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;
-  if (data.activeSession) {
+  let wsToken: string | null = null;
+  if (data.activeSession && WS_BASE) {
     try {
       const { token } = await getWsToken(data.activeSession.id);
-      wsUrl = `${WS_BASE}/ws/one-on-one/${data.activeSession.id}?token=${token}`;
+      wsUrl = `${WS_BASE}/ws/one-on-one/${data.activeSession.id}`;
+      wsToken = token;
     } catch {
       // WS unavailable
     }
@@ -106,6 +108,7 @@ export default async function ManagerOneOnOnePage({
             currentUserId={data.currentUserId}
             employeeName={data.employeeName}
             wsUrl={wsUrl}
+            wsToken={wsToken}
             startAction={startSession}
             endAction={endSession}
             addActionItemAction={addActionItemAction}

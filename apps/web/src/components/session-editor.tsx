@@ -8,6 +8,7 @@ interface SessionEditorProps {
   currentUserId: string;
   employeeName: string;
   wsUrl: string | null;
+  wsToken: string | null;
   startAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
   endAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
   addActionItemAction: (formData: FormData) => Promise<{ error?: string; success?: boolean }>;
@@ -24,6 +25,7 @@ export function SessionEditor({
   currentUserId,
   employeeName,
   wsUrl,
+  wsToken,
   startAction,
   endAction,
   addActionItemAction,
@@ -49,9 +51,9 @@ export function SessionEditor({
 
   // WebSocket connection for active sessions
   useEffect(() => {
-    if (!isActive || !wsUrl) return;
+    if (!isActive || !wsUrl || !wsToken) return;
 
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, ["revualy-ws", wsToken]);
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
@@ -59,22 +61,23 @@ export function SessionEditor({
       try {
         msg = JSON.parse(event.data);
       } catch {
-        console.warn("[WS] Received malformed message, ignoring");
         return;
       }
       if (!msg || typeof msg.type !== "string") return;
       switch (msg.type) {
         case "presence":
-          setEmployeeConnected(msg.employeeConnected as boolean);
+          if (typeof msg.employeeConnected !== "boolean") return;
+          setEmployeeConnected(msg.employeeConnected);
           break;
         case "edit_request":
           setEditRequest(true);
           setTimeout(() => setEditRequest(false), 5000);
           break;
         case "content_sync":
+          if (typeof msg.content !== "string") return;
           // Manager is the writer, so this is just for reconnection
           if (msg.content && !notes) {
-            setNotes(msg.content as string);
+            setNotes(msg.content);
           }
           break;
       }
@@ -95,7 +98,7 @@ export function SessionEditor({
       clearInterval(pingInterval);
       ws.close();
     };
-  }, [isActive, wsUrl]);
+  }, [isActive, wsUrl, wsToken]);
 
   const sendContentUpdate = useCallback(
     (content: string) => {
