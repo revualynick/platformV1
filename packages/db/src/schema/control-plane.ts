@@ -5,6 +5,7 @@ import {
   text,
   boolean,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -27,16 +28,22 @@ export const organizations = pgTable("organizations", {
     .defaultNow(),
 });
 
-export const orgPlatformConfigs = pgTable("org_platform_configs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orgId: uuid("org_id")
-    .notNull()
-    .references(() => organizations.id),
-  platform: varchar("platform", { length: 50 }).notNull(), // slack | google_chat | teams
-  credentials: text("credentials").notNull(), // encrypted JSON
-  webhookSecret: text("webhook_secret"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const orgPlatformConfigs = pgTable(
+  "org_platform_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id),
+    platform: varchar("platform", { length: 50 }).notNull(), // slack | google_chat | teams
+    credentials: text("credentials").notNull(), // encrypted JSON
+    webhookSecret: text("webhook_secret"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uq_org_platform").on(table.orgId, table.platform),
+  ],
+);

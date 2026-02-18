@@ -79,44 +79,44 @@ export async function runAnalysisPipeline(
     }
   });
 
-  // 4. Create feedback entry
-  const [feedbackEntry] = await db
-    .insert(feedbackEntries)
-    .values({
-      conversationId,
-      reviewerId: conversation.reviewerId,
-      subjectId: conversation.subjectId,
-      interactionType: conversation.interactionType,
-      rawContent,
-      aiSummary: summaryResult,
-      sentiment: sentimentResult,
-      engagementScore: engagementResult.score,
-      wordCount: engagementResult.wordCount,
-      hasSpecificExamples: engagementResult.hasExamples,
-    })
-    .returning();
+  // 4-6. Write feedback entry, value scores, and escalation in a transaction
+  await db.transaction(async (tx) => {
+    const [feedbackEntry] = await tx
+      .insert(feedbackEntries)
+      .values({
+        conversationId,
+        reviewerId: conversation.reviewerId,
+        subjectId: conversation.subjectId,
+        interactionType: conversation.interactionType,
+        rawContent,
+        aiSummary: summaryResult,
+        sentiment: sentimentResult,
+        engagementScore: engagementResult.score,
+        wordCount: engagementResult.wordCount,
+        hasSpecificExamples: engagementResult.hasExamples,
+      })
+      .returning();
 
-  // 5. Store value scores
-  if (valuesResult.length > 0) {
-    await db.insert(feedbackValueScores).values(
-      valuesResult.map((v) => ({
+    if (valuesResult.length > 0) {
+      await tx.insert(feedbackValueScores).values(
+        valuesResult.map((v) => ({
+          feedbackEntryId: feedbackEntry.id,
+          coreValueId: v.coreValueId,
+          score: v.score,
+          evidence: v.evidence,
+        })),
+      );
+    }
+
+    if (flagResult.shouldFlag) {
+      await tx.insert(escalations).values({
         feedbackEntryId: feedbackEntry.id,
-        coreValueId: v.coreValueId,
-        score: v.score,
-        evidence: v.evidence,
-      })),
-    );
-  }
-
-  // 6. Create escalation if flagged
-  if (flagResult.shouldFlag) {
-    await db.insert(escalations).values({
-      feedbackEntryId: feedbackEntry.id,
-      severity: flagResult.severity,
-      reason: flagResult.reason,
-      flaggedContent: flagResult.flaggedContent,
-    });
-  }
+        severity: flagResult.severity,
+        reason: flagResult.reason,
+        flaggedContent: flagResult.flaggedContent,
+      });
+    }
+  });
 }
 
 // ── Sentiment Analysis ──────────────────────────────────

@@ -116,6 +116,14 @@ async function cleanupRoom(sessionId: string) {
   }
 }
 
+/** Close the WebSocket Redis connection (called during graceful shutdown). */
+export async function closeWsRedis(): Promise<void> {
+  if (wsRedis) {
+    await wsRedis.quit();
+    wsRedis = null;
+  }
+}
+
 export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
   // Create dedicated Redis instance for WebSocket
   const parsed = new URL(redisUrl);

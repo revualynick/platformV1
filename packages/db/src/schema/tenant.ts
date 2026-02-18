@@ -286,7 +286,6 @@ export const escalations = pgTable(
     flaggedContent: text("flagged_content").notNull().default(""),
     resolution: text("resolution"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-    resolvedBy: uuid("resolved_by"),
     resolvedById: uuid("resolved_by_id").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -377,8 +376,8 @@ export const questionnaires = pgTable(
     source: varchar("source", { length: 50 }).notNull().default("custom"), // built_in | custom | imported
     verbatim: boolean("verbatim").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
-    createdByUserId: uuid("created_by_user_id"), // null = org-wide (admin), set = manager-owned
-    teamScope: uuid("team_scope"), // FK to teams added via migration, null = org-wide
+    createdByUserId: uuid("created_by_user_id").references(() => users.id), // null = org-wide (admin), set = manager-owned
+    teamScope: uuid("team_scope").references(() => teams.id), // null = org-wide
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

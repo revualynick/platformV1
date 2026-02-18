@@ -50,10 +50,15 @@ export class SlackAdapter implements ChatAdapter {
     hmac.update(sigBasestring);
     const mySignature = `v0=${hmac.digest("hex")}`;
 
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(mySignature),
-      Buffer.from(signature),
-    );
+    const myBuf = Buffer.from(mySignature);
+    const sigBuf = Buffer.from(signature);
+
+    // timingSafeEqual throws if buffer lengths differ — check first
+    if (myBuf.byteLength !== sigBuf.byteLength) {
+      return { isValid: false };
+    }
+
+    const isValid = crypto.timingSafeEqual(myBuf, sigBuf);
 
     // Handle URL verification challenge
     const parsed = typeof body === "string" ? JSON.parse(body) : body;

@@ -10,6 +10,9 @@ export class AdapterRegistry {
   private adapters = new Map<ChatPlatform, ChatAdapter>();
 
   register(adapter: ChatAdapter): void {
+    if (this.adapters.has(adapter.platform)) {
+      console.warn(`[AdapterRegistry] Overriding existing adapter for platform: ${adapter.platform}`);
+    }
     this.adapters.set(adapter.platform, adapter);
   }
 

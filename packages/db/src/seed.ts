@@ -2,6 +2,7 @@ import { sql, eq, inArray } from "drizzle-orm";
 import { createTenantClient } from "./tenant.js";
 import {
   users,
+  userPlatformIdentities,
   teams,
   coreValues,
   userRelationships,
@@ -10,39 +11,64 @@ import {
   kudos,
   engagementScores,
   feedbackEntries,
+  feedbackValueScores,
   conversations,
   conversationMessages,
   escalations,
   escalationNotes,
+  questions,
+  interactionSchedule,
+  pulseCheckTriggers,
   notificationPreferences,
   calendarTokens,
   calendarEvents,
+  oneOnOneSessions,
+  oneOnOneActionItems,
+  oneOnOneAgendaItems,
+  managerNotes,
 } from "./schema/tenant.js";
 
-const DB_URL =
-  process.env.DATABASE_URL ??
-  "postgresql://revualy:revualy@localhost:5432/revualy_dev";
+function getDbUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    console.error("DATABASE_URL env var is required for seeding");
+    process.exit(1);
+  }
+  return url;
+}
+
+const DB_URL = getDbUrl();
 
 async function seed() {
   console.log("Seeding tenant database...");
   const { db, sql: pgSql } = createTenantClient(DB_URL);
 
   // ── Clean slate (idempotent) ─────────────────────────
-  // Delete in reverse FK order to avoid constraint violations
+  // Delete in reverse FK order to avoid constraint violations.
+  // Every tenant table must be listed here.
   console.log("  Clearing existing data...");
   await db.delete(calendarEvents);
   await db.delete(calendarTokens);
   await db.delete(notificationPreferences);
+  await db.delete(pulseCheckTriggers);
+  await db.delete(interactionSchedule);
+  await db.delete(oneOnOneAgendaItems);
+  await db.delete(oneOnOneActionItems);
+  await db.delete(oneOnOneSessions);
+  await db.delete(managerNotes);
   await db.delete(escalationNotes);
   await db.delete(escalations);
   await db.delete(engagementScores);
   await db.delete(kudos);
+  await db.delete(feedbackValueScores);
   await db.delete(feedbackEntries);
   await db.delete(conversationMessages);
   await db.delete(conversations);
+  await db.delete(questions);
   await db.delete(questionnaireThemes);
   await db.delete(questionnaires);
   await db.delete(userRelationships);
+  await db.delete(userPlatformIdentities);
   // Clear manager references before deleting users
   await db.execute(sql`UPDATE users SET manager_id = NULL`);
   await db.execute(sql`UPDATE teams SET manager_id = NULL`);

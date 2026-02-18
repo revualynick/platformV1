@@ -18,26 +18,30 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
     const userId = getAuthenticatedUserId(request);
     const body = parseBody(createEscalationSchema, request.body);
 
-    const [created] = await db
-      .insert(escalations)
-      .values({
-        reporterId: userId,
-        subjectId: body.subjectId ?? null,
-        feedbackEntryId: body.feedbackEntryId ?? null,
-        type: body.type,
-        severity: body.severity,
-        reason: body.reason,
-        description: body.description,
-        flaggedContent: body.flaggedContent,
-      })
-      .returning();
+    const created = await db.transaction(async (tx) => {
+      const [esc] = await tx
+        .insert(escalations)
+        .values({
+          reporterId: userId,
+          subjectId: body.subjectId ?? null,
+          feedbackEntryId: body.feedbackEntryId ?? null,
+          type: body.type,
+          severity: body.severity,
+          reason: body.reason,
+          description: body.description,
+          flaggedContent: body.flaggedContent,
+        })
+        .returning();
 
-    // Auto-create audit note
-    await db.insert(escalationNotes).values({
-      escalationId: created.id,
-      action: "Escalation filed",
-      performedBy: userId,
-      content: `Escalation filed with severity: ${body.severity}`,
+      // Auto-create audit note
+      await tx.insert(escalationNotes).values({
+        escalationId: esc.id,
+        action: "Escalation filed",
+        performedBy: userId,
+        content: `Escalation filed with severity: ${body.severity}`,
+      });
+
+      return esc;
     });
 
     return reply.code(201).send(created);
@@ -127,24 +131,30 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
         updates.resolvedById = userId;
       }
 
-      const [updated] = await db
-        .update(escalations)
-        .set(updates)
-        .where(eq(escalations.id, id))
-        .returning();
+      const result = await db.transaction(async (tx) => {
+        const [upd] = await tx
+          .update(escalations)
+          .set(updates)
+          .where(eq(escalations.id, id))
+          .returning();
 
-      if (!updated)
-        return reply.code(404).send({ error: "Escalation not found" });
+        if (!upd) return null;
 
-      // Audit trail
-      await db.insert(escalationNotes).values({
-        escalationId: id,
-        action: `Status changed to ${body.status ?? "updated"}`,
-        performedBy: userId,
-        content: body.resolution ?? "",
+        // Audit trail
+        await tx.insert(escalationNotes).values({
+          escalationId: id,
+          action: `Status changed to ${body.status ?? "updated"}`,
+          performedBy: userId,
+          content: body.resolution ?? "",
+        });
+
+        return upd;
       });
 
-      return reply.send(updated);
+      if (!result)
+        return reply.code(404).send({ error: "Escalation not found" });
+
+      return reply.send(result);
     },
   );
 

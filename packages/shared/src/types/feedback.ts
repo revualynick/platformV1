@@ -53,7 +53,6 @@ export interface Escalation {
   flaggedContent: string;
   resolution: string | null;
   resolvedAt: ISODateTime | null;
-  resolvedBy: UUID | null;
   resolvedById: UUID | null;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;

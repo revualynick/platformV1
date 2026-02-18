@@ -335,14 +335,19 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: "Session not found" });
     }
 
-    await db
+    const [deleted] = await db
       .delete(oneOnOneActionItems)
       .where(
         and(
           eq(oneOnOneActionItems.id, itemId),
           eq(oneOnOneActionItems.sessionId, id),
         ),
-      );
+      )
+      .returning();
+
+    if (!deleted) {
+      return reply.code(404).send({ error: "Action item not found" });
+    }
 
     return reply.send({ success: true });
   });

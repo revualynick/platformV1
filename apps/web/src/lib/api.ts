@@ -2,6 +2,7 @@
 // Server components: uses absolute URL to Fastify + auth session headers
 // Client components: not supported — use server actions instead
 
+import "server-only";
 import { auth } from "@/lib/auth";
 
 const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
@@ -37,13 +38,17 @@ async function apiFetch<T>(
       ...authHeaders,
       ...init?.headers,
     },
-    // Don't cache by default for server components — data changes frequently
-    cache: "no-store",
+    // Default to no-store for mutation-sensitive data; callers can override
+    cache: init?.cache ?? "no-store",
   });
 
   if (!res.ok) {
+    // Don't leak backend error details — log for debugging, expose only status
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${path} — ${body}`);
+    if (process.env.NODE_ENV === "development") {
+      console.error(`API error ${res.status}: ${path} — ${body}`);
+    }
+    throw new Error(`API request failed: ${res.status} ${path}`);
   }
 
   return res.json() as Promise<T>;
@@ -310,7 +315,7 @@ export async function getFlaggedItems() {
         reason: string;
         flaggedContent: string;
         resolvedAt: string | null;
-        resolvedBy: string | null;
+        resolvedById: string | null;
         createdAt: string;
       };
       feedback: FeedbackEntryRow;

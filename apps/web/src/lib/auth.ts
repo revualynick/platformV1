@@ -1,3 +1,4 @@
+import "server-only";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
@@ -18,6 +19,22 @@ import Credentials from "next-auth/providers/credentials";
 
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
+function getInternalSecret(): string {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    throw new Error("INTERNAL_API_SECRET env var is required");
+  }
+  return secret;
+}
+
+function getDefaultOrgId(): string {
+  const orgId = process.env.DEFAULT_ORG_ID;
+  if (!orgId) {
+    throw new Error("DEFAULT_ORG_ID env var is required");
+  }
+  return orgId;
+}
+
 interface RevualyUser {
   id: string;
   email: string;
@@ -33,8 +50,8 @@ async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
   try {
     const res = await fetch(`${API_URL}/api/v1/auth/lookup?email=${encodeURIComponent(email)}`, {
       headers: {
-        "x-org-id": "dev-org",
-        "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "",
+        "x-org-id": getDefaultOrgId(),
+        "x-internal-secret": getInternalSecret(),
       },
     });
     if (!res.ok) return null;
@@ -132,12 +149,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async session({ session, token }) {
-      // Expose Revualy fields on the client session
-      session.user.id = token.userId as string;
-      session.role = token.role as string;
-      session.orgId = token.orgId as string;
-      session.teamId = token.teamId as string | null;
-      session.user.onboardingCompleted = (token.onboardingCompleted as boolean) ?? true;
+      // Expose Revualy fields on the client session with runtime validation
+      session.user.id = typeof token.userId === "string" ? token.userId : "";
+      session.role = typeof token.role === "string" ? token.role : "employee";
+      session.orgId = typeof token.orgId === "string" ? token.orgId : "";
+      session.teamId = typeof token.teamId === "string" ? token.teamId : null;
+      session.user.onboardingCompleted =
+        typeof token.onboardingCompleted === "boolean" ? token.onboardingCompleted : true;
       return session;
     },
   },

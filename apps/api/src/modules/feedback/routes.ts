@@ -22,25 +22,29 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: "Authentication required" });
     }
 
-    // RBAC: employees can only view their own feedback
+    // RBAC: employees see own feedback only, managers see their reports', admins see all
     if (id !== userId) {
-      // Check if caller is a manager of this user or an admin
       const [caller] = await db
         .select({ role: users.role })
         .from(users)
         .where(eq(users.id, userId));
 
       if (!caller || caller.role === "employee") {
-        // Employees can also see feedback for users they manage
+        return reply.code(403).send({ error: "You can only view your own feedback" });
+      }
+
+      // Managers must have a direct management relationship to the subject
+      if (caller.role === "manager") {
         const [subject] = await db
           .select({ managerId: users.managerId })
           .from(users)
           .where(eq(users.id, id));
 
         if (!subject || subject.managerId !== userId) {
-          return reply.code(403).send({ error: "You can only view your own feedback" });
+          return reply.code(403).send({ error: "You can only view feedback for your direct reports" });
         }
       }
+      // Admins pass through
     }
 
     const { limit = "50" } = request.query as { limit?: string };
@@ -111,6 +115,19 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       if (!caller || caller.role === "employee") {
         return reply.code(403).send({ error: "You can only export your own feedback" });
       }
+
+      // Managers must manage the subject to export their data
+      if (caller.role === "manager") {
+        const [subject] = await db
+          .select({ managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, id));
+
+        if (!subject || subject.managerId !== userId) {
+          return reply.code(403).send({ error: "You can only export feedback for your direct reports" });
+        }
+      }
+      // Admins pass through
     }
 
     const entries = await db

@@ -8,8 +8,8 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
   // Conversation state machine is primarily driven by BullMQ jobs,
   // not direct API calls. These endpoints are for admin/debug purposes.
 
-  // GET /conversations/:id — Get conversation with messages
-  app.get("/:id", async (request, reply) => {
+  // GET /conversations/:id — Get conversation with messages (admin only)
+  app.get("/:id", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { db } = request.tenant;
 
@@ -44,8 +44,8 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ id, status: "closed" });
   });
 
-  // GET /conversations — List recent conversations (admin)
-  app.get("/", async (request, reply) => {
+  // GET /conversations — List recent conversations (admin only)
+  app.get("/", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { db } = request.tenant;
     const { limit = "20", status } = request.query as { limit?: string; status?: string };
 

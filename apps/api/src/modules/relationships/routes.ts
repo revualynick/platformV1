@@ -8,7 +8,7 @@ import {
   updateRelationshipSchema,
   updateManagerSchema,
 } from "../../lib/validation.js";
-import { requireAuth } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 
 export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -19,6 +19,31 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/users/:id/relationships", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
+    const callerId = getAuthenticatedUserId(request);
+
+    // RBAC: employees can only view their own graph
+    if (id !== callerId) {
+      const [caller] = await db
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, callerId));
+
+      if (!caller || caller.role === "employee") {
+        return reply.code(403).send({ error: "You can only view your own relationships" });
+      }
+
+      // Managers can view their direct reports' graphs
+      if (caller.role === "manager") {
+        const [subject] = await db
+          .select({ managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, id));
+        if (!subject || subject.managerId !== callerId) {
+          return reply.code(403).send({ error: "You can only view relationships for your direct reports" });
+        }
+      }
+      // Admins pass through
+    }
 
     // Fetch the user and their connections
     const allUsers = await db.select().from(users).where(eq(users.isActive, true));
@@ -93,8 +118,8 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── GET /relationships ───────────────────────────────
-  // All relationships in the org (admin view for the org chart)
-  app.get("/relationships", async (request, reply) => {
+  // All relationships in the org (admin only)
+  app.get("/relationships", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { db } = request.tenant;
 
     const allUsers = await db.select().from(users).where(eq(users.isActive, true));
@@ -145,8 +170,8 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── POST /relationships ──────────────────────────────
-  // Create a new thread (user relationship)
-  app.post("/relationships", async (request, reply) => {
+  // Create a new thread (user relationship) — admin only
+  app.post("/relationships", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { db } = request.tenant;
     const body = parseBody(createRelationshipSchema, request.body);
 
@@ -167,8 +192,8 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── PATCH /relationships/:id ─────────────────────────
-  // Update a thread's properties (label, tags, strength, etc.)
-  app.patch("/relationships/:id", async (request, reply) => {
+  // Update a thread's properties (label, tags, strength, etc.) — admin only
+  app.patch("/relationships/:id", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
     const body = parseBody(updateRelationshipSchema, request.body);
@@ -194,8 +219,8 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── DELETE /relationships/:id ────────────────────────
-  // Soft-delete a thread (set isActive = false)
-  app.delete("/relationships/:id", async (request, reply) => {
+  // Soft-delete a thread (set isActive = false) — admin only
+  app.delete("/relationships/:id", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
 
@@ -213,8 +238,8 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ── PATCH /users/:id/manager ─────────────────────────
-  // Update reporting line (change who a person reports to)
-  app.patch("/users/:id/manager", async (request, reply) => {
+  // Update reporting line (change who a person reports to) — admin only
+  app.patch("/users/:id/manager", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
     const body = parseBody(updateManagerSchema, request.body);

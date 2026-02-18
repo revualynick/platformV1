@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq, and } from "drizzle-orm";
 import { calendarTokens } from "@revualy/db";
 import { encrypt, isEncryptionConfigured } from "@revualy/shared";
-import { requireAuth } from "../../lib/rbac.js";
+import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
 import { getAuthUrl, exchangeCode } from "../../lib/google-calendar.js";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3001";
@@ -12,20 +12,23 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /integrations/google/authorize — Redirect to Google OAuth
   app.get("/google/authorize", async (request, reply) => {
-    const userId = request.tenant.userId!;
-    const url = getAuthUrl(userId); // Pass userId as state for callback
+    const userId = getAuthenticatedUserId(request);
+    // Pass a random nonce as state for CSRF protection (not userId — never trust state as identity)
+    const nonce = crypto.randomUUID();
+    const url = getAuthUrl(nonce);
     return reply.redirect(url);
   });
 
   // GET /integrations/google/callback — Handle OAuth callback
   app.get("/google/callback", async (request, reply) => {
-    const { code, state } = request.query as { code?: string; state?: string };
+    const { code } = request.query as { code?: string };
 
-    if (!code || !state) {
+    if (!code) {
       return reply.redirect(`${APP_URL}/settings/integrations?error=missing_params`);
     }
 
-    const userId = state; // userId passed as state from authorize
+    // Use authenticated userId from session — never trust OAuth state as identity
+    const userId = getAuthenticatedUserId(request);
     const { db } = request.tenant;
 
     try {
@@ -83,7 +86,7 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /integrations/google/status — Check if connected
   app.get("/google/status", async (request, reply) => {
-    const userId = request.tenant.userId!;
+    const userId = getAuthenticatedUserId(request);
     const { db } = request.tenant;
 
     const [token] = await db

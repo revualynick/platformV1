@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { getTenantDb } from "@revualy/db";
@@ -43,20 +44,31 @@ function parseRedisConnection(url: string) {
   const parsed = new URL(url);
   return {
     host: parsed.hostname,
-    port: parseInt(parsed.port || "6379"),
+    port: parseInt(parsed.port || "6379", 10),
     password: parsed.password || undefined,
+    username: parsed.username || undefined,
+    db: parsed.pathname?.length > 1 ? parseInt(parsed.pathname.slice(1), 10) : undefined,
+    tls: parsed.protocol === "rediss:" ? {} : undefined,
   };
 }
 
+const DEFAULT_JOB_OPTIONS = {
+  attempts: 3,
+  backoff: { type: "exponential" as const, delay: 1000 },
+  removeOnComplete: 1000,
+  removeOnFail: 5000,
+};
+
 export function createQueues(redisUrl: string) {
   const connection = parseRedisConnection(redisUrl);
+  const defaultJobOptions = DEFAULT_JOB_OPTIONS;
 
   return {
-    conversationQueue: new Queue("conversation", { connection }),
-    analysisQueue: new Queue("analysis", { connection }),
-    schedulerQueue: new Queue("scheduler", { connection }),
-    notificationQueue: new Queue("notification", { connection }),
-    calendarSyncQueue: new Queue("calendar-sync", { connection }),
+    conversationQueue: new Queue("conversation", { connection, defaultJobOptions }),
+    analysisQueue: new Queue("analysis", { connection, defaultJobOptions }),
+    schedulerQueue: new Queue("scheduler", { connection, defaultJobOptions }),
+    notificationQueue: new Queue("notification", { connection, defaultJobOptions }),
+    calendarSyncQueue: new Queue("calendar-sync", { connection, defaultJobOptions }),
   };
 }
 
@@ -85,7 +97,13 @@ export async function getConversationState(conversationId: string): Promise<Conv
   const redis = getStateRedis();
   const raw = await redis.get(`${STATE_KEY_PREFIX}${conversationId}`);
   if (!raw) return undefined;
-  return JSON.parse(raw) as ConversationState;
+  try {
+    return JSON.parse(raw) as ConversationState;
+  } catch {
+    // Corrupted state — delete and treat as missing
+    await redis.del(`${STATE_KEY_PREFIX}${conversationId}`);
+    return undefined;
+  }
 }
 
 export async function setConversationState(state: ConversationState): Promise<void> {
@@ -102,9 +120,46 @@ export async function deleteConversationState(conversationId: string): Promise<v
   await redis.del(`${STATE_KEY_PREFIX}${conversationId}`);
 }
 
+const LOCK_TTL_MS = 30000; // 30s lock timeout
+const LOCK_PREFIX = "lock:conv:";
+
+/**
+ * Acquire a simple Redis lock for a conversation.
+ * Returns a release function, or null if the lock is already held.
+ */
+export async function acquireConversationLock(
+  conversationId: string,
+): Promise<(() => Promise<void>) | null> {
+  const redis = getStateRedis();
+  const lockKey = `${LOCK_PREFIX}${conversationId}`;
+  const lockValue = crypto.randomUUID();
+
+  // SET NX PX — atomic acquire with TTL
+  const result = await redis.set(lockKey, lockValue, "PX", LOCK_TTL_MS, "NX");
+  if (result !== "OK") return null;
+
+  return async () => {
+    // Only release if we still own the lock (compare-and-delete via Lua)
+    await redis.eval(
+      `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
+      1,
+      lockKey,
+      lockValue,
+    );
+  };
+}
+
 /** Initialize the state Redis connection (called during server startup). */
 export function initStateRedis(redisUrl: string): void {
   getStateRedis(redisUrl);
+}
+
+/** Close the state Redis connection (called during graceful shutdown). */
+export async function closeStateRedis(): Promise<void> {
+  if (stateRedis) {
+    await stateRedis.quit();
+    stateRedis = null;
+  }
 }
 
 // ── Worker factory ────────────────────────────────────────
@@ -158,28 +213,39 @@ export function createWorkers(config: WorkerConfig) {
             userMessage: string;
           };
 
-          const state = await getConversationState(data.conversationId);
-          if (!state) {
-            job.log(`No active state for conversation ${data.conversationId}`);
+          // Acquire lock to prevent concurrent state mutations from duplicate webhooks
+          const releaseLock = await acquireConversationLock(data.conversationId);
+          if (!releaseLock) {
+            job.log(`Lock held for conversation ${data.conversationId} — skipping duplicate`);
             return;
           }
 
-          const db = getTenantDb(
-            data.orgId,
-            process.env.TENANT_DATABASE_URL ?? "",
-          );
+          try {
+            const state = await getConversationState(data.conversationId);
+            if (!state) {
+              job.log(`No active state for conversation ${data.conversationId}`);
+              return;
+            }
 
-          const result = await handleReply(
-            db,
-            { llm, adapters, analysisQueue: queues.analysisQueue },
-            state,
-            data.userMessage,
-          );
+            const db = getTenantDb(
+              data.orgId,
+              process.env.TENANT_DATABASE_URL ?? "",
+            );
 
-          if (result.closed) {
-            await deleteConversationState(data.conversationId);
-          } else {
-            await setConversationState(result.state);
+            const result = await handleReply(
+              db,
+              { llm, adapters, analysisQueue: queues.analysisQueue },
+              state,
+              data.userMessage,
+            );
+
+            if (result.closed) {
+              await deleteConversationState(data.conversationId);
+            } else {
+              await setConversationState(result.state);
+            }
+          } finally {
+            await releaseLock();
           }
           break;
         }

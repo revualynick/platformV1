@@ -30,6 +30,22 @@ export default auth((req) => {
     }
   }
 
+  // Role-based route protection
+  if (isLoggedIn) {
+    const session = req.auth as unknown as Record<string, unknown> | undefined;
+    const role = (typeof session?.role === "string" ? session.role : "employee");
+
+    // /team/* requires manager or admin
+    if (pathname.startsWith("/team") && role === "employee") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    // /settings/* (admin settings) requires admin
+    if (pathname.startsWith("/settings") && role !== "admin") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+  }
+
   return NextResponse.next();
 });
 

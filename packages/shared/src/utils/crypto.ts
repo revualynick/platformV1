@@ -68,5 +68,8 @@ function resolveKey(keyHex?: string): Buffer {
       `ENCRYPTION_KEY must be 64 hex characters (got ${hex.length})`,
     );
   }
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error("ENCRYPTION_KEY must contain only valid hex characters (0-9, a-f, A-F)");
+  }
   return Buffer.from(hex, "hex");
 }
