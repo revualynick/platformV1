@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUsers, getEngagementScores } from "@/lib/api";
 import {
@@ -26,16 +27,7 @@ async function loadLeaderboardData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
-    return {
-      leaderboard: (mockLeaderboard as Array<{ rank: number; name: string; score: number; streak: number }>).map((e) => {
-        const member = members.find((m) => m.name === e.name);
-        return { ...e, interactionsThisWeek: member?.interactionsThisWeek ?? 0, target: member?.target ?? 3 };
-      }),
-      history: mockHistory,
-      teamSize: members.length,
-      activeCount: members.filter((m) => m.interactionsThisWeek > 0).length,
-    };
+    redirect("/login");
   }
 
   try {

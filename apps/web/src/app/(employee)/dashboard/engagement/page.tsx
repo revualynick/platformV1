@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getEngagementScores } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
@@ -25,11 +26,7 @@ async function loadEngagementData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return {
-      weeklyDetail: mockWeeklyDetail as WeekDetail[],
-      chartData: mockHistory,
-      streak: mockUser.streak,
-    };
+    redirect("/login");
   }
 
   try {

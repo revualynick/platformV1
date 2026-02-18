@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getKudos, getOrgConfig, getUsers } from "@/lib/api";
 import {
@@ -28,7 +29,7 @@ async function loadKudosData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return { received: mockReceived, given: mockGiven, users: [], values: [] };
+    redirect("/login");
   }
 
   try {

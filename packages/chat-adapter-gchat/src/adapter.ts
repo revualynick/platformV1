@@ -6,6 +6,7 @@ import type {
   PlatformUser,
   MessageBlock,
 } from "@revualy/chat-core";
+import { retryAsync } from "@revualy/chat-core";
 import type { ChatPlatform } from "@revualy/shared";
 import { google, type chat_v1 } from "googleapis";
 import crypto from "node:crypto";
@@ -141,7 +142,9 @@ export class GoogleChatAdapter implements ChatAdapter {
       requestBody.messageReplyOption = "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD";
     }
 
-    const response = await this.chatClient.spaces.messages.create(requestBody);
+    const response = await retryAsync(() =>
+      this.chatClient.spaces.messages.create(requestBody),
+    );
     return response.data.name ?? "";
   }
 

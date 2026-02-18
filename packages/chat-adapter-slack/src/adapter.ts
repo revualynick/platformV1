@@ -5,6 +5,7 @@ import type {
   WebhookVerification,
   PlatformUser,
 } from "@revualy/chat-core";
+import { retryAsync } from "@revualy/chat-core";
 import type { ChatPlatform } from "@revualy/shared";
 import { WebClient } from "@slack/web-api";
 import crypto from "node:crypto";
@@ -109,12 +110,14 @@ export class SlackAdapter implements ChatAdapter {
       ? slackBlockBuilder.toSlackBlocks(message.blocks)
       : undefined;
 
-    const result = await this.client.chat.postMessage({
-      channel: message.channelId,
-      text: message.text,
-      blocks,
-      thread_ts: message.threadId,
-    });
+    const result = await retryAsync(() =>
+      this.client.chat.postMessage({
+        channel: message.channelId,
+        text: message.text,
+        blocks,
+        thread_ts: message.threadId,
+      }),
+    );
 
     return result.ts ?? "";
   }

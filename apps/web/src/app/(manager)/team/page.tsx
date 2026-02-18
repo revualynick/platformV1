@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUsers, getEngagementScores, getFlaggedItems } from "@/lib/api";
 import { TeamTrendChart } from "@/components/charts/team-trend-chart";
@@ -40,13 +41,7 @@ async function loadTeamData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return {
-      teamName: "Engineering",
-      teamMembers: mockTeamMembers as TeamMember[],
-      flaggedItems: mockFlaggedItems as FlaggedItem[],
-      leaderboard: mockLeaderboard as LeaderboardEntry[],
-      trendData: mockTrend,
-    };
+    redirect("/login");
   }
 
   try {

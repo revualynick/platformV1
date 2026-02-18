@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getFlaggedItems, getUsers } from "@/lib/api";
 import {
@@ -29,12 +30,7 @@ async function loadFlaggedData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return {
-      flaggedItems: mockFlaggedItems as FlaggedItem[],
-      needsAttention: (mockTeamMembers as TeamMember[])
-        .filter((m) => m.engagementScore < 60 || m.trend === "down")
-        .sort((a, b) => a.engagementScore - b.engagementScore),
-    };
+    redirect("/login");
   }
 
   try {

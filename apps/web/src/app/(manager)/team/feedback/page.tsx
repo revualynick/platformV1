@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUsers, getFeedback, getOrgConfig } from "@/lib/api";
 import {
@@ -24,10 +25,7 @@ async function loadTeamFeedbackData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return {
-      feedback: mockTeamFeedback as TeamFeedback[],
-      members: mockTeamMembers.map((m) => ({ id: m.id, name: m.name })),
-    };
+    redirect("/login");
   }
 
   try {

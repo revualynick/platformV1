@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getOneOnOneSessions, getCurrentUser, getUser } from "@/lib/api";
 import type { OneOnOneSession } from "@/lib/api";
@@ -9,11 +10,7 @@ async function loadOneOnOneData() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return {
-      sessions: mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
-      managerName: "Jordan Wells",
-      hasManager: true,
-    };
+    redirect("/login");
   }
 
   try {

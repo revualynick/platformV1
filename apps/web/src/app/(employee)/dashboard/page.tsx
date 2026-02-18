@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneSessions } from "@/lib/api";
 import type { OneOnOneSession } from "@/lib/api";
@@ -22,18 +23,7 @@ async function loadDashboardData() {
   const userName = session?.user?.name ?? mockUser.name;
 
   if (!userId) {
-    return {
-      userName,
-      engagementHistory: mockHistory,
-      currentScore: 87,
-      scoreDelta: 5,
-      streak: mockUser.streak,
-      interactionsThisWeek: 3,
-      recentFeedback: mockFeedback,
-      valuesScores: mockValuesScores,
-      oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
-      hasManager: true,
-    };
+    redirect("/login");
   }
 
   try {

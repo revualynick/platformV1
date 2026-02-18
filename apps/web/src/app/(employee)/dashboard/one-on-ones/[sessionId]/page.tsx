@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getOneOnOneSession, getUser, getCurrentUser, getWsToken } from "@/lib/api";
 import type { OneOnOneSessionDetail } from "@/lib/api";
@@ -12,11 +13,7 @@ async function loadSession(sessionId: string) {
   const mockSession = mockSessions.find((s) => s.id === sessionId) ?? mockSessions[0];
 
   if (!userId) {
-    return {
-      session: mockSession as unknown as OneOnOneSessionDetail,
-      managerName: "Jordan Wells",
-      currentUserId: "p3",
-    };
+    redirect("/login");
   }
 
   try {

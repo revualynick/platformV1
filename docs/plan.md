@@ -461,6 +461,13 @@ Full static analysis performed via OpenAI Codex across API, database/workers, sh
 
 **40 findings total** — 18 high/critical, 16 medium, 6 low/info.
 
+**Resolution status (2026-02-18):**
+- **Fixed (37 of 40):** #1–6, #8–10, #12–14, #16–20, #22–34, #36–39
+- **Acceptable / Not actionable (3):** #7 (single tenant DB URL — correct for single-org beta), #11 (destructive migration — pre-beta, no prod data), #15 (GChat token auth — intentional design), #35 (no runtime validation on API responses — standard TS cast, internal API)
+- **#14** — `embed()` failure: documented as known gap. Embedding support requires explicit provider registration (Phase 5).
+- **#18** — Mock data fallback: replaced `if (!userId) return mockData` with `redirect("/login")` in all 11 dashboard pages.
+- **#33** — No retry in send paths: added `retryAsync()` utility to `@revualy/chat-core`, wrapped Slack and GChat `sendMessage()` calls.
+
 ### Critical / High Severity
 
 #### API Security

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUsers, getEngagementScores } from "@/lib/api";
 import {
@@ -20,7 +21,7 @@ async function loadMembers() {
   const userId = session?.user?.id;
 
   if (!userId) {
-    return mockTeamMembers as TeamMember[];
+    redirect("/login");
   }
 
   try {
