@@ -7,6 +7,7 @@ const navItems = [
   { label: "Reflections", href: "/dashboard/reflections", icon: "◎" },
   { label: "Engagement", href: "/dashboard/engagement", icon: "△" },
   { label: "Kudos", href: "/dashboard/kudos", icon: "♡" },
+  { label: "Demo Chat", href: "/dashboard/demo", icon: "◇" },
   { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 

@@ -732,6 +732,41 @@ export async function updateNotificationPreference(data: {
   );
 }
 
+// ── Demo Conversations ──────────────────────────────
+
+export interface DemoStartResponse {
+  conversationId: string;
+  message: string;
+  phase: string;
+  messageCount: number;
+  maxMessages: number;
+  interactionType: string;
+}
+
+export interface DemoReplyResponse {
+  message: string;
+  closed: boolean;
+  phase: string;
+  messageCount: number;
+  maxMessages: number;
+}
+
+export async function startDemoConversation() {
+  return apiFetch<DemoStartResponse>("/api/v1/demo/start", {
+    method: "POST",
+  });
+}
+
+export async function sendDemoReply(
+  conversationId: string,
+  message: string,
+) {
+  return apiFetch<DemoReplyResponse>(
+    `/api/v1/demo/${conversationId}/reply`,
+    { method: "POST", body: JSON.stringify({ message }) },
+  );
+}
+
 // ── Users (onboarding) ──────────────────────────────
 
 export async function completeOnboarding() {

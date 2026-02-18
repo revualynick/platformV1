@@ -18,6 +18,7 @@ import { notificationRoutes } from "./modules/notifications/routes.js";
 import { integrationsRoutes } from "./modules/integrations/routes.js";
 import { managerRoutes } from "./modules/manager/routes.js";
 import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
+import { demoRoutes, setDemoAnalysisQueue } from "./modules/demo/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
@@ -94,6 +95,7 @@ async function buildApp() {
   await app.register(integrationsRoutes, { prefix: "/api/v1/integrations" });
   await app.register(managerRoutes, { prefix: "/api/v1/manager" });
   await app.register(oneOnOneRoutes, { prefix: "/api/v1/one-on-one-sessions" });
+  await app.register(demoRoutes, { prefix: "/api/v1/demo" });
 
   // WebSocket routes
   registerOneOnOneWs(app, REDIS_URL);
@@ -112,6 +114,7 @@ async function start() {
 
   const queues = createQueues(REDIS_URL);
   setConversationQueue(queues.conversationQueue);
+  setDemoAnalysisQueue(queues.analysisQueue);
 
   // LLM gateway — provider determined by env vars
   const llmProvider = process.env.LLM_PROVIDER ?? "anthropic";
