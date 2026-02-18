@@ -104,30 +104,33 @@ export async function initiateConversation(
     priorMessages: [],
   });
 
-  // 6. Create conversation record in DB
-  const [conversation] = await db
-    .insert(conversations)
-    .values({
-      reviewerId: params.reviewerId,
-      subjectId: params.subjectId,
-      interactionType: params.interactionType,
-      platform: params.platform,
-      platformChannelId: params.channelId,
-      status: "initiated",
-      messageCount: 1,
-      scheduledAt: new Date(),
-      initiatedAt: new Date(),
-    })
-    .returning();
+  // 6. Create conversation record + opening message in a transaction
+  const conversation = await db.transaction(async (tx) => {
+    const [conv] = await tx
+      .insert(conversations)
+      .values({
+        reviewerId: params.reviewerId,
+        subjectId: params.subjectId,
+        interactionType: params.interactionType,
+        platform: params.platform,
+        platformChannelId: params.channelId,
+        status: "initiated",
+        messageCount: 1,
+        scheduledAt: new Date(),
+        initiatedAt: new Date(),
+      })
+      .returning();
 
-  // 7. Store the opening message
-  await db.insert(conversationMessages).values({
-    conversationId: conversation.id,
-    role: "assistant",
-    content: openingQuestion,
+    await tx.insert(conversationMessages).values({
+      conversationId: conv.id,
+      role: "assistant",
+      content: openingQuestion,
+    });
+
+    return conv;
   });
 
-  // 8. Send the message via chat adapter
+  // 7. Send the message via chat adapter (outside transaction — external side effect)
   await sendMessage(deps.adapters, {
     platform: params.platform,
     channelId: params.channelId,

@@ -7,10 +7,13 @@ export type TenantDb = TenantClient["db"];
 
 const MAX_POOL_SIZE = 50;
 
+let evictionSeq = 0;
+
 interface PoolEntry {
   db: TenantDb;
   sql: ReturnType<typeof postgres>;
   lastUsed: number;
+  seq: number;
 }
 
 const tenantPool = new Map<string, PoolEntry>();
@@ -32,13 +35,15 @@ export function getTenantDb(orgId: string, connectionString: string): TenantDb {
     return entry.db;
   }
 
-  // Evict least-recently-used entry if at capacity
+  // Evict least-recently-used entry if at capacity (seq as tiebreaker)
   if (tenantPool.size >= MAX_POOL_SIZE) {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
+    let oldestSeq = Infinity;
     for (const [key, e] of tenantPool) {
-      if (e.lastUsed < oldestTime) {
+      if (e.lastUsed < oldestTime || (e.lastUsed === oldestTime && e.seq < oldestSeq)) {
         oldestTime = e.lastUsed;
+        oldestSeq = e.seq;
         oldestKey = key;
       }
     }
@@ -51,7 +56,7 @@ export function getTenantDb(orgId: string, connectionString: string): TenantDb {
   }
 
   const { db, sql } = createTenantClient(connectionString);
-  tenantPool.set(orgId, { db, sql, lastUsed: Date.now() });
+  tenantPool.set(orgId, { db, sql, lastUsed: Date.now(), seq: evictionSeq++ });
   return db;
 }
 

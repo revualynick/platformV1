@@ -10,6 +10,7 @@ export function initNeo4j(
   username?: string,
   password?: string,
 ): Driver {
+  if (driver) return driver;
   const u = uri ?? process.env.NEO4J_URI ?? "bolt://localhost:7687";
   const user = username ?? process.env.NEO4J_USERNAME ?? "neo4j";
   const pass = password ?? process.env.NEO4J_PASSWORD;
@@ -61,17 +62,21 @@ export async function syncReportsTo(
   userId: string,
   managerId: string,
 ): Promise<void> {
-  const session = getOrgSession(orgId);
   try {
-    await session.run(
-      `MERGE (u:User {id: $userId})
-       MERGE (m:User {id: $managerId})
-       MERGE (u)-[r:REPORTS_TO]->(m)
-       SET r.updatedAt = datetime()`,
-      { userId, managerId },
-    );
-  } finally {
-    await session.close();
+    const session = getOrgSession(orgId);
+    try {
+      await session.run(
+        `MERGE (u:User {id: $userId})
+         MERGE (m:User {id: $managerId})
+         MERGE (u)-[r:REPORTS_TO]->(m)
+         SET r.updatedAt = datetime()`,
+        { userId, managerId },
+      );
+    } finally {
+      await session.close();
+    }
+  } catch (err) {
+    console.error("[Neo4j] syncReportsTo failed:", err);
   }
 }
 
@@ -83,15 +88,19 @@ export async function removeReportsTo(
   userId: string,
   managerId: string,
 ): Promise<void> {
-  const session = getOrgSession(orgId);
   try {
-    await session.run(
-      `MATCH (u:User {id: $userId})-[r:REPORTS_TO]->(m:User {id: $managerId})
-       DELETE r`,
-      { userId, managerId },
-    );
-  } finally {
-    await session.close();
+    const session = getOrgSession(orgId);
+    try {
+      await session.run(
+        `MATCH (u:User {id: $userId})-[r:REPORTS_TO]->(m:User {id: $managerId})
+         DELETE r`,
+        { userId, managerId },
+      );
+    } finally {
+      await session.close();
+    }
+  } catch (err) {
+    console.error("[Neo4j] removeReportsTo failed:", err);
   }
 }
 
@@ -111,29 +120,33 @@ export async function syncThread(
     relationshipId: string;
   },
 ): Promise<void> {
-  const session = getOrgSession(orgId);
   try {
-    await session.run(
-      `MERGE (a:User {id: $from})
-       MERGE (b:User {id: $to})
-       MERGE (a)-[r:WORKS_WITH {relationshipId: $relId}]->(b)
-       SET r.strength = $strength,
-           r.source = $source,
-           r.label = $label,
-           r.tags = $tags,
-           r.updatedAt = datetime()`,
-      {
-        from: fromUserId,
-        to: toUserId,
-        relId: properties.relationshipId,
-        strength: properties.strength,
-        source: properties.source,
-        label: properties.label,
-        tags: properties.tags,
-      },
-    );
-  } finally {
-    await session.close();
+    const session = getOrgSession(orgId);
+    try {
+      await session.run(
+        `MERGE (a:User {id: $from})
+         MERGE (b:User {id: $to})
+         MERGE (a)-[r:WORKS_WITH {relationshipId: $relId}]->(b)
+         SET r.strength = $strength,
+             r.source = $source,
+             r.label = $label,
+             r.tags = $tags,
+             r.updatedAt = datetime()`,
+        {
+          from: fromUserId,
+          to: toUserId,
+          relId: properties.relationshipId,
+          strength: properties.strength,
+          source: properties.source,
+          label: properties.label,
+          tags: properties.tags,
+        },
+      );
+    } finally {
+      await session.close();
+    }
+  } catch (err) {
+    console.error("[Neo4j] syncThread failed:", err);
   }
 }
 
@@ -144,15 +157,19 @@ export async function removeThread(
   orgId: string,
   relationshipId: string,
 ): Promise<void> {
-  const session = getOrgSession(orgId);
   try {
-    await session.run(
-      `MATCH ()-[r:WORKS_WITH {relationshipId: $relId}]-()
-       DELETE r`,
-      { relId: relationshipId },
-    );
-  } finally {
-    await session.close();
+    const session = getOrgSession(orgId);
+    try {
+      await session.run(
+        `MATCH ()-[r:WORKS_WITH {relationshipId: $relId}]-()
+         DELETE r`,
+        { relId: relationshipId },
+      );
+    } finally {
+      await session.close();
+    }
+  } catch (err) {
+    console.error("[Neo4j] removeThread failed:", err);
   }
 }
 
@@ -163,15 +180,19 @@ export async function syncUserNode(
   orgId: string,
   user: { id: string; name: string; role: string; teamId: string | null },
 ): Promise<void> {
-  const session = getOrgSession(orgId);
   try {
-    await session.run(
-      `MERGE (u:User {id: $id})
-       SET u.name = $name, u.role = $role, u.teamId = $teamId, u.updatedAt = datetime()`,
-      { id: user.id, name: user.name, role: user.role, teamId: user.teamId },
-    );
-  } finally {
-    await session.close();
+    const session = getOrgSession(orgId);
+    try {
+      await session.run(
+        `MERGE (u:User {id: $id})
+         SET u.name = $name, u.role = $role, u.teamId = $teamId, u.updatedAt = datetime()`,
+        { id: user.id, name: user.name, role: user.role, teamId: user.teamId },
+      );
+    } finally {
+      await session.close();
+    }
+  } catch (err) {
+    console.error("[Neo4j] syncUserNode failed:", err);
   }
 }
 
@@ -193,6 +214,7 @@ export async function getRelationshipWeb(
     label: string;
   }>;
 }> {
+  try {
   const session = getOrgSession(orgId);
   try {
     const result = await session.run(
@@ -215,7 +237,8 @@ export async function getRelationshipWeb(
     // Build a map from Neo4j internal node ID → user UUID
     // so we can resolve relationship start/end to actual user IDs
     type RawNode = { identity: { low: number }; properties: Record<string, unknown> };
-    const centerNode = record.get("center") as RawNode;
+    const centerNode = record.get("center") as RawNode | null;
+    if (!centerNode?.identity?.low) return { nodes: [], edges: [] };
     const neighborNodes = (record.get("neighbors") ?? []) as RawNode[];
     const hop2Nodes = (record.get("hop2s") ?? []) as RawNode[];
 
@@ -278,5 +301,9 @@ export async function getRelationshipWeb(
     return { nodes: Array.from(nodeMap.values()), edges };
   } finally {
     await session.close();
+  }
+  } catch (err) {
+    console.error("[Neo4j] getRelationshipWeb failed:", err);
+    return { nodes: [], edges: [] };
   }
 }
