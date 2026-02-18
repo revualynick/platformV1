@@ -84,7 +84,7 @@ export default async function OneOnOnesPage() {
 
       <div className="card-enter">
         <SessionList
-          sessions={data.sessions as any}
+          sessions={data.sessions}
           linkPrefix="/dashboard/one-on-ones"
           partnerName={data.managerName ?? "Your Manager"}
         />

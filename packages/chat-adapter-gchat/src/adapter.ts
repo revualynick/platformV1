@@ -123,7 +123,7 @@ export class GoogleChatAdapter implements ChatAdapter {
     if (message.blocks && message.blocks.length > 0) {
       chatMessage.cardsV2 = [
         {
-          cardId: `card-${Date.now()}`,
+          cardId: `card-${crypto.randomUUID()}`,
           card: this.buildCard(message.blocks),
         },
       ];

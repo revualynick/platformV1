@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import { auth } from "@/lib/auth";
 
 const navItems = [
   { label: "Organization", href: "/settings", icon: "◉" },
@@ -9,14 +10,17 @@ const navItems = [
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },
 ];
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const userName = session?.user?.name ?? undefined;
+
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar role="admin" items={navItems} userName="Jordan Wells" />
+      <Sidebar role="admin" items={navItems} userName={userName} />
       <main className="ml-[260px] flex-1 p-8 lg:p-10">{children}</main>
     </div>
   );

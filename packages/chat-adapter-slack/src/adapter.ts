@@ -88,8 +88,8 @@ export class SlackAdapter implements ChatAdapter {
     }
 
     const event = payload.event as Record<string, unknown>;
-    if (!event || event.type !== "message" || event.subtype) {
-      return null; // Ignore non-message events and message edits/deletes
+    if (!event || event.type !== "message" || event.subtype || !event.user) {
+      return null; // Ignore non-message events, message edits/deletes, and bot messages
     }
 
     return {

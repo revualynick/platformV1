@@ -13,7 +13,7 @@ export async function confirmProfile(data: { name: string; timezone: string }) {
     await updateUser(userId, { name: data.name, timezone: data.timezone });
     return { success: true };
   } catch (e) {
-    return { success: false, error: String(e) };
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
@@ -26,15 +26,15 @@ export async function saveNotificationPrefs(prefs: Record<string, boolean>) {
     );
     return { success: true };
   } catch (e) {
-    return { success: false, error: String(e) };
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
 export async function finishOnboarding() {
   try {
     await completeOnboarding();
-  } catch {
-    // Continue even if API fails in dev mode
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Failed to complete onboarding" };
   }
   redirect("/dashboard");
 }

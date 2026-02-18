@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import { auth } from "@/lib/auth";
 
 const navItems = [
   { label: "Team Overview", href: "/team", icon: "◉" },
@@ -10,14 +11,17 @@ const navItems = [
   { label: "Org Chart", href: "/team/org-chart", icon: "◎" },
 ];
 
-export default function ManagerLayout({
+export default async function ManagerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const userName = session?.user?.name ?? undefined;
+
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar role="manager" items={navItems} userName="Alex Thompson" />
+      <Sidebar role="manager" items={navItems} userName={userName} />
       <main className="ml-[260px] flex-1 p-8 lg:p-10">{children}</main>
     </div>
   );

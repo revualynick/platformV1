@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import { auth } from "@/lib/auth";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◉" },
@@ -11,14 +12,17 @@ const navItems = [
   { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 
-export default function EmployeeLayout({
+export default async function EmployeeLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const userName = session?.user?.name ?? undefined;
+
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar role="employee" items={navItems} />
+      <Sidebar role="employee" items={navItems} userName={userName} />
       <main className="ml-[260px] flex-1 p-8 lg:p-10">{children}</main>
     </div>
   );

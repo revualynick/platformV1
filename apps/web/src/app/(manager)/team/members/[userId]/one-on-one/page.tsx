@@ -133,7 +133,7 @@ export default async function ManagerOneOnOnePage({
           All Sessions
         </h3>
         <SessionList
-          sessions={data.sessions as any}
+          sessions={data.sessions}
           linkPrefix={`/team/members/${userId}/one-on-one`}
           partnerName={data.employeeName}
         />
