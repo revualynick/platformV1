@@ -119,7 +119,10 @@ export class SlackAdapter implements ChatAdapter {
       }),
     );
 
-    return result.ts ?? "";
+    if (!result.ts) {
+      throw new Error("Slack sendMessage: no message timestamp returned");
+    }
+    return result.ts;
   }
 
   async resolveUser(platformUserId: string): Promise<PlatformUser | null> {

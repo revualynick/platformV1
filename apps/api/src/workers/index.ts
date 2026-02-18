@@ -120,12 +120,14 @@ export async function deleteConversationState(conversationId: string): Promise<v
   await redis.del(`${STATE_KEY_PREFIX}${conversationId}`);
 }
 
-const LOCK_TTL_MS = 30000; // 30s lock timeout
+const LOCK_TTL_MS = 60000; // 60s lock timeout (extended by heartbeat)
+const LOCK_HEARTBEAT_MS = 15000; // Extend lock every 15s
 const LOCK_PREFIX = "lock:conv:";
 
 /**
- * Acquire a simple Redis lock for a conversation.
+ * Acquire a Redis lock for a conversation with automatic heartbeat extension.
  * Returns a release function, or null if the lock is already held.
+ * The lock auto-extends every 15s to prevent expiry during long-running LLM calls.
  */
 export async function acquireConversationLock(
   conversationId: string,
@@ -138,7 +140,24 @@ export async function acquireConversationLock(
   const result = await redis.set(lockKey, lockValue, "PX", LOCK_TTL_MS, "NX");
   if (result !== "OK") return null;
 
+  // Heartbeat: extend lock TTL periodically while held
+  const heartbeat = setInterval(async () => {
+    try {
+      // Only extend if we still own the lock
+      await redis.eval(
+        `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("pexpire", KEYS[1], ARGV[2]) else return 0 end`,
+        1,
+        lockKey,
+        lockValue,
+        String(LOCK_TTL_MS),
+      );
+    } catch {
+      // Heartbeat failure is non-fatal — lock will expire naturally
+    }
+  }, LOCK_HEARTBEAT_MS);
+
   return async () => {
+    clearInterval(heartbeat);
     // Only release if we still own the lock (compare-and-delete via Lua)
     await redis.eval(
       `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
@@ -255,6 +274,9 @@ export function createWorkers(config: WorkerConfig) {
           await deleteConversationState(data.conversationId);
           break;
         }
+
+        default:
+          throw new Error(`Unknown conversation job type: ${type}`);
       }
     },
     { connection },
@@ -489,6 +511,9 @@ export function createWorkers(config: WorkerConfig) {
         case "leaderboard_update":
           // TODO Phase 5: Compute and publish leaderboard
           break;
+
+        default:
+          throw new Error(`Unknown notification job type: ${type}`);
       }
     },
     { connection },

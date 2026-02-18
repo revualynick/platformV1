@@ -50,7 +50,7 @@ export async function runAnalysisPipeline(
   // 3. Run analysis steps in parallel with graceful degradation
   const results = await Promise.allSettled([
     analyzeSentiment(llm, rawContent),
-    scoreEngagement(llm, rawContent, userMessages.length),
+    scoreEngagement(llm, rawContent, userMessages.length, logger),
     generateSummary(llm, rawContent, conversation.interactionType),
     detectFlags(llm, rawContent),
     orgValues.length > 0 ? mapCoreValues(llm, rawContent, orgValues) : Promise.resolve([]),
@@ -162,6 +162,7 @@ async function scoreEngagement(
   llm: LLMGateway,
   content: string,
   messageCount: number,
+  logger: Pick<Console, "error" | "warn" | "info"> = console,
 ): Promise<EngagementResult> {
   const wordCount = content.split(/\s+/).filter(Boolean).length;
 
@@ -197,7 +198,7 @@ ${content}`,
     };
   } catch (err) {
     // Fallback: heuristic scoring (LLM returned non-JSON)
-    console.error("[Analysis] scoreEngagement JSON parse failed, using heuristic fallback:", err);
+    logger.warn("[Analysis] scoreEngagement JSON parse failed, using heuristic fallback:", err);
     let score = 30;
     if (wordCount > 20) score += 15;
     if (wordCount > 50) score += 15;

@@ -66,11 +66,23 @@ async function buildApp() {
   await app.register(tenantPlugin);
 
   // Global error handler — preserve client error status codes, log server errors
-  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, request, reply) => {
     const status = error.statusCode ?? 500;
 
     if (status >= 400 && status < 500) {
-      return reply.code(status).send({ error: error.message });
+      // Sanitize: only expose validation errors and known safe messages
+      const safeMessage = error.validation
+        ? "Validation failed"
+        : status === 401
+          ? "Unauthorized"
+          : status === 403
+            ? "Forbidden"
+            : status === 404
+              ? "Not found"
+              : status === 400
+                ? (error.message.startsWith("Validation failed:") ? error.message : "Bad request")
+                : "Request error";
+      return reply.code(status).send({ error: safeMessage });
     }
 
     request.log.error(error);
@@ -168,17 +180,21 @@ async function start() {
   app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification)");
 
   // ── Repeatable cron jobs ───────────────────────────────
+  // TODO: In multi-tenant mode, enumerate orgs from control plane and enqueue per-org.
+  // For now, single-tenant uses ORG_ID env var or falls back to "dev-org".
+  const cronOrgId = process.env.ORG_ID ?? "dev-org";
+
   // Weekly digest: Monday 9:00 AM UTC
   await queues.notificationQueue.add(
     "schedule_weekly_digests",
-    { type: "schedule_weekly_digests", orgId: "dev-org" },
+    { type: "schedule_weekly_digests", orgId: cronOrgId },
     { repeat: { pattern: "0 9 * * 1" }, jobId: "weekly-digest-cron" },
   );
 
   // Calendar sync: every 15 minutes
   await queues.calendarSyncQueue.add(
     "calendar-sync",
-    { orgId: "dev-org" },
+    { orgId: cronOrgId },
     { repeat: { pattern: "*/15 * * * *" }, jobId: "calendar-sync-cron" },
   );
 

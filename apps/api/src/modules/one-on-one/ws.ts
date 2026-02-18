@@ -271,7 +271,11 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
               sendJson(socket, { type: "error", message: "Only the manager can edit notes" });
               return;
             }
-            room.lastContent = msg.content as string;
+            if (typeof msg.content !== "string") {
+              sendJson(socket, { type: "error", message: "content must be a string" });
+              return;
+            }
+            room.lastContent = msg.content;
             // Broadcast to employee
             sendJson(room.employeeSocket, {
               type: "content_sync",

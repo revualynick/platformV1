@@ -40,11 +40,20 @@ export async function addValue(formData: FormData): Promise<ActionResult> {
   }
 }
 
+const editValueSchema = z.object({
+  id: z.string().uuid("Invalid value ID"),
+  name: z.string().min(1, "Name is required").max(100, "Name too long"),
+  description: z.string().max(500, "Description too long").default(""),
+});
+
 export async function editValue(formData: FormData): Promise<ActionResult> {
-  const id = formData.get("id") as string;
-  const name = formData.get("name") as string;
-  const description = (formData.get("description") as string) ?? "";
-  if (!id || !name?.trim()) return { ok: false, error: "Name is required" };
+  const parsed = editValueSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    description: formData.get("description") ?? "",
+  });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { id, name, description } = parsed.data;
 
   try {
     await updateCoreValue(id, { name: name.trim(), description: description.trim() });
@@ -56,9 +65,12 @@ export async function editValue(formData: FormData): Promise<ActionResult> {
   }
 }
 
+const idSchema = z.object({ id: z.string().uuid("Invalid ID") });
+
 export async function removeValue(formData: FormData): Promise<ActionResult> {
-  const id = formData.get("id") as string;
-  if (!id) return { ok: false, error: "ID is required" };
+  const parsed = idSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { id } = parsed.data;
 
   try {
     await updateCoreValue(id, { isActive: false });
@@ -88,11 +100,20 @@ export async function addQuestionnaire(formData: FormData): Promise<ActionResult
   }
 }
 
+const editQuestionnaireSchema = z.object({
+  id: z.string().uuid("Invalid questionnaire ID"),
+  name: z.string().min(1, "Name is required").max(200, "Name too long"),
+  category: z.string().min(1, "Category is required"),
+});
+
 export async function editQuestionnaire(formData: FormData): Promise<ActionResult> {
-  const id = formData.get("id") as string;
-  const name = formData.get("name") as string;
-  const category = formData.get("category") as string;
-  if (!id || !name?.trim()) return { ok: false, error: "Name is required" };
+  const parsed = editQuestionnaireSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    category: formData.get("category"),
+  });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { id, name, category } = parsed.data;
 
   try {
     await updateQuestionnaire(id, { name: name.trim(), category });
@@ -104,9 +125,10 @@ export async function editQuestionnaire(formData: FormData): Promise<ActionResul
 }
 
 export async function toggleVerbatim(formData: FormData): Promise<ActionResult> {
-  const id = formData.get("id") as string;
+  const parsed = idSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { id } = parsed.data;
   const verbatim = formData.get("verbatim") === "true";
-  if (!id) return { ok: false, error: "ID is required" };
 
   try {
     await updateQuestionnaire(id, { verbatim });

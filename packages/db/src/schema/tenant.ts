@@ -139,6 +139,7 @@ export const conversations = pgTable(
     index("idx_conversations_subject_id").on(table.subjectId),
     index("idx_conversations_status").on(table.status),
     index("idx_conversations_scheduled_at").on(table.scheduledAt),
+    index("idx_conversations_reviewer_created").on(table.reviewerId, table.createdAt),
   ],
 );
 
@@ -194,6 +195,7 @@ export const feedbackEntries = pgTable(
     index("idx_feedback_entries_subject_id").on(table.subjectId),
     index("idx_feedback_entries_reviewer_id").on(table.reviewerId),
     index("idx_feedback_entries_created_at").on(table.createdAt),
+    index("idx_feedback_entries_subject_created").on(table.subjectId, table.createdAt),
   ],
 );
 
@@ -305,21 +307,27 @@ export const escalations = pgTable(
   ],
 );
 
-export const escalationNotes = pgTable("escalation_notes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  escalationId: uuid("escalation_id")
-    .notNull()
-    .references(() => escalations.id, { onDelete: "cascade" }),
-  action: varchar("action", { length: 100 }).notNull(),
-  performedBy: uuid("performed_by")
-    .notNull()
-    .references(() => users.id),
-  content: text("content").notNull().default(""),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const escalationNotes = pgTable(
+  "escalation_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    escalationId: uuid("escalation_id")
+      .notNull()
+      .references(() => escalations.id, { onDelete: "cascade" }),
+    action: varchar("action", { length: 100 }).notNull(),
+    performedBy: uuid("performed_by")
+      .notNull()
+      .references(() => users.id),
+    content: text("content").notNull().default(""),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_escalation_notes_escalation_created").on(table.escalationId, table.createdAt),
+  ],
+);
 
 // ── Questions ──────────────────────────────────────────
 
@@ -633,5 +641,6 @@ export const calendarEvents = pgTable(
     unique("uq_calendar_user_event").on(table.userId, table.externalEventId),
     index("idx_calendar_events_user_id").on(table.userId),
     index("idx_calendar_events_start_at").on(table.startAt),
+    index("idx_calendar_events_user_start").on(table.userId, table.startAt),
   ],
 );

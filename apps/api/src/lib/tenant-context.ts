@@ -35,19 +35,18 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
   const userId = request.headers["x-user-id"] as string | undefined;
   const secret = request.headers["x-internal-secret"] as string | undefined;
 
-  // Require a valid internal secret to trust headers (always, not just production)
+  // Require a valid internal secret to trust headers
   if (INTERNAL_SECRET) {
     if (secret !== INTERNAL_SECRET) {
-      return {
-        orgId: DEV_ORG_ID,
-        db: getTenantDb(DEV_ORG_ID, DEV_DB_URL),
-        userId: null,
-      };
+      const err = new Error("Invalid internal API secret");
+      (err as Error & { statusCode: number }).statusCode = 401;
+      throw err;
     }
   } else if (IS_PRODUCTION) {
     // In production, INTERNAL_SECRET must be set — reject all requests
     throw new Error("INTERNAL_API_SECRET is required in production");
   }
+  // Non-production without secret: accept dev headers but don't trust x-user-id from external callers
 
   // Resolve tenant database
   // In a multi-tenant setup, orgId would map to a connection string via the control plane.

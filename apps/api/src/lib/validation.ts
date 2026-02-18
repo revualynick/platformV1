@@ -142,7 +142,7 @@ export const createSessionSchema = z.object({
 });
 
 export const updateSessionSchema = z.object({
-  status: z.enum(["scheduled", "active", "completed"]).optional(),
+  status: z.enum(["scheduled", "active", "completed", "cancelled"]).optional(),
   notes: z.string().max(100000).optional(),
   summary: z.string().max(10000).optional(),
   scheduledAt: z.string().datetime().optional(),
@@ -150,20 +150,22 @@ export const updateSessionSchema = z.object({
 
 export const sessionQuerySchema = z.object({
   employeeId: uuid.optional(),
-  status: z.enum(["scheduled", "active", "completed"]).optional(),
+  status: z.enum(["scheduled", "active", "completed", "cancelled"]).optional(),
 });
+
+const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format");
 
 export const createActionItemSchema = z.object({
   text: z.string().min(1).max(2000),
   assigneeId: uuid.optional(),
-  dueDate: z.string().optional(), // YYYY-MM-DD
+  dueDate: dateString.optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
 
 export const updateActionItemSchema = z.object({
   text: z.string().min(1).max(2000).optional(),
   assigneeId: uuid.nullable().optional(),
-  dueDate: z.string().nullable().optional(),
+  dueDate: dateString.nullable().optional(),
   completed: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });

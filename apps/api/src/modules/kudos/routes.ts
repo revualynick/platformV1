@@ -12,10 +12,20 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
 
   // GET /kudos?userId=X — List kudos where user is giver or receiver
+  // If userId is provided and differs from caller, require manager/admin role
   app.get("/", async (request, reply) => {
     const { db } = request.tenant;
     const query = parseBody(kudosQuerySchema, request.query);
-    const userId = query.userId ?? getAuthenticatedUserId(request);
+    const callerId = getAuthenticatedUserId(request);
+    const userId = query.userId ?? callerId;
+
+    // Scope check: employees can only view their own kudos
+    if (userId !== callerId) {
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
+      if (!caller || (caller.role !== "manager" && caller.role !== "admin")) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+    }
 
     // Fetch kudos for this user (given or received), newest first
     const rows = await db

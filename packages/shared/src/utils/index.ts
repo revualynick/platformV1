@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 export function generateId(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 export function toISOString(date: Date = new Date()): string {

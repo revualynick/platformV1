@@ -125,6 +125,12 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Conversation not found or expired" });
       }
 
+      // Ownership check: only the conversation's reviewer can reply
+      const callerId = request.tenant.userId;
+      if (state.reviewerId !== callerId) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+
       const emptyAdapters = new AdapterRegistry();
 
       const result = await handleReply(

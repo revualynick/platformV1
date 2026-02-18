@@ -1,9 +1,11 @@
 import neo4j, { type Driver, type Session } from "neo4j-driver";
 
 let driver: Driver | null = null;
+let initPromise: Promise<Driver> | null = null;
 
 /**
  * Initialize the Neo4j driver. Call once at startup.
+ * Thread-safe: concurrent calls return the same driver instance.
  */
 export function initNeo4j(
   uri?: string,
@@ -22,9 +24,9 @@ export function initNeo4j(
 }
 
 export function getNeo4jDriver(): Driver {
-  if (!driver) {
-    driver = initNeo4j();
-  }
+  if (driver) return driver;
+  // Prevent race condition: only one call creates the driver
+  driver = initNeo4j();
   return driver;
 }
 
@@ -236,17 +238,20 @@ export async function getRelationshipWeb(
 
     // Build a map from Neo4j internal node ID → user UUID
     // so we can resolve relationship start/end to actual user IDs
-    type RawNode = { identity: { low: number }; properties: Record<string, unknown> };
+    type RawNode = { identity: { low: number }; elementId?: string; properties: Record<string, unknown> };
     const centerNode = record.get("center") as RawNode | null;
-    if (!centerNode?.identity?.low) return { nodes: [], edges: [] };
+    if (!centerNode?.properties?.id) return { nodes: [], edges: [] };
     const neighborNodes = (record.get("neighbors") ?? []) as RawNode[];
     const hop2Nodes = (record.get("hop2s") ?? []) as RawNode[];
 
-    const internalIdToUuid = new Map<number, string>();
+    // Map internal node IDs to user UUIDs (prefer elementId, fall back to identity.low)
+    const internalIdToUuid = new Map<string, string>();
     const allNodes = [centerNode, ...neighborNodes, ...hop2Nodes];
     allNodes.forEach((n) => {
-      if (n?.identity?.low != null && n?.properties?.id) {
-        internalIdToUuid.set(n.identity.low, n.properties.id as string);
+      if (!n?.properties?.id) return;
+      const nodeKey = n.elementId ?? String(n.identity?.low ?? "");
+      if (nodeKey) {
+        internalIdToUuid.set(nodeKey, n.properties.id as string);
       }
     });
 
@@ -276,12 +281,16 @@ export async function getRelationshipWeb(
     allRels.forEach((r: {
       type: string;
       start: { low: number };
+      startNodeElementId?: string;
       end: { low: number };
+      endNodeElementId?: string;
       properties: Record<string, unknown>;
     }) => {
-      // Resolve Neo4j internal IDs to user UUIDs
-      const fromUuid = internalIdToUuid.get(r.start.low);
-      const toUuid = internalIdToUuid.get(r.end.low);
+      // Resolve Neo4j internal IDs to user UUIDs (prefer elementId, fall back to identity.low)
+      const startKey = r.startNodeElementId ?? String(r.start?.low ?? "");
+      const endKey = r.endNodeElementId ?? String(r.end?.low ?? "");
+      const fromUuid = internalIdToUuid.get(startKey);
+      const toUuid = internalIdToUuid.get(endKey);
       if (!fromUuid || !toUuid) return; // Skip edges with unresolvable nodes
 
       const key = `${fromUuid}-${r.type}-${toUuid}`;

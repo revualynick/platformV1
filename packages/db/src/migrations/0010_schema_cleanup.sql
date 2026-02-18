@@ -1,5 +1,12 @@
 -- Add unique constraint on org_platform_configs (prevent duplicate platform per org)
-CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_platform" ON "org_platform_configs" ("org_id", "platform");
+-- Note: org_platform_configs is a control-plane table. Guard with table existence check
+-- so this migration doesn't fail on tenant-only databases.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'org_platform_configs') THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS "uq_org_platform" ON "org_platform_configs" ("org_id", "platform");
+  END IF;
+END $$;
 
 -- Remove duplicated resolved_by column (resolved_by_id with FK is the canonical column)
 ALTER TABLE "escalations" DROP COLUMN IF EXISTS "resolved_by";

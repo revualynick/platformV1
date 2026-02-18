@@ -123,7 +123,7 @@ export class GoogleChatAdapter implements ChatAdapter {
     if (message.blocks && message.blocks.length > 0) {
       chatMessage.cardsV2 = [
         {
-          cardId: `card-${crypto.randomUUID()}`,
+          cardId: crypto.randomUUID(),
           card: this.buildCard(message.blocks),
         },
       ];
@@ -145,7 +145,10 @@ export class GoogleChatAdapter implements ChatAdapter {
     const response = await retryAsync(() =>
       this.chatClient.spaces.messages.create(requestBody),
     );
-    return response.data.name ?? "";
+    if (!response.data.name) {
+      throw new Error("Google Chat sendMessage: no message name returned");
+    }
+    return response.data.name;
   }
 
   async resolveUser(platformUserId: string): Promise<PlatformUser | null> {

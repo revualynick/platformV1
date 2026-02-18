@@ -115,5 +115,9 @@ export function createLLMGateway(config: LLMGatewayConfig): LLMGateway {
 
   const gateway = new LLMGateway(config.provider);
   gateway.registerProvider(adapter);
+  // Register the same adapter as embedding provider if it supports embeddings
+  if ("embed" in adapter && typeof (adapter as unknown as EmbeddingProviderAdapter).embed === "function") {
+    gateway.registerEmbeddingProvider(adapter as unknown as EmbeddingProviderAdapter);
+  }
   return gateway;
 }

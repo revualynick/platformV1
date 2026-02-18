@@ -32,10 +32,20 @@ export class OpenAICompatAdapter implements LLMProviderAdapter {
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
     const model = this.models[request.tier];
 
-    const messages: OpenAI.ChatCompletionMessageParam[] = request.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    // Separate system messages from user/assistant messages (OpenAI API best practice)
+    const systemMessages = request.messages.filter((m) => m.role === "system");
+    const nonSystemMessages = request.messages.filter((m) => m.role !== "system");
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      // Combine system messages into one if multiple
+      ...(systemMessages.length > 0
+        ? [{ role: "system" as const, content: systemMessages.map((m) => m.content).join("\n\n") }]
+        : []),
+      ...nonSystemMessages.map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+    ];
 
     // OpenAI requires at least one message to mention "json" when using json_object response format
     if (request.jsonMode) {
