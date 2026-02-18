@@ -14,7 +14,7 @@ import { OpenAICompatAdapter } from "./providers/openai-compat.js";
 
 const ANTHROPIC_DEFAULTS: Record<ModelTier, string> = {
   fast: "claude-haiku-4-5-20251001",
-  standard: "claude-sonnet-4-5-20250929",
+  standard: "claude-sonnet-4-6",
   advanced: "claude-opus-4-6",
 };
 

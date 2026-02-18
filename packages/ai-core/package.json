@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.76.0",
     "@revualy/shared": "workspace:*",
     "openai": "^4.85.0"
   },

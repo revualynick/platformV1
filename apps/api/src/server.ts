@@ -18,9 +18,9 @@ import { notificationRoutes } from "./modules/notifications/routes.js";
 import { integrationsRoutes } from "./modules/integrations/routes.js";
 import { managerRoutes } from "./modules/manager/routes.js";
 import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
-import { registerOneOnOneWs } from "./modules/one-on-one/ws.js";
+import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
-import { createQueues, createWorkers, initStateRedis } from "./workers/index.js";
+import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
 import { AdapterRegistry } from "@revualy/chat-core";
 
@@ -62,11 +62,14 @@ async function buildApp() {
   });
   await app.register(tenantPlugin);
 
-  // Global error handler for validation errors
+  // Global error handler — preserve client error status codes, log server errors
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
-    if (error.statusCode === 400) {
-      return reply.code(400).send({ error: error.message });
+    const status = error.statusCode ?? 500;
+
+    if (status >= 400 && status < 500) {
+      return reply.code(status).send({ error: error.message });
     }
+
     request.log.error(error);
     return reply.code(500).send({ error: "Internal server error" });
   });
@@ -109,9 +112,15 @@ async function start() {
   setConversationQueue(queues.conversationQueue);
 
   // LLM gateway — provider determined by env vars
+  const llmProvider = process.env.LLM_PROVIDER ?? "anthropic";
+  const llmApiKey =
+    process.env.LLM_API_KEY ||
+    (llmProvider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined) ||
+    (llmProvider === "openai" ? process.env.OPENAI_API_KEY : undefined) ||
+    "";
   const llm = createLLMGateway({
-    provider: process.env.LLM_PROVIDER ?? "anthropic",
-    apiKey: process.env.LLM_API_KEY ?? "",
+    provider: llmProvider,
+    apiKey: llmApiKey,
     baseUrl: process.env.LLM_BASE_URL || undefined,
     models: {
       ...(process.env.LLM_MODEL_FAST ? { fast: process.env.LLM_MODEL_FAST } : {}),
@@ -163,6 +172,8 @@ async function start() {
       queues.schedulerQueue.close(),
       queues.notificationQueue.close(),
       queues.calendarSyncQueue.close(),
+      closeStateRedis(),
+      closeWsRedis(),
     ]);
     await app.close();
     process.exit(0);
