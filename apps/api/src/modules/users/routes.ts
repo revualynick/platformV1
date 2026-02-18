@@ -3,6 +3,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { users, engagementScores } from "@revualy/db";
 import { parseBody, idParamSchema, updateUserSchema } from "../../lib/validation.js";
 import { requireAuth } from "../../lib/rbac.js";
+import { syncAuthUser } from "../../lib/auth-sync.js";
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -81,6 +82,15 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       .returning();
 
     if (!updated) return reply.code(404).send({ error: "User not found" });
+
+    // Sync changed auth-relevant fields to control plane session store
+    if (body.role !== undefined || body.teamId !== undefined) {
+      const syncUpdates: { role?: string; teamId?: string | null } = {};
+      if (body.role !== undefined) syncUpdates.role = body.role;
+      if (body.teamId !== undefined) syncUpdates.teamId = body.teamId;
+      syncAuthUser(id, syncUpdates);
+    }
+
     return reply.send(updated);
   });
 
@@ -99,6 +109,10 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       .returning();
 
     if (!updated) return reply.code(404).send({ error: "User not found" });
+
+    // Sync onboarding status to control plane session store
+    syncAuthUser(userId, { onboardingCompleted: true });
+
     return reply.send({ success: true });
   });
 

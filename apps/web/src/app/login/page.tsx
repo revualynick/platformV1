@@ -1,31 +1,8 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleDevLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    const result = await signIn("credentials", {
-      email,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      setError("No account found for that email. Try a seeded email like sarah.chen@acmecorp.com");
-      setLoading(false);
-    } else {
-      window.location.href = "/home";
-    }
-  }
-
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
       {/* Background */}
@@ -51,7 +28,7 @@ export default function LoginPage() {
             Sign in to your account
           </h1>
           <p className="mt-2 text-center text-sm text-stone-500">
-            Use your company Google account or sign in with email
+            Use your company Google account to continue
           </p>
 
           {/* Google OAuth */}
@@ -80,73 +57,6 @@ export default function LoginPage() {
             </svg>
             Continue with Google
           </button>
-
-          {/* Divider */}
-          {process.env.NODE_ENV !== "production" && (
-            <>
-              <div className="my-6 flex items-center gap-4">
-                <div className="h-px flex-1 bg-stone-200" />
-                <span className="text-xs text-stone-400">DEV MODE</span>
-                <div className="h-px flex-1 bg-stone-200" />
-              </div>
-
-              {/* Dev credentials login */}
-              <form onSubmit={handleDevLogin}>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-stone-600"
-                >
-                  Email address
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="sarah.chen@acmecorp.com"
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-forest focus:outline-none focus:ring-1 focus:ring-forest"
-                />
-
-                {error && (
-                  <p className="mt-2 text-sm text-red-600">{error}</p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-4 w-full rounded-xl bg-forest px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-forest-light disabled:opacity-50"
-                >
-                  {loading ? "Signing in..." : "Sign in with Email"}
-                </button>
-              </form>
-
-              {/* Quick-select seeded users */}
-              <div className="mt-4">
-                <p className="text-xs text-stone-400">Quick sign-in as:</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {[
-                    { name: "Sarah Chen", email: "sarah.chen@acmecorp.com", role: "employee" },
-                    { name: "Jordan Wells", email: "jordan.wells@acmecorp.com", role: "manager" },
-                    { name: "Dana Whitfield", email: "dana.whitfield@acmecorp.com", role: "admin" },
-                  ].map((u) => (
-                    <button
-                      key={u.email}
-                      type="button"
-                      onClick={() => {
-                        setEmail(u.email);
-                        setError("");
-                      }}
-                      className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-600 transition-colors hover:border-forest/30 hover:bg-forest/[0.04] hover:text-forest"
-                    >
-                      {u.name}
-                      <span className="ml-1 text-stone-400">({u.role})</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

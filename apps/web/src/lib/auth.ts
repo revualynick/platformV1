@@ -1,23 +1,36 @@
 import "server-only";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import Credentials from "next-auth/providers/credentials";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { eq } from "drizzle-orm";
+import { createControlPlaneClient } from "@revualy/db";
+import {
+  authUsers,
+  authAccounts,
+  authSessions,
+  authVerificationTokens,
+} from "@revualy/db/schema";
 
 /**
  * NextAuth.js v5 configuration.
  *
- * Strategy: JWT-based sessions (no database session table needed).
+ * Strategy: Database-backed sessions via @auth/drizzle-adapter.
  * On sign-in, we look up the user by email in the Revualy API,
- * then embed userId, orgId, and role into the JWT for downstream use.
+ * then persist org/tenant fields on the authUsers row so the
+ * session callback can hydrate them without a JWT.
  *
- * Providers:
- * - Google OAuth (for Google Chat / Workspace orgs)
- * - Credentials (dev-only: sign in with email, no password)
- *
- * Microsoft Entra ID will be added in Phase 4 alongside the Teams adapter.
+ * Provider: Google OAuth (Google Chat / Workspace orgs).
  */
 
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
+
+// Control plane DB for session CRUD. The fallback URL is only used during
+// `next build` static analysis — postgres.js connects lazily on first query,
+// so no actual connection is attempted at build time.
+const controlPlaneDb = createControlPlaneClient(
+  process.env.CONTROL_PLANE_DATABASE_URL ||
+    "postgresql://build:build@localhost:5432/build_placeholder",
+);
 
 function getInternalSecret(): string {
   const secret = process.env.INTERNAL_API_SECRET;
@@ -48,12 +61,15 @@ interface RevualyUser {
 /** Look up a Revualy user by email via the API */
 async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
   try {
-    const res = await fetch(`${API_URL}/api/v1/auth/lookup?email=${encodeURIComponent(email)}`, {
-      headers: {
-        "x-org-id": getDefaultOrgId(),
-        "x-internal-secret": getInternalSecret(),
+    const res = await fetch(
+      `${API_URL}/api/v1/auth/lookup?email=${encodeURIComponent(email)}`,
+      {
+        headers: {
+          "x-org-id": getDefaultOrgId(),
+          "x-internal-secret": getInternalSecret(),
+        },
       },
-    });
+    );
     if (!res.ok) return null;
     return res.json();
   } catch {
@@ -61,40 +77,63 @@ async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
   }
 }
 
+/**
+ * Populate Revualy-specific columns on an authUsers row.
+ * Called for both new and returning users to keep data fresh.
+ */
+async function syncRevualyFields(
+  authUserId: string,
+  email: string,
+): Promise<void> {
+  const revualyUser = await lookupUserByEmail(email);
+  if (!revualyUser) return;
+
+  await controlPlaneDb
+    .update(authUsers)
+    .set({
+      orgId: revualyUser.orgId,
+      tenantUserId: revualyUser.id,
+      role: revualyUser.role,
+      teamId: revualyUser.teamId,
+      onboardingCompleted: revualyUser.onboardingCompleted,
+    })
+    .where(eq(authUsers.id, authUserId));
+}
+
+// Wrap the adapter so we can populate custom columns after user creation
+const baseAdapter = DrizzleAdapter(controlPlaneDb, {
+  usersTable: authUsers,
+  accountsTable: authAccounts,
+  sessionsTable: authSessions,
+  verificationTokensTable: authVerificationTokens,
+});
+
+const adapter = {
+  ...baseAdapter,
+  async createUser(
+    ...args: Parameters<NonNullable<typeof baseAdapter.createUser>>
+  ) {
+    const user = await baseAdapter.createUser!(...args);
+    // Immediately populate Revualy fields so the first session has them
+    if (user.email) {
+      await syncRevualyFields(user.id, user.email);
+    }
+    return user;
+  },
+};
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter,
+
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
-    // Dev-only credentials provider: sign in with any seeded email
-    ...(process.env.NODE_ENV !== "production"
-      ? [
-          Credentials({
-            name: "Dev Login",
-            credentials: {
-              email: { label: "Email", type: "email", placeholder: "sarah.chen@acmecorp.com" },
-            },
-            async authorize(credentials) {
-              const email = credentials?.email as string | undefined;
-              if (!email) return null;
-
-              const user = await lookupUserByEmail(email);
-              if (!user) return null;
-
-              return {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-              };
-            },
-          }),
-        ]
-      : []),
   ],
 
   session: {
-    strategy: "jwt",
+    strategy: "database",
     maxAge: 8 * 60 * 60, // 8 hours
   },
 
@@ -104,59 +143,54 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   callbacks: {
     async signIn({ user, account }) {
-      // For OAuth providers, look up the user in Revualy by email
-      if (account?.provider === "google" && user.email) {
-        const revualyUser = await lookupUserByEmail(user.email);
-        if (!revualyUser) {
-          // User exists in Google but not in Revualy — deny sign-in
-          return false;
-        }
-        // Attach Revualy-specific fields for the jwt callback
-        (user as Record<string, unknown>).revualyId = revualyUser.id;
-        (user as Record<string, unknown>).role = revualyUser.role;
-        (user as Record<string, unknown>).orgId = revualyUser.orgId;
-        (user as Record<string, unknown>).teamId = revualyUser.teamId;
-        (user as Record<string, unknown>).onboardingCompleted = revualyUser.onboardingCompleted;
+      // Only allow Google OAuth sign-in for known Revualy users
+      if (account?.provider !== "google" || !user.email) {
+        return false;
       }
+
+      const revualyUser = await lookupUserByEmail(user.email);
+      if (!revualyUser) {
+        // User exists in Google but not in Revualy — deny sign-in
+        return false;
+      }
+
       return true;
     },
 
-    async jwt({ token, user }) {
-      if (user) {
-        // First sign-in — populate token with Revualy data
-        const u = user as Record<string, unknown>;
+    async session({ session, user }) {
+      // With database sessions, `user` is the authUsers DB row.
+      // Read Revualy-specific columns to hydrate the session.
+      const [authUser] = await controlPlaneDb
+        .select({
+          orgId: authUsers.orgId,
+          tenantUserId: authUsers.tenantUserId,
+          role: authUsers.role,
+          teamId: authUsers.teamId,
+          onboardingCompleted: authUsers.onboardingCompleted,
+        })
+        .from(authUsers)
+        .where(eq(authUsers.id, user.id));
 
-        if (u.revualyId) {
-          // OAuth flow — data already attached in signIn callback
-          token.userId = u.revualyId as string;
-          token.role = u.role as string;
-          token.orgId = u.orgId as string;
-          token.teamId = u.teamId as string | null;
-          token.onboardingCompleted = u.onboardingCompleted as boolean;
-        } else {
-          // Credentials flow — look up by email
-          const revualyUser = await lookupUserByEmail(user.email!);
-          if (revualyUser) {
-            token.userId = revualyUser.id;
-            token.role = revualyUser.role;
-            token.orgId = revualyUser.orgId;
-            token.teamId = revualyUser.teamId;
-            token.onboardingCompleted = revualyUser.onboardingCompleted;
-          }
-        }
+      if (authUser) {
+        session.user.id = authUser.tenantUserId ?? "";
+        session.role = authUser.role ?? "employee";
+        session.orgId = authUser.orgId ?? "";
+        session.teamId = authUser.teamId ?? null;
+        session.user.onboardingCompleted =
+          authUser.onboardingCompleted ?? true;
       }
-      return token;
-    },
 
-    async session({ session, token }) {
-      // Expose Revualy fields on the client session with runtime validation
-      session.user.id = typeof token.userId === "string" ? token.userId : "";
-      session.role = typeof token.role === "string" ? token.role : "employee";
-      session.orgId = typeof token.orgId === "string" ? token.orgId : "";
-      session.teamId = typeof token.teamId === "string" ? token.teamId : null;
-      session.user.onboardingCompleted =
-        typeof token.onboardingCompleted === "boolean" ? token.onboardingCompleted : true;
       return session;
+    },
+  },
+
+  events: {
+    async signIn({ user }) {
+      // Refresh Revualy fields on every sign-in (handles role/team changes
+      // that occurred since the last login)
+      if (user.id && user.email) {
+        await syncRevualyFields(user.id, user.email);
+      }
     },
   },
 });

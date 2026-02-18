@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { auth } from "@/lib/auth";
 
@@ -17,7 +18,14 @@ export default async function ManagerLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const userName = session?.user?.name ?? undefined;
+  if (!session) redirect("/login");
+
+  // /team/* requires manager or admin
+  if (session.role === "employee") {
+    redirect("/dashboard");
+  }
+
+  const userName = session.user?.name ?? undefined;
 
   return (
     <div className="flex min-h-screen bg-cream">

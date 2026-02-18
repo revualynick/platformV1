@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { auth } from "@/lib/auth";
 
@@ -16,7 +17,14 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const userName = session?.user?.name ?? undefined;
+  if (!session) redirect("/login");
+
+  // /settings/* requires admin
+  if (session.role !== "admin") {
+    redirect("/dashboard");
+  }
+
+  const userName = session.user?.name ?? undefined;
 
   return (
     <div className="flex min-h-screen bg-cream">

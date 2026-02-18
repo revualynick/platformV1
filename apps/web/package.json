@@ -11,9 +11,13 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.1",
+    "@revualy/db": "workspace:*",
     "@revualy/shared": "workspace:*",
+    "drizzle-orm": "^0.39.3",
     "next": "^15.1.0",
     "next-auth": "^5.0.0-beta.25",
+    "postgres": "^3.4.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^2.15.0",

@@ -13,14 +13,13 @@ declare module "next-auth" {
     orgId: string;
     teamId: string | null;
   }
-}
 
-declare module "next-auth/jwt" {
-  interface JWT {
-    userId: string;
-    role: string;
-    orgId: string;
-    teamId: string | null;
-    onboardingCompleted: boolean;
+  /** Extended User with Revualy-specific columns from authUsers */
+  interface User {
+    orgId?: string | null;
+    tenantUserId?: string | null;
+    role?: string | null;
+    teamId?: string | null;
+    onboardingCompleted?: boolean | null;
   }
 }

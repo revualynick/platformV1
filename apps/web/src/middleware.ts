@@ -1,53 +1,34 @@
-import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 /**
- * Next.js middleware for auth protection + onboarding redirect.
- * - Authenticated users hitting /login → redirect to /home
- * - Unauthenticated users on protected routes → redirect to /login
- * - Authenticated users who haven't completed onboarding → redirect to /onboarding
- * - Public routes (/, /api/auth/*) pass through (not matched)
+ * Next.js middleware for auth redirects.
+ *
+ * With database-backed sessions, the session token cookie is a random string
+ * validated server-side. Middleware (Edge runtime) can't do DB lookups, so
+ * we only check cookie presence here. Full session validation + role/onboarding
+ * checks happen in server component layouts via auth().
  */
-export default auth((req) => {
-  const { pathname } = req.nextUrl;
-  const isLoggedIn = !!req.auth;
+export function middleware(request: NextRequest) {
+  const sessionToken =
+    request.cookies.get("authjs.session-token")?.value ||
+    request.cookies.get("__Secure-authjs.session-token")?.value;
+
+  const { pathname } = request.nextUrl;
+  const isLoggedIn = !!sessionToken;
 
   // Authenticated user on login page → redirect to home hub
   if (isLoggedIn && pathname === "/login") {
-    return NextResponse.redirect(new URL("/home", req.url));
+    return NextResponse.redirect(new URL("/home", request.url));
   }
 
   // Unauthenticated users on protected routes → redirect to login
   if (!isLoggedIn && pathname !== "/login") {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  // Onboarding redirect: if logged in and not already on onboarding
-  if (isLoggedIn && !pathname.startsWith("/onboarding")) {
-    const user = req.auth?.user as Record<string, unknown> | undefined;
-    if (user && user.onboardingCompleted === false) {
-      return NextResponse.redirect(new URL("/onboarding", req.url));
-    }
-  }
-
-  // Role-based route protection
-  if (isLoggedIn) {
-    const session = req.auth as unknown as Record<string, unknown> | undefined;
-    const role = (typeof session?.role === "string" ? session.role : "employee");
-
-    // /team/* requires manager or admin
-    if (pathname.startsWith("/team") && role === "employee") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
-
-    // /settings/* (admin settings) requires admin
-    if (pathname.startsWith("/settings") && role !== "admin") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [

@@ -32,6 +32,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         name: users.name,
         role: users.role,
         teamId: users.teamId,
+        onboardingCompleted: users.onboardingCompleted,
       })
       .from(users)
       .where(eq(users.email, email));
