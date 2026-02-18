@@ -455,129 +455,98 @@ revualy/
 
 ---
 
-## Code Review Findings (2026-02-17)
+## Code Review Findings
 
-Full static analysis performed via OpenAI Codex across API, database/workers, shared packages, and frontend.
+### First Review (2026-02-17)
+Full static analysis — 40 findings (18 high/critical, 16 medium, 6 low). **37 fixed**, 3 acceptable (single-tenant workers, pre-beta destructive migration, intentional GChat token auth, standard TS cast pattern).
 
-**40 findings total** — 18 high/critical, 16 medium, 6 low/info.
+### Second Review (2026-02-18)
+Comprehensive review across API server, frontend, and all packages. 30 new findings not covered by the first review.
 
-**Resolution status (2026-02-18):**
-- **Fixed (37 of 40):** #1–6, #8–10, #12–14, #16–20, #22–34, #36–39
-- **Acceptable / Not actionable (3):** #7 (single tenant DB URL — correct for single-org beta), #11 (destructive migration — pre-beta, no prod data), #15 (GChat token auth — intentional design), #35 (no runtime validation on API responses — standard TS cast, internal API)
-- **#14** — `embed()` failure: documented as known gap. Embedding support requires explicit provider registration (Phase 5).
-- **#18** — Mock data fallback: replaced `if (!userId) return mockData` with `redirect("/login")` in all 11 dashboard pages.
-- **#33** — No retry in send paths: added `retryAsync()` utility to `@revualy/chat-core`, wrapped Slack and GChat `sendMessage()` calls.
+#### Critical / High (10)
 
-### Critical / High Severity
+1. **WebSocket token exposed in URL** — `apps/web/.../one-on-ones/[sessionId]/page.tsx`, manager equivalents
+   WS auth token passed as `?token=...` query param. Leaks to browser history, server logs, referrer headers.
 
-#### API Security
+2. **Calendar OAuth tokens stored unencrypted** — `packages/db/src/schema/tenant.ts:485-507`
+   `accessToken`/`refreshToken` in `calendar_tokens` are plain text. Grants access to user Google calendars if DB is compromised.
 
-1. **OAuth account-linking vulnerability** — `apps/api/src/modules/integrations/routes.ts:22-69`
-   `/google/callback` trusts `state` as `userId` without verifying integrity. A forged callback can bind attacker tokens to another user.
+3. **Neo4j operations have no error handling** — `packages/db/src/neo4j.ts:59-96`
+   All sync functions throw unhandled if Neo4j is down. Neo4j is supplementary — shouldn't crash the app.
 
-2. **Missing authorization on relationship endpoints** — `apps/api/src/modules/relationships/routes.ts:97-217`
-   Only uses `requireAuth`, but exposes org-wide graph reads and privileged mutations (create/update/delete relationships, reassign managers). Any authenticated employee can modify org structure.
+4. **Unvalidated WebSocket message payloads** — `apps/web/src/components/session-editor.tsx:57-80`, `session-viewer.tsx:39-66`
+   Incoming WS messages cast directly (`msg.content as string`) without schema validation.
 
-3. **Over-broad feedback access for managers** — `apps/api/src/modules/feedback/routes.ts:25-111`
-   Logic allows any non-employee role (including unrelated managers) to view/export any user's feedback. Missing manager-subject relationship check.
+5. **Prompt injection risk in LLM prompts** — `apps/api/src/lib/conversation-orchestrator.ts:319-330`
+   User names and feedback content interpolated directly into LLM system prompts without sanitization.
 
-4. **Conversation endpoints too broadly accessible** — `apps/api/src/modules/conversation/routes.ts:11-48`
-   Comments indicate admin/debug access, but routes only require auth, not admin role. Sensitive conversation content is readable by anyone.
+6. **Missing transaction in initiateConversation** — `apps/api/src/lib/conversation-orchestrator.ts:107-121`
+   Conversation record and first message inserted separately. Message failure orphans the conversation.
 
-#### Database & Workers
+7. **Onboarding check trusts JWT claim, not DB** — `apps/web/src/middleware.ts:25-31`
+   `user.onboardingCompleted` read from token only. Tampered JWT bypasses onboarding flow.
 
-5. **Seed cleanup fails on FK constraints** — `packages/db/src/seed.ts:33-49`
-   Deletes parent tables before child tables; missing deletes for `feedback_value_scores`, `user_platform_identities`, etc.
+8. **Hardcoded sidebar usernames** — `apps/web/src/app/(manager)/layout.tsx:20`, `(admin)/layout.tsx:19`
+   Both pass `userName="Alex Thompson"` instead of reading from auth session.
 
-6. **Migration journal out of sync** — `packages/db/src/migrations/meta/_journal.json`
-   Only lists `0000`; migrations `0001`–`0008` exist on disk but aren't tracked. Deployment blocker for Drizzle migration runner.
+9. **Missing session ownership check** — `apps/web/src/app/(employee)/dashboard/one-on-ones/[sessionId]/page.tsx`
+   Any authenticated employee can load any 1:1 session by ID. No `employeeId` validation.
 
-7. **Workers use single env connection for all tenants** — `apps/api/src/workers/index.ts:136-252`
-   `getTenantDb(orgId, process.env.TENANT_DATABASE_URL)` ignores org-specific DB mapping. Multi-tenant correctness risk.
+10. **Tenant pool eviction can leak memory** — `packages/db/src/tenant.ts:36-50`
+    If all entries share identical `lastUsed` timestamps, eviction silently fails and pool grows unbounded.
 
-8. **No BullMQ retry/backoff policy** — `apps/api/src/workers/index.ts:55-59`
-   Queues created without `defaultJobOptions`. Transient failures kill jobs immediately.
+#### Medium (14)
 
-9. **Race condition in conversation state** — `apps/api/src/workers/index.ts:161-182`
-   Read-modify-write on Redis state without locking. Duplicate webhooks can overwrite state concurrently.
+11. **Unsafe type assertions on Neo4j results** — `packages/db/src/neo4j.ts:217-276`
+    `getRelationshipWeb` casts results without null checks. Missing nodes crash the function.
 
-10. **Redis connections never closed on shutdown** — `apps/api/src/workers/index.ts:76`, `apps/api/src/modules/one-on-one/ws.ts:117`
-    State Redis singleton and WebSocket Redis are created but never cleaned up in graceful shutdown.
+12. **Escalation schema allows orphaned records** — `packages/db/src/schema/tenant.ts:272-304`
+    No CHECK constraint requiring at least one of `feedbackEntryId` or `reporterId` to be non-null.
 
-11. **Destructive migration with no backfill** — `packages/db/src/migrations/0007_replace_one_on_one_with_sessions.sql:5-6`
-    Drops old 1:1 tables outright with no data migration path.
+13. **Missing unique constraint on escalations per feedback** — same file
+    Duplicate escalations for the same feedback entry are possible.
 
-#### Shared Packages
+14. **Missing "cancelled" status for 1:1 sessions** — `packages/db/src/schema/tenant.ts:511-539`
+    Only "scheduled"/"active"/"completed". No way to represent cancellations.
 
-12. **Slack signature check crashes on length mismatch** — `packages/chat-adapter-slack/src/adapter.ts:53-55`
-    `crypto.timingSafeEqual` throws if buffer lengths differ. Malformed `x-slack-signature` causes 500 instead of 401.
+15. **OpenAI adapter doesn't extract system messages** — `packages/ai-core/src/providers/openai-compat.ts:34-37`
+    Unlike Anthropic adapter, system messages aren't separated from user/assistant messages.
 
-13. **Slack verification uses `JSON.stringify(body)` not raw bytes** — `packages/chat-adapter-slack/src/adapter.ts:46-47`
-    Slack signing requires exact raw body bytes; re-serializing can invalidate legitimate requests.
+16. **Neo4j driver initialization race condition** — `packages/db/src/neo4j.ts:8-21`
+    Concurrent `getNeo4jDriver()` calls can both trigger `initNeo4j()`, creating duplicate drivers.
 
-14. **LLM gateway `embed()` always fails** — `packages/ai-core/src/gateway.ts:45-105`
-    Factory never registers `EmbeddingProviderAdapter`; any `embed()` call throws at runtime.
+17. **Stale data from sequential 1:1 API calls** — `apps/web/.../[userId]/one-on-one/page.tsx:22-59`
+    Active session loaded, then detail fetched separately. Status can change between calls.
 
-15. **GChat auth is token equality only, no JWT validation** — `packages/chat-adapter-gchat/src/adapter.ts:49-70`
-    No issuer/audience/expiry/signature verification. Weak sender authenticity and replay resistance.
+18. **Missing error boundaries on dashboard pages** — multiple pages
+    No `error.tsx` files. A chart component throw crashes the entire page.
 
-#### Frontend
+19. **Optimistic WS updates without rollback** — `apps/web/src/components/session-editor.tsx:111-118`
+    Notes update local state immediately; WS send failure causes state divergence with no recovery.
 
-16. **Hardcoded `x-org-id: "dev-org"` in auth** — `apps/web/src/lib/auth.ts:36`
-    Multi-tenant auth looks up users under wrong org context.
+20. **Analysis pipeline uses console.error** — `apps/api/src/lib/analysis-pipeline.ts:74-80`
+    Errors go to console, not Fastify structured logger. Invisible in centralized logging.
 
-17. **`INTERNAL_API_SECRET` falls back to `""`** — `apps/web/src/lib/auth.ts:37`
-    Auth proceeds misconfigured instead of failing closed.
+21. **LLM JSON parse fallback generates unreliable scores** — `apps/api/src/lib/analysis-pipeline.ts:190-206`
+    Invalid JSON triggers heuristic scoring fallback that still writes to DB as if reliable.
 
-18. **Mock data fallback masks auth/production failures** — `apps/web/src/app/(employee)/dashboard/page.tsx:24,138`
-    Missing session or fetch failure silently shows fabricated data instead of redirecting.
+22. **Hardcoded fallback `ws://localhost:3000`** — `apps/web/.../[sessionId]/page.tsx:57`
+    Falls back to insecure localhost WS URL if `NEXT_PUBLIC_WS_URL` not set.
 
-### Medium Severity
+23. **Missing input validation on admin form submissions** — `apps/web/src/app/(admin)/settings/actions.ts:13-26`
+    FormData values extracted with `as string` casts, no Zod validation before API call.
 
-#### API
+24. **WebSocket room cleanup incomplete** — `apps/api/src/modules/one-on-one/ws.ts:100-117`
+    Room cleaned only when both sockets disconnect. One-sided disconnects leak rooms in memory.
 
-19. **Escalation writes not transactional** — `apps/api/src/modules/escalation/routes.ts:20-137` — Partial writes on failure.
-20. **Input validation gaps on route params** — `apps/api/src/modules/users/routes.ts:13-19` and others — Raw string casts instead of Zod.
-21. **Inconsistent API response shapes** — Mix of `{ data }`, raw objects, `{ success: true }` across endpoints.
-22. **DELETE action-item returns 200 even when item doesn't exist** — `apps/api/src/modules/one-on-one/routes.ts:331-340`
-23. **Full-table fetches with in-memory filtering** — `apps/api/src/modules/relationships/routes.ts:24-25`, `manager/routes.ts:33` — Won't scale.
-24. **Global error handler too coarse** — `apps/api/src/server.ts:62-67` — Only preserves 400; 401/403/404 become 500.
+#### Low (6)
 
-#### Database & Workers
-
-25. **Unsafe `JSON.parse` in job handler** — `apps/api/src/workers/index.ts:88` — Corrupted Redis value crashes worker.
-26. **Redis URL parsing drops TLS/username/db-index** — `apps/api/src/workers/index.ts:42` — Breaks production Redis.
-27. **Missing unique constraint on `org_platform_configs(org_id, platform)`** — `packages/db/src/schema/control-plane.ts:30`
-28. **Duplicated resolver columns in escalation schema** — `packages/db/src/schema/tenant.ts:289-290`
-29. **Schema/migration FK drift** — `packages/db/src/schema/tenant.ts:380-381` — Missing `.references()` that exist in SQL.
-30. **Analysis pipeline writes not transactional** — `packages/db/src/lib/analysis-pipeline.ts:83-113`
-31. **Seed script hardcoded DB URL fallback** — `packages/db/src/seed.ts:24` — No `finally` cleanup.
-
-#### Shared Packages
-
-32. **Adapter registry allows silent override** — `packages/chat-core/src/registry.ts:13`
-33. **No retry/backoff in Slack/GChat send paths** — `packages/chat-adapter-slack/src/adapter.ts:107`, `packages/chat-adapter-gchat/src/adapter.ts:144`
-34. **Shared crypto key validation checks length but not hex validity** — `packages/shared/src/utils/crypto.ts:66-71`
-
-#### Frontend
-
-35. **No runtime validation on API responses** — `apps/web/src/lib/api.ts:49` — `res.json() as Promise<T>` trusts shape blindly.
-36. **Unsafe session type casts** — `apps/web/src/lib/auth.ts:136` — `as string`/`as boolean` without validation.
-37. **Server modules not marked `"server-only"`** — `apps/web/src/lib/api.ts`, `apps/web/src/lib/auth.ts`
-38. **No middleware role checks for `/team`, `/settings` routes** — `apps/web/src/middleware.ts:20`
-39. **Error details leak in API helper** — `apps/web/src/lib/api.ts:46` — Full backend response in thrown error.
-40. **Global `cache: "no-store"` on every fetch** — `apps/web/src/lib/api.ts:41` — Unnecessary perf cost.
-
-### Low / Info
-
-- No SQL injection vectors found (Drizzle parameterized queries throughout)
-- No `dangerouslySetInnerHTML` usage found
-- No circular dependencies in package graph
-- ESM import extensions consistent (`.js`)
-- No explicit `any` usage found in reviewed source
-- `@slack/bolt` appears unused in Slack adapter package
-- No down migrations for any migration file
-- `shared` package contains runtime crypto logic beyond just types
+25. **`as any` cast in 1:1 page** — `apps/web/.../[userId]/one-on-one/page.tsx:133`
+26. **GChat card ID uses `Date.now()`** — `packages/chat-adapter-gchat/src/adapter.ts:126` — weak entropy, use `crypto.randomUUID()`
+27. **Missing null check on Slack `event.user`** — `packages/chat-adapter-slack/src/adapter.ts:100-102`
+28. **`console.warn` in production WS components** — `session-editor.tsx:62`, `session-viewer.tsx:44`
+29. **`LLMProvider` typed as generic `string`** — `packages/ai-core/src/types.ts:3` — should be union type
+30. **Inconsistent error handling in server actions** — `apps/web/.../onboarding/actions.ts:16` — `String(e)` loses error type
 
 
 continuing the plan for switching NextAuth.js from JWT to database-backed sessions. Let me read the key files to design the implementation plan.
