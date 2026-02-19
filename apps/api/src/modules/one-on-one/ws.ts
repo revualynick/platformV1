@@ -7,8 +7,8 @@ import { oneOnOneSessions } from "@revualy/db";
 import { verifyWsToken } from "../../lib/ws-auth.js";
 
 function getTenantDbUrl(): string {
-  const url = process.env.TENANT_DATABASE_URL;
-  if (!url) throw new Error("TENANT_DATABASE_URL is required");
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is required");
   return url;
 }
 

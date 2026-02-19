@@ -10,8 +10,11 @@ import { getTenantDb, type TenantDb } from "@revualy/db";
  *
  * Auth flow:
  * 1. Next.js server calls auth() to get the session (userId, orgId, role)
- * 2. Passes x-org-id, x-user-id, x-internal-secret headers to the Fastify API
+ * 2. Passes x-user-id, x-internal-secret headers to the Fastify API
  * 3. Fastify validates the internal secret, then trusts the headers
+ *
+ * In DEMO_MODE, demo routes skip internal-secret validation and set
+ * userId to null (demo routes handle identity via lead email).
  */
 export interface TenantContext {
   orgId: string;
@@ -28,18 +31,45 @@ declare module "fastify" {
 const ENV_ORG_ID = process.env.ORG_ID ?? "dev-org";
 const DATABASE_URL =
   process.env.DATABASE_URL ??
-  process.env.TENANT_DATABASE_URL ??
   "postgres://revualy:revualy@localhost:5432/revualy_dev";
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const DEMO_MODE = process.env.DEMO_MODE === "true";
+
+/** Paths that skip internal-secret validation in DEMO_MODE */
+const DEMO_PUBLIC_PATHS = ["/api/v1/demo/lead", "/api/v1/demo/start"];
+const DEMO_PUBLIC_PREFIX = "/api/v1/demo/";
+const DEMO_REPLY_SUFFIX = "/reply";
+
+function isDemoPublicRoute(url: string): boolean {
+  if (!DEMO_MODE) return false;
+  if (DEMO_PUBLIC_PATHS.includes(url)) return true;
+  // Match /api/v1/demo/:conversationId/reply
+  if (url.startsWith(DEMO_PUBLIC_PREFIX) && url.endsWith(DEMO_REPLY_SUFFIX)) {
+    return true;
+  }
+  return false;
+}
 
 export function resolveTenant(request: FastifyRequest): TenantContext {
+  const requestUrl = request.url.split("?")[0]; // strip query params
+
+  // Demo public routes: skip secret validation, no userId
+  if (isDemoPublicRoute(requestUrl)) {
+    return {
+      orgId: ENV_ORG_ID,
+      db: getTenantDb(ENV_ORG_ID, DATABASE_URL),
+      userId: null,
+    };
+  }
+
   const userId = request.headers["x-user-id"] as string | undefined;
   const secret = request.headers["x-internal-secret"] as string | undefined;
 
-  // Allow header override for dev/testing, but default to env var
-  const orgId =
-    (request.headers["x-org-id"] as string | undefined) ?? ENV_ORG_ID;
+  // In production single-tenant deployments, ignore x-org-id header override
+  const orgId = IS_PRODUCTION
+    ? ENV_ORG_ID
+    : (request.headers["x-org-id"] as string | undefined) ?? ENV_ORG_ID;
 
   // Require a valid internal secret to trust headers
   if (INTERNAL_SECRET) {

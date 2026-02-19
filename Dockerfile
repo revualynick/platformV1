@@ -36,6 +36,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 revualy
+
 # Copy built output and production deps
 COPY --from=build /app/package.json ./
 COPY --from=build /app/pnpm-lock.yaml ./
@@ -58,8 +61,15 @@ COPY --from=build /app/packages/chat-adapter-teams/dist ./packages/chat-adapter-
 COPY --from=build /app/packages/chat-adapter-teams/package.json ./packages/chat-adapter-teams/
 COPY --from=build /app/packages/ai-core/dist ./packages/ai-core/dist
 COPY --from=build /app/packages/ai-core/package.json ./packages/ai-core/
+
+# Copy API
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
+
+# Prune dev dependencies
+RUN pnpm prune --prod
+
+USER revualy
 
 EXPOSE 3000
 

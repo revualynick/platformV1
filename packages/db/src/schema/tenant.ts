@@ -837,7 +837,7 @@ export const authUsers = pgTable("auth_user", {
   image: text("image"),
   // Revualy-specific columns (synced on sign-in)
   orgId: uuid("org_id"),
-  tenantUserId: uuid("tenant_user_id"),
+  tenantUserId: uuid("tenant_user_id").unique(),
   role: varchar("role", { length: 50 }),
   teamId: uuid("team_id"),
   onboardingCompleted: boolean("onboarding_completed").default(false),
@@ -898,10 +898,10 @@ export const leads = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: varchar("email", { length: 255 }).notNull(),
     name: varchar("name", { length: 255 }),
-    conversationCount: integer("conversation_count").notNull().default(0),
-    lastConversationAt: timestamp("last_conversation_at", {
-      withTimezone: true,
-    }),
+    /** Conversations started today (reset when conversationDate changes) */
+    countToday: integer("count_today").notNull().default(0),
+    /** Date (YYYY-MM-DD) of the last conversation — used to reset countToday */
+    conversationDate: date("conversation_date"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

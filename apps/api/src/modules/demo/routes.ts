@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Queue } from "bullmq";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   questionnaires,
@@ -36,10 +36,27 @@ const replySchema = z.object({
   message: z.string().min(1).max(5000),
 });
 
+/** Get today's date string in YYYY-MM-DD format (UTC) */
+function todayDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Get today's conversation count for a lead.
+ * Returns 0 if the stored date differs from today (stale counter).
+ */
+function getDailyCount(lead: {
+  countToday: number;
+  conversationDate: string | null;
+}): number {
+  if (lead.conversationDate !== todayDateStr()) return 0;
+  return lead.countToday;
+}
+
 export const demoRoutes: FastifyPluginAsync = async (app) => {
   /**
    * POST /lead — Capture a lead email (demo mode only).
-   * Returns the lead record. Rate-limited by email.
+   * Returns the lead record with remaining conversations.
    */
   if (DEMO_MODE) {
     app.post("/lead", async (request, reply) => {
@@ -53,13 +70,14 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
         .where(eq(leads.email, body.email));
 
       if (existing) {
+        const used = getDailyCount(existing);
         return reply.send({
           id: existing.id,
           email: existing.email,
           name: existing.name,
           conversationsRemaining: Math.max(
             0,
-            MAX_DEMO_CONVERSATIONS_PER_DAY - dailyCount(existing),
+            MAX_DEMO_CONVERSATIONS_PER_DAY - used,
           ),
         });
       }
@@ -93,23 +111,25 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
       const { db, orgId } = request.tenant;
 
       let userId: string | null = request.tenant.userId;
+      let demoLeadEmail: string | undefined;
 
       // In demo mode, use lead email instead of auth
       if (DEMO_MODE) {
-        const demoEmail = request.headers["x-demo-email"] as
+        const headerEmail = request.headers["x-demo-email"] as
           | string
           | undefined;
-        if (!demoEmail) {
+        if (!headerEmail) {
           return reply
             .code(400)
             .send({ error: "x-demo-email header required for demo mode" });
         }
+        demoLeadEmail = headerEmail;
 
         // Check lead exists and rate limit
         const [lead] = await db
           .select()
           .from(leads)
-          .where(eq(leads.email, demoEmail));
+          .where(eq(leads.email, demoLeadEmail));
 
         if (!lead) {
           return reply
@@ -117,20 +137,28 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
             .send({ error: "Please register your email first via /lead" });
         }
 
-        if (dailyCount(lead) >= MAX_DEMO_CONVERSATIONS_PER_DAY) {
+        const usedToday = getDailyCount(lead);
+        if (usedToday >= MAX_DEMO_CONVERSATIONS_PER_DAY) {
           return reply.code(429).send({
             error: `Rate limit: max ${MAX_DEMO_CONVERSATIONS_PER_DAY} demo conversations per day`,
           });
         }
 
-        // Increment conversation count
-        await db
-          .update(leads)
-          .set({
-            conversationCount: sql`${leads.conversationCount} + 1`,
-            lastConversationAt: new Date(),
-          })
-          .where(eq(leads.id, lead.id));
+        // Atomic increment with date-aware reset
+        const today = todayDateStr();
+        if (lead.conversationDate === today) {
+          // Same day — increment
+          await db
+            .update(leads)
+            .set({ countToday: sql`${leads.countToday} + 1` })
+            .where(eq(leads.id, lead.id));
+        } else {
+          // New day — reset counter to 1
+          await db
+            .update(leads)
+            .set({ countToday: 1, conversationDate: today })
+            .where(eq(leads.id, lead.id));
+        }
 
         // Use first active user as the demo reviewer
         const [demoUser] = await db
@@ -154,24 +182,21 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Analysis queue not initialized" });
       }
 
-      // Find first active questionnaire that has themes
-      const allQuestionnaires = await db
-        .select()
+      // Find first active questionnaire that has themes (single JOIN, no N+1)
+      const questionnairesWithThemes = await db
+        .select({
+          id: questionnaires.id,
+          category: questionnaires.category,
+        })
         .from(questionnaires)
-        .where(eq(questionnaires.isActive, true));
+        .innerJoin(
+          questionnaireThemes,
+          eq(questionnaireThemes.questionnaireId, questionnaires.id),
+        )
+        .where(eq(questionnaires.isActive, true))
+        .limit(1);
 
-      let selectedQuestionnaire = null;
-      for (const q of allQuestionnaires) {
-        const qThemes = await db
-          .select()
-          .from(questionnaireThemes)
-          .where(eq(questionnaireThemes.questionnaireId, q.id));
-
-        if (qThemes.length > 0) {
-          selectedQuestionnaire = q;
-          break;
-        }
-      }
+      const selectedQuestionnaire = questionnairesWithThemes[0];
 
       if (!selectedQuestionnaire) {
         return reply.code(400).send({
@@ -210,6 +235,11 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
         },
       );
 
+      // Bind lead email to conversation state for ownership enforcement
+      if (demoLeadEmail) {
+        state.demoLeadEmail = demoLeadEmail;
+      }
+
       await setConversationState(state);
 
       return {
@@ -227,8 +257,8 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
    * POST /:conversationId/reply
    * Send a reply in a demo conversation. LLM generates the next question.
    *
-   * In DEMO_MODE: no auth required (conversation state has ownership).
-   * Otherwise: requires auth.
+   * In DEMO_MODE: ownership enforced via demoLeadEmail in conversation state.
+   * Otherwise: requires auth + reviewerId match.
    */
   app.post(
     "/:conversationId/reply",
@@ -253,9 +283,20 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Conversation not found or expired" });
       }
 
-      // Ownership check: only the conversation's reviewer can reply
-      // In demo mode, skip check (no authenticated user to compare)
-      if (!DEMO_MODE) {
+      // Ownership check
+      if (DEMO_MODE) {
+        // In demo mode, enforce via lead email bound to conversation state
+        const callerEmail = request.headers["x-demo-email"] as
+          | string
+          | undefined;
+        if (
+          !callerEmail ||
+          !state.demoLeadEmail ||
+          callerEmail !== state.demoLeadEmail
+        ) {
+          return reply.code(403).send({ error: "Forbidden" });
+        }
+      } else {
         const callerId = request.tenant.userId;
         if (state.reviewerId !== callerId) {
           return reply.code(403).send({ error: "Forbidden" });
@@ -292,15 +333,3 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 };
-
-/** Count conversations today for a lead (simple check using lastConversationAt) */
-function dailyCount(lead: {
-  conversationCount: number;
-  lastConversationAt: Date | null;
-}): number {
-  if (!lead.lastConversationAt) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (lead.lastConversationAt < today) return 0; // Last conversation was before today — reset
-  return lead.conversationCount;
-}

@@ -36,10 +36,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+
 # Next.js standalone output includes everything needed
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
+
+USER nextjs
 
 EXPOSE 3001
 

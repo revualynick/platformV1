@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import { users } from "@revualy/db";
+import crypto from "node:crypto";
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 if (!INTERNAL_SECRET) {
@@ -15,7 +16,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    */
   app.get("/lookup", async (request, reply) => {
     const secret = request.headers["x-internal-secret"] as string | undefined;
-    if (secret !== INTERNAL_SECRET) {
+    if (!secret || secret.length !== INTERNAL_SECRET.length || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(INTERNAL_SECRET))) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 

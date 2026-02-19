@@ -8,11 +8,14 @@ CREATE TABLE IF NOT EXISTS "auth_user" (
   "emailVerified" timestamp,
   "image" text,
   "org_id" uuid,
-  "tenant_user_id" uuid,
+  "tenant_user_id" uuid UNIQUE,
   "role" varchar(50),
   "team_id" uuid,
   "onboarding_completed" boolean DEFAULT false
 );
+
+CREATE INDEX IF NOT EXISTS "idx_auth_user_email" ON "auth_user" ("email");
+CREATE INDEX IF NOT EXISTS "idx_auth_user_tenant_user_id" ON "auth_user" ("tenant_user_id");
 
 CREATE TABLE IF NOT EXISTS "auth_account" (
   "userId" text NOT NULL REFERENCES "auth_user"("id") ON DELETE CASCADE,
@@ -46,8 +49,8 @@ CREATE TABLE IF NOT EXISTS "leads" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "email" varchar(255) NOT NULL,
   "name" varchar(255),
-  "conversation_count" integer NOT NULL DEFAULT 0,
-  "last_conversation_at" timestamp with time zone,
+  "count_today" integer NOT NULL DEFAULT 0,
+  "conversation_date" date,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   CONSTRAINT "uq_leads_email" UNIQUE ("email")
 );

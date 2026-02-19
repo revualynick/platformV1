@@ -207,7 +207,7 @@ export function createWorkers(config: WorkerConfig) {
 
           const db = getTenantDb(
             data.orgId,
-            process.env.TENANT_DATABASE_URL ?? "",
+            process.env.DATABASE_URL ?? "",
           );
 
           const state = await initiateConversation(db, { llm, adapters, analysisQueue: queues.analysisQueue }, {
@@ -248,7 +248,7 @@ export function createWorkers(config: WorkerConfig) {
 
             const db = getTenantDb(
               data.orgId,
-              process.env.TENANT_DATABASE_URL ?? "",
+              process.env.DATABASE_URL ?? "",
             );
 
             const result = await handleReply(
@@ -293,7 +293,7 @@ export function createWorkers(config: WorkerConfig) {
 
       const db = getTenantDb(
         orgId,
-        process.env.TENANT_DATABASE_URL ?? "",
+        process.env.DATABASE_URL ?? "",
       );
 
       await runAnalysisPipeline(db, llm, conversationId, console, orgId);
@@ -312,7 +312,7 @@ export function createWorkers(config: WorkerConfig) {
 
       const db = getTenantDb(
         orgId,
-        process.env.TENANT_DATABASE_URL ?? "",
+        process.env.DATABASE_URL ?? "",
       );
 
       const result = await runSchedulingPass(
@@ -337,7 +337,7 @@ export function createWorkers(config: WorkerConfig) {
         case "schedule_weekly_digests": {
           // Dispatcher: enqueue individual digest jobs per active user
           const { orgId } = job.data as { orgId: string };
-          const db = getTenantDb(orgId, process.env.TENANT_DATABASE_URL ?? "");
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
 
           const activeUsers = await db
             .select({ id: users.id, email: users.email })
@@ -362,7 +362,7 @@ export function createWorkers(config: WorkerConfig) {
             userId: string;
             email: string;
           };
-          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
 
           // Check preference
           const [pref] = await db
@@ -435,7 +435,7 @@ export function createWorkers(config: WorkerConfig) {
             escalationId: string;
           };
 
-          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
 
           // Check preference
           const [pref] = await db
@@ -477,7 +477,7 @@ export function createWorkers(config: WorkerConfig) {
             targetThisWeek: number;
           };
 
-          const db = getTenantDb(data.orgId, process.env.TENANT_DATABASE_URL ?? "");
+          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
 
           // Check preference
           const [pref] = await db
@@ -524,7 +524,7 @@ export function createWorkers(config: WorkerConfig) {
     "calendar-sync",
     async (job) => {
       const { orgId } = job.data as { orgId: string };
-      const db = getTenantDb(orgId, process.env.TENANT_DATABASE_URL ?? "");
+      const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
 
       // Get all users with calendar tokens
       const tokens = await db

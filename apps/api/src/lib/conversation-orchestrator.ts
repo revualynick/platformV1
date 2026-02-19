@@ -36,6 +36,8 @@ export interface ConversationState {
   phase: "opening" | "exploring" | "follow_up" | "closing";
   /** Message history for LLM context */
   messages: Array<{ role: "system" | "assistant" | "user"; content: string }>;
+  /** Lead email bound to this conversation (demo mode only) */
+  demoLeadEmail?: string;
 }
 
 // ── Orchestrator ─────────────────────────────────────────
