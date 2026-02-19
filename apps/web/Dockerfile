@@ -7,9 +7,15 @@ RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
+COPY packages/chat-core/package.json packages/chat-core/
+COPY packages/chat-adapter-slack/package.json packages/chat-adapter-slack/
+COPY packages/chat-adapter-gchat/package.json packages/chat-adapter-gchat/
+COPY packages/chat-adapter-teams/package.json packages/chat-adapter-teams/
+COPY packages/ai-core/package.json packages/ai-core/
 
 RUN pnpm install --frozen-lockfile --prod=false
 
@@ -18,8 +24,7 @@ FROM node:20-alpine AS build
 RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/ ./
 COPY . .
 
 # Build-time env vars (used during `next build` static analysis).

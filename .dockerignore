@@ -1,0 +1,10 @@
+node_modules
+.git
+.gitignore
+.next
+dist
+*.md
+.env*
+.turbo
+.vscode
+docker-compose*.yml
