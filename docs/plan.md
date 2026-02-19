@@ -1,35 +1,16 @@
-# Revualy — Technical Architecture Plan
+# Revualy — Technical Plan
 
-## Context
+## Brief
 
-Revualy is a greenfield AI-powered peer review platform where all feedback interactions happen via chat (Slack, Google Chat, Microsoft Teams). The system must be **chat-platform agnostic** — core logic fully decoupled from any specific platform. It continuously collects feedback (2-3 micro-interactions per week, 1-5 messages each), scores engagement quality, maps feedback to company core values, and surfaces insights through role-based dashboards.
+Revualy is an AI-powered peer review platform. Feedback interactions happen via chat (Slack, Google Chat, Microsoft Teams). The system is **chat-platform agnostic** — core logic is fully decoupled from any specific platform via an adapter pattern. It continuously collects feedback (2-3 micro-interactions per week, 1-5 messages each), scores engagement quality, maps feedback to company core values, and surfaces insights through role-based dashboards.
 
-**Beta plan:** First beta company is a Google Chat shop. Build order is **Slack first** (faster dev, better SDK) then **Google Chat fast-follow** (via official Google Chat API + Pub/Sub — Workspace admin access confirmed). This validates the adapter pattern early by proving platform-agnosticism with the second adapter.
+**Business model:** $3/employee/month. ~$49/mo inference cost per 100 employees (~83% gross margin).
 
----
+## Spec Decisions (fixed)
 
-## Architecture: Chat-Agnostic Modular Monolith
+**Architecture:** Chat-agnostic modular monolith. Single deployment, one CI/CD pipeline. Clear module boundaries via TypeScript packages — extractable to services later if needed.
 
-### Why Modular Monolith (Not Microservices)
-- Single deployment, one CI/CD pipeline — startup speed
-- In-process calls between modules (no network overhead)
-- Clear module boundaries via TypeScript packages — extractable to services later if needed
-
-### Chat Adapter Pattern (Hexagonal Architecture)
-
-The core abstraction that makes everything platform-agnostic:
-
-```
-packages/
-  chat-core/              → Unified types: ChatAdapter interface, InboundMessage, OutboundMessage
-  chat-adapter-slack/     → Implements ChatAdapter using @slack/bolt + Block Kit
-  chat-adapter-teams/     → Implements ChatAdapter using botbuilder + Adaptive Cards
-  chat-adapter-gchat/     → Implements ChatAdapter using Google Chat API + Cards v2
-```
-
-**Adding a new platform** = create a new adapter package implementing 5 methods. Zero changes to core logic, AI pipeline, or dashboards.
-
-**ChatAdapter interface:**
+**ChatAdapter interface** — adding a platform = implement 5 methods, zero core changes:
 ```typescript
 interface ChatAdapter {
   readonly platform: ChatPlatform;
@@ -41,502 +22,157 @@ interface ChatAdapter {
 }
 ```
 
-**Message flow:**
-```
-Platform webhook → Adapter (verify, normalize) → InboundMessage (canonical)
-    → Event Bus (BullMQ) → Conversation Manager → AI Pipeline
-    → OutboundMessage (canonical) → Adapter Registry → correct adapter → platform API
-```
+**Message flow:** Platform webhook → Adapter (verify, normalize) → InboundMessage → BullMQ → Conversation Manager → AI Pipeline → OutboundMessage → AdapterRegistry → correct adapter → platform API
 
-### LLM Gateway (Provider-Agnostic)
-Same pattern for AI — abstract behind a gateway with model tiers:
-- **Fast** (Haiku/GPT-4o-mini): engagement scoring, simple classification
-- **Standard** (Sonnet/GPT-4o): question generation, follow-ups
-- **Advanced** (Opus/GPT-4o): complex calibration, nuanced flagging
+**LLM tiers:** Fast (Haiku/GPT-4o-mini) for scoring/classification, Standard (Sonnet/GPT-4o) for questions/follow-ups, Advanced (Opus/GPT-4o) for calibration/analysis.
 
----
+| Layer | Technology |
+|-------|-----------|
+| **Language** | TypeScript (Node.js 20 LTS) |
+| **API** | Fastify 5 + BullMQ (5 queues, 5 workers) |
+| **Primary DB** | PostgreSQL 16 + pgvector (Drizzle ORM) |
+| **Graph DB** | Neo4j (relationship web queries) |
+| **Cache/Queue** | Redis 7 + BullMQ |
+| **Frontend** | Next.js 15 (App Router), Tailwind CSS v4, Recharts |
+| **Auth** | NextAuth.js (DB sessions, Google OAuth, `@auth/drizzle-adapter`) |
+| **Monorepo** | Turborepo + pnpm workspaces |
+| **Email** | Resend |
+| **Calendar** | Google Calendar API (`googleapis`) |
 
-## Tech Stack
-
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **Language** | TypeScript (Node.js 20 LTS) | Unified front/back. All chat SDKs have first-class TS support. |
-| **API** | Fastify | Fast, schema validation, plugin arch maps to modules |
-| **Primary DB** | PostgreSQL 16 + pgvector | Structured data, JSONB flexibility, RLS for multi-tenancy, vector embeddings |
-| **Graph DB** | Neo4j (AuraDB managed) | Relationship web queries (multi-hop, weighted paths, cluster detection) |
-| **Cache/Queue** | Redis 7 + BullMQ | Conversation state (hot path), job scheduling, leaderboard sorted sets |
-| **Frontend** | Next.js 15 (App Router) | SSR dashboards, React ecosystem, Tailwind CSS v4 |
-| **Charts** | Recharts | Engagement trends, values radar, calibration distributions |
-| **Auth** | NextAuth.js + Google/Microsoft SSO | Aligns with GChat/Teams identity providers |
-| **ORM** | Drizzle ORM | Type-safe, SQL-first, less magic than Prisma |
-| **Monorepo** | Turborepo + pnpm workspaces | Manages packages, incremental builds |
-| **CI/CD** | GitHub Actions | Standard, good Turborepo caching |
-| **Monitoring** | Sentry + Axiom | Error tracking + logs/metrics |
-
-### Hosting
-- **Early stage (months 1-6):** Railway — zero DevOps, PostgreSQL + Redis included, fast iteration
-- **Growth stage (6-18m):** AWS — ECS Fargate, RDS, ElastiCache, CloudFront
+**Data:** Database-per-org (control plane DB + tenant DBs, resolved via middleware). Neo4j for relationship web. Redis for conversation state (24h TTL), WebSocket notes, rate limiter, leaderboard.
 
 ---
 
-## Data Architecture
+## Reference
 
-### PostgreSQL — Database-Per-Org (Data Sovereignty)
-Each organization gets its own isolated PostgreSQL database. This ensures:
-
-- **Complete data sovereignty** — No risk of cross-tenant data leakage. Each org's data is physically separated.
-- **Regional hosting** — Databases can be provisioned in different regions per customer (EU, US, APAC) for compliance.
-- **Independent backups & lifecycle** — Per-org backup schedules, retention policies, and data deletion.
-- **Simpler queries** — No `org_id` filtering needed; the connection itself scopes to the tenant.
-
-**How it works:**
-- A **control plane database** (shared) stores: org registry, org-to-database connection mappings, platform-level config, billing metadata.
-- Each **tenant database** contains all org-specific tables.
-- On each API request, middleware resolves the authenticated user's org → looks up the database connection string → routes all queries to that org's database.
-- Connection pooling via PgBouncer or a pooler per database to manage connections efficiently.
-
-Key tables per tenant DB: `users`, `user_platform_identities`, `teams`, `core_values`, `user_relationships`, `questionnaires`, `questionnaire_themes`, `conversations`, `conversation_messages`, `feedback_entries`, `feedback_value_scores`, `kudos`, `engagement_scores`, `escalations`, `escalation_audit_log`, `questions`, `interaction_schedule`, `pulse_check_triggers`, `calendar_events`, `notification_preferences`, `calendar_tokens`
-
-- Encryption at rest per database (RDS AES-256 + pgcrypto for sensitive columns like `raw_content`)
-- pgvector extension enabled per tenant DB for semantic search
-
-### Neo4j (Relationship Web) — Per-Org Isolation
-- `(:User)-[:WORKS_WITH {strength, source, meetingCount30d, lastReviewedAt}]->(:User)`
-- `(:User)-[:REPORTS_TO]->(:User)`
-- `(:User)-[:MEMBER_OF]->(:Team)`
-- Synced from tenant PostgreSQL via event-driven updates
-- Used for: peer selection, web visualization, cross-team collaboration analysis
-- Isolated per org using separate Neo4j databases (supported in Neo4j 4+) or `orgId` property scoping on AuraDB
-
-### Redis (Hot State)
-- Active conversation state (JSON, 24h TTL)
-- Leaderboard sorted sets
-- Rate limiter state
-- Session cache
-
----
-
-## Core System Modules
-
-| Module | Responsibility |
-|--------|---------------|
-| `chat` | Adapter registry, webhook handling, outbound messaging |
-| `conversation` | Multi-turn state machine (initiate → respond → follow-up → close) |
-| `ai` | LLM gateway, question generation, analysis pipelines |
-| `feedback` | Storage, retrieval, anonymization, export |
-| `relationships` | Neo4j graph management, calendar sync, connection strength |
-| `calibration` | Leniency/severity detection, cross-team comparison, outliers |
-| `engagement` | Interaction scoring, weekly leaderboard computation |
-| `kudos` | Real-time capture, weekly digest generation |
-| `escalation` | Flagging pipeline, HR feed, audit trail |
-| `users` | Auth, profiles, onboarding state, preferences |
-| `org` | Company config, core values, teams, manager hierarchy |
-| `integrations` | Calendar sync, company comms ingestion |
-| `pulse` | Comms listener, organic follow-up, sentiment aggregation |
-
----
-
-## AI Pipeline
-
-### Questionnaire Model
-
-Questionnaires define the *direction* of data collection, not rigid scripts. Each questionnaire contains **themes** — high-level intents describing what data to collect. The AI rewords themes into natural conversation based on context, relationship history, and conversational flow.
-
-**Structure:**
-```
-Questionnaire
-├── name, category, source (built_in | custom | imported)
-├── verbatim: boolean  ← locks AI to exact wording when true
-└── themes[]
-    ├── intent: what you want to learn
-    ├── dataGoal: what data this produces
-    ├── examplePhrasings[]: how AI might phrase it
-    └── coreValue: optional value alignment
-```
-
-**Sources:**
-- **Built-in** — System-provided questionnaires (Sprint Peer Review, Weekly Self-Reflection)
-- **Custom** — Created in-platform by admins
-- **Imported** — Loaded from plain text (e.g. existing company survey templates)
-
-**Verbatim mode:** When HR needs consistent wording for benchmarking or compliance, toggling verbatim locks the AI to the exact first example phrasing. Default is adaptive mode where AI rewords freely.
-
-**AI-discovered themes:** The AI continuously analyzes team communications and feedback patterns to suggest new question themes admins might not have considered (e.g. "cross-team handoff friction detected in 14 Slack messages"). Admins can accept themes into questionnaires or dismiss them.
-
-### Interaction Scheduling (daily BullMQ cron)
-- Check each user's weekly schedule (target: 2-3 interactions)
-- Pick optimal time based on timezone + activity patterns
-- Select interaction type (peer review, self-reflection, 360, pulse check)
-- Select review subject via Neo4j (strongest connections not reviewed recently)
-- Select questionnaire and themes for the interaction type
-- Enqueue delayed conversation job
-
-### Conversation Orchestrator
-- Creates conversation record + Redis state
-- Selects themes from the assigned questionnaire
-- Generates contextual opening question (adapts theme phrasing to context, or uses verbatim wording)
-- Handles inbound replies, decides follow-up vs. close (1-5 messages)
-- On close: enqueues async analysis job
-
-### Feedback Analysis (async post-conversation)
-Runs in parallel:
-- Sentiment analysis
-- Engagement quality scoring (word count, specificity, examples, elaboration)
-- Core values mapping (per-value scores with evidence)
-- Problematic language detection (coaching vs. escalation severity)
-- Embedding generation (pgvector)
-- AI summary generation
-
-### Calibration Engine (weekly batch)
-- Reviewer leniency/severity: flag if >1.5 std deviations from org mean
-- Cross-team comparison: similar roles across teams
-- Outlier detection: individual ratings far from consensus
-- Blind review mode: strip names/demographics
-
----
-
-## LLM Cost Model (100-Person Company)
-
-Based on 8 LLM call sites across conversation orchestration and the analysis pipeline. Assumes **3 conversations per person per week** (~1,300/month) with ~4 exchange rounds each.
-
-### Per-Conversation Token Usage
-
-| Call | Tier | Input | Output |
-|------|------|------:|-------:|
-| Opening question | standard | ~400 | ~80 |
-| Decision (×3 rounds) | fast | ~2,000 | ~15 |
-| Follow-up questions (×3) | standard | ~2,700 | ~240 |
-| Sentiment analysis | fast | ~1,700 | ~5 |
-| Engagement scoring | fast | ~1,800 | ~30 |
-| AI summary | standard | ~1,700 | ~150 |
-| Problematic language flags | standard | ~1,800 | ~100 |
-| Core values mapping | fast | ~2,200 | ~300 |
-
-### Monthly Cost Estimate
-
-| Tier | Model | Input Tokens | Output Tokens | Cost |
-|------|-------|-------------:|--------------:|-----:|
-| fast | Claude Haiku 4.5 ($1/$5 per MTok) | 10.0M | 455K | ~$12 |
-| standard | Claude Sonnet 4.6 ($3/$15 per MTok) | 8.6M | 741K | ~$37 |
-| | | | **Total** | **~$49/mo** |
-
-### Pricing
-
-At **$3/employee/month**, a 100-person company generates **$300/month revenue** against ~$49 in inference costs — **~83% gross margin** on AI spend. The analysis pipeline runs async via BullMQ and qualifies for Anthropic's batch API (50% discount), which could reduce inference costs to ~$30-35/month.
-
-The `advanced` tier (Opus) is not used in any current call site. Cost scales linearly with headcount.
-
----
-
-## Monorepo Structure
+### Monorepo Structure
 
 ```
 revualy/
 ├── packages/
-│   ├── chat-core/              # ChatAdapter interface + canonical types
-│   ├── chat-adapter-slack/     # Slack implementation (complete)
-│   ├── chat-adapter-teams/     # Teams implementation (stub — Phase 5)
-│   ├── chat-adapter-gchat/     # Google Chat implementation (stub — Phase 4)
-│   ├── ai-core/                # LLM gateway + provider adapters
-│   ├── shared/                 # Domain types, utilities
-│   └── db/                     # Drizzle schema (control-plane + tenant), migrations
+│   ├── shared/                 # Domain types, crypto utils
+│   ├── db/                     # Drizzle schema (control-plane + tenant), Neo4j ops, 14 migrations
+│   ├── chat-core/              # ChatAdapter interface + AdapterRegistry
+│   ├── chat-adapter-slack/     # Slack adapter (complete)
+│   ├── chat-adapter-gchat/     # Google Chat adapter (complete — needs Workspace admin setup)
+│   ├── chat-adapter-teams/     # Teams adapter (stub — Phase 5)
+│   └── ai-core/                # LLM gateway + provider adapters (abstraction only)
 ├── apps/
-│   ├── api/                    # Fastify server + BullMQ workers
-│   │   └── src/
-│   │       ├── modules/        # auth, chat, conversation, feedback, manager, notifications, etc. (16 route files)
-│   │       ├── lib/            # email, calendar, availability, interaction-scheduler, analysis-pipeline
-│   │       └── workers/        # conversation, analysis, scheduler, notification, calendar-sync queues
-│   └── web/                    # Next.js 15 dashboards
-│       └── src/app/
-│           ├── (employee)/     # Employee: dashboard, feedback, engagement, kudos
-│           ├── (manager)/      # Manager: team overview, feedback, flagged, leaderboard, questions, org-chart
-│           └── (admin)/        # Admin: settings, values, questionnaires, integrations, escalations
-├── docs/                       # Architecture docs
+│   ├── api/                    # Fastify server (16 route modules) + BullMQ workers (5 queues)
+│   └── web/                    # Next.js 15 dashboards (employee, manager, admin)
 └── docker-compose.yml          # PostgreSQL+pgvector, Redis 7, Neo4j 5
 ```
 
----
+### Core Modules
 
-## API Design (REST + OpenAPI)
+| Module | Responsibility |
+|--------|---------------|
+| `chat` | Adapter registry, webhook handling, outbound messaging |
+| `conversation` | Multi-turn state machine (initiate → explore → follow-up → close) |
+| `ai` | LLM gateway, question generation, analysis pipeline |
+| `feedback` | Storage, retrieval, flagged items, RBAC-filtered access |
+| `relationships` | Neo4j graph management, calendar sync, connection strength |
+| `engagement` | Interaction scoring, weekly leaderboard |
+| `kudos` | Real-time capture, weekly digest generation |
+| `escalation` | Flagging pipeline, CRUD, audit trail notes |
+| `one-on-one` | Live sessions (WebSocket), agenda generator, action items |
+| `users` | Auth, profiles, onboarding, preferences |
+| `org` | Core values, teams, manager hierarchy |
+| `integrations` | Google Calendar OAuth, token management |
+| `notifications` | Email (Resend), preferences, weekly digest/flag alert/nudge workers |
+
+### AI Pipeline
+
+**Questionnaires** define direction of data collection via themes (not rigid scripts). AI rewords themes into natural conversation. Verbatim mode locks to exact wording for compliance.
+
+**Conversation Orchestrator:** Create conversation → select themes → generate opening → handle replies (1-5 messages) → close → enqueue analysis.
+
+**Feedback Analysis (async, parallel):** Sentiment → Engagement scoring → Core values mapping → Problematic language detection → AI summary. Returns `{ success, failedSteps, feedbackEntryId }`.
+
+**Interaction Scheduler (daily cron):** Check weekly targets → pick optimal time (timezone + calendar) → select subject via Neo4j → select questionnaire → enqueue delayed job.
+
+### API Routes
 
 ```
-/api/v1/auth/*                    # Login, SSO, token refresh
+/api/v1/auth/*                    # Login, SSO, session
+/api/v1/users/:id                 # Profile CRUD
 /api/v1/users/:id/feedback        # Feedback (RBAC-filtered)
 /api/v1/users/:id/relationships   # Relationship web
 /api/v1/users/:id/engagement      # Engagement scores
-/api/v1/users/:id/export          # Data export
-/api/v1/kudos                     # Create + list digest
+/api/v1/users/:id/manager         # Set/update manager
+/api/v1/users/me/onboarding       # Complete onboarding
+/api/v1/kudos                     # Create + list
 /api/v1/leaderboard               # Weekly leaderboard
 /api/v1/feedback/flagged           # Flagged items (manager/HR)
-/api/v1/escalations               # HR feed
-/api/v1/admin/org                  # Org config, core values
-/api/v1/admin/questionnaires      # Questionnaire CRUD + theme management
-/api/v1/admin/relationships        # Graph overrides
-/api/v1/admin/integrations         # Platform connections
-/api/v1/notifications/preferences  # Notification preferences (GET/PATCH)
-/api/v1/integrations/google/*      # Google Calendar OAuth (authorize, callback, status)
-/api/v1/manager/questionnaires     # Manager-scoped question bank CRUD
-/api/v1/manager/org-chart          # Manager reporting tree + threads
-/api/v1/manager/relationships      # Manager-scoped relationship creation
-/webhooks/slack/*                  # Slack adapter
-/webhooks/teams/*                  # Teams adapter
-/webhooks/gchat/*                  # Google Chat adapter
+/api/v1/escalations               # CRUD + audit trail notes
+/api/v1/conversations             # List, view, force-close
+/api/v1/one-on-one-sessions       # Sessions, action items, agenda, WebSocket tokens
+/api/v1/admin/org                 # Org config, core values CRUD
+/api/v1/admin/questionnaires      # Questionnaire + theme CRUD
+/api/v1/manager/questionnaires    # Manager-scoped question bank
+/api/v1/manager/org-chart         # Reporting tree
+/api/v1/manager/notes             # Private notes CRUD
+/api/v1/notifications/preferences # GET/PATCH notification settings
+/api/v1/integrations/google/*     # Calendar OAuth (authorize, callback, status)
+/api/v1/demo/*                    # Demo conversation start/reply
+/webhooks/slack/*                 # Slack adapter
+/webhooks/gchat/*                 # Google Chat adapter
+/webhooks/teams/*                 # Teams adapter (stub)
 ```
 
----
+### Frontend
 
-## Frontend Design System
+**Design system:** "Warm Editorial" — Fraunces (display) + Outfit (body), cream/forest/terracotta/warm stone palette, rounded-2xl cards, staggered entry animations, Recharts with forest/terracotta colors.
 
-"Warm Editorial" — intentionally avoids generic SaaS/AI aesthetics.
+**Employee pages:** Dashboard overview, feedback history, engagement breakdown, kudos, 1:1 session viewer, onboarding wizard, settings (notification prefs)
 
-- **Fonts:** Fraunces (display/serif) + Outfit (body/sans)
-- **Palette:** Cream (#FFFBF5), Forest green (#2D5A3D), Terracotta (#C4654A), warm stone scale
-- **Cards:** rounded-2xl, warm shadows, staggered entry animations
-- **Textures:** Subtle grain overlay, dot-grid patterns
-- **Navigation path bar:** A breadcrumb-style path bar (e.g. "Team → Sarah Chen → Feedback") that stays hidden by default and reveals on hover over the top edge of the content area. Slides down with a subtle transition. Shows the full navigation path so users always know where they are, without eating vertical space. Appears across all dashboard layouts (employee, manager, admin).
-- **Charts:** Recharts (LineChart, RadarChart, AreaChart) with forest/terracotta palette
+**Manager pages:** Team overview with trend chart, member grid, flagged items, leaderboard, per-reportee detail (engagement, values, feedback, notes, 1:1 sessions), question bank, org chart
 
-### Dashboard Pages
+**Admin pages:** Org settings, core values CRUD, questionnaire builder, integrations, escalation feed with audit trail
 
-**Employee** (`/dashboard`)
-- Overview: engagement ring, stats, upcoming interaction, trend chart, values radar, recent feedback
-- `/dashboard/feedback` — Full feedback history with sentiment, values, quality scores
-- `/dashboard/engagement` — Score breakdown, weekly metrics table, trend chart
-- `/dashboard/kudos` — Received/given kudos with value badges
+### Verification Checklist
 
-**Manager** (`/team`)
-- Overview: team stats, trend chart (high/avg/low bands), leaderboard, member grid, flagged items
-- `/team/feedback` — All team feedback with reviewer→subject flow, per-member sidebar
-- `/team/flagged` — Language/behavior flags, at-risk members, coaching tips
-- `/team/leaderboard` — Rankings with historical weeks, participation stats
-- `/team/[userId]` — **Per-reportee page** (like Culture Amp's 1-on-1 view). Dedicated page per direct report showing their engagement history, values radar, recent feedback, and a persistent **1-1 notes** section. Managers can add timestamped private notes (talking points, coaching observations, follow-up items). Notes are only visible to the manager, not the employee or admin. Notes persist across meetings and form a running record for performance conversations. Data model: `manager_notes` table (managerId, subjectUserId, content, createdAt, updatedAt).
-
-**Admin** (`/settings`)
-- Overview: org stats, core values list, integrations, escalation feed
-- `/settings/values` — Core values CRUD with alignment scores
-- `/settings/questions` — Questionnaire builder with themes, verbatim toggle, AI-discovered themes
-- `/settings/integrations` — Platform connection cards with descriptions
-- `/settings/escalations` — Detail view with audit trail timeline, related feedback
+- **Chat agnosticism:** Same OutboundMessage through each adapter → verify platform-native formatting
+- **Conversation flow:** Schedule → initiate → 3-turn → close → verify feedback_entries + engagement_scores
+- **Questionnaire modes:** Adaptive produces varied phrasing; verbatim produces identical wording
+- **RBAC:** Employee can't access flagged, manager sees team only, admin sees all
+- **Escalation:** Flagged feedback → HR feed, not manager dashboard
 
 ---
 
-## Implementation Phases
+## Active Context
 
-### Phase 1: Foundation (Weeks 1-4) ✅
-- Monorepo setup (Turborepo, Docker Compose for local dev)
-- PostgreSQL schema + Drizzle ORM (control plane + tenant)
-- `chat-core` package with adapter interface + registry
-- Slack adapter (complete), GChat/Teams adapters (stubs)
-- `ai-core` LLM gateway with model tiers
-- Fastify API with 14 module route files + BullMQ workers
-- Next.js dashboard shells (3 role-based views)
-- GitHub Actions CI pipeline
-- All 13 dashboard pages with production-grade UI
+<!-- Append new entries at the bottom of this section. Most recent = last. -->
 
-### Phase 2: Core Loop (Weeks 5-8) ✅
-- ✅ `user_relationships` table — threads with tags, strength, source (mirrors org chart frontend)
-- ✅ `questionnaires` + `questionnaire_themes` tables — theme-based questionnaire model
-- ✅ Shared types: `UserRelationship`, `RelationshipGraph`, `Questionnaire`, `QuestionnaireTheme`
-- ✅ Neo4j driver setup — `syncReportsTo`, `syncThread`, `getRelationshipWeb` graph operations
-- ✅ Tenant context middleware — per-request DB resolution via `tenantPlugin`
-- ✅ Relationships API — full CRUD (threads + reporting lines + org graph endpoint)
-- ✅ Questionnaires API — full CRUD with themes, verbatim toggle
-- ✅ Users API — profile CRUD, engagement scores (wired to Drizzle)
-- ✅ Feedback API — RBAC-filtered feedback, flagged items, export (wired to Drizzle)
-- ✅ Org admin API — core values CRUD, questionnaire management, relationship overrides
-- ✅ Conversation orchestrator — multi-turn state machine (initiate → explore themes → follow-up → close)
-- ✅ AI question generation — theme-aware, verbatim mode support, contextual follow-ups via LLMGateway
-- ✅ Feedback analysis pipeline — sentiment, engagement scoring, core values mapping, language flagging, AI summary (parallel)
-- ✅ Interaction scheduler — daily cron, weekly targets, subject selection via relationship strength, delayed job enqueue
-- ✅ Chat webhook → BullMQ pipeline — inbound messages enqueued as conversation reply jobs
-- ✅ Conversation admin API — list, view with messages, force-close
-- ✅ User/org/team models + auth (NextAuth.js with Google/Microsoft SSO, RBAC middleware, session provider)
-- ✅ Wire dashboards to real API data (all employee + manager pages via Promise.allSettled + mock fallback)
-- ✅ Redis + BullMQ wiring — `server.ts` initializes state Redis, creates queues, starts workers, injects conversation queue into chat routes. Workers share queue instances. Graceful shutdown on SIGTERM/SIGINT.
-- ✅ Code debt sweep — Zod validation, FK constraints + indexes, idempotent seed, LRU tenant pool (max 50)
-- ✅ Admin mutation buttons — Values Add/Edit/Delete, Questionnaires New/Edit/Verbatim toggle, Overview Add/Edit. Server Actions + client component islands (Modal, ValuesList, ValuesCard, QuestionnairesList). Soft-delete for values (isActive: false).
+### What's Built (Phases 1-4) ✅
 
-**Remaining stubs (to be completed in later phases):**
-- Leaderboard endpoint (returns empty — needs Redis sorted sets, Phase 4)
-- Escalation module (returns empty — needs audit trail, Phase 4)
-- Reflections page (frontend mock only — no self-reflection API, Phase 5)
-- AI provider SDKs not integrated (LLM gateway abstraction exists, no Anthropic/OpenAI SDK wired)
-- Outlook calendar integration (Phase 5 — Google Calendar done in Phase 3)
+**Foundation:** Monorepo (Turborepo + pnpm), PostgreSQL schema (14 migrations via Drizzle), control-plane + tenant DB pattern, Slack adapter (complete), GChat adapter (complete), Teams adapter (stub), LLM gateway abstraction, Fastify API (16 route modules), BullMQ (5 queues + workers + graceful shutdown), Next.js dashboards (all pages wired to live API with mock fallback).
 
-### Phase 2.5: Marketing Site + Demo Funnel
-- SEO-optimized landing pages (public routes in Next.js app, no auth required)
-- Pages: Hero/landing (`/`), Features, Pricing, About — all server components for crawlability
-- Meta tags, Open Graph, JSON-LD structured data, semantic HTML
-- CTA flow funnels to live demo dashboards (`/dashboard`, `/team`, `/settings`)
-- Demo mode: visitors can explore all 13 dashboard pages with mock data (no login wall)
-- Design: uses existing "Warm Editorial" system (Fraunces/Outfit, forest/terracotta/cream palette)
-- Built with frontend-design plugin for distinctive, non-generic aesthetics
-- Google Search Console + sitemap.xml + robots.txt
-- **Copy direction:** Avoid generic "feedback" language. Lead with *real-time insight* — the value prop is that managers and teams get continuous signal about culture, values alignment, and team health as it happens, not in a quarterly report. Frame the product around insight and visibility, not process and reviews. Key phrases: "real-time insight into your team's culture", "see what's happening, not what happened", "continuous signal, not annual noise".
+**Core Loop:** Conversation orchestrator (multi-turn state machine), AI question generation (theme-aware, verbatim support), feedback analysis pipeline (sentiment, engagement, values, flagging, summary — parallel with graceful degradation), interaction scheduler (daily cron, calendar-aware, Neo4j peer selection), Redis conversation state, full CRUD for users, relationships, questionnaires, feedback, org config.
 
-### Phase 3: Intelligence (Weeks 9-12) ✅
-- ✅ **Kudos system** — Full CRUD API with user name joins (`giverName`/`receiverName`), Zod validation (`createKudosSchema`, `kudosQuerySchema`), Send Kudos modal (client component with receiver/value selects), server action, dashboard page wired to live API
-- ✅ **Email notifications** — Resend wrapper (stub-logs without API key), three HTML email templates (weekly digest, flag alert, nudge) with warm editorial palette, notification preferences table + GET/PATCH API, worker cases for `schedule_weekly_digests` (Monday 9am UTC cron), `weekly_digest`, `flag_alert`, `nudge`. RFC 8058 one-click unsubscribe headers.
-- ✅ **Calendar-aware interaction scheduling**
-  - ✅ Google Calendar OAuth (authorize/callback/status routes via `googleapis`)
-  - ✅ Token storage in `calendar_tokens` table with refresh-on-expiry
-  - ✅ Calendar sync worker (15-min repeatable cron) — fetches next 7 days, upserts into `calendar_events`
-  - ✅ Availability engine: `findFreeSlots()` finds gaps, `scoreSlot()` prefers mid-morning/mid-afternoon, `findBestSlot()` combines both
-  - ✅ `calculateSendTime()` now async — checks calendar availability first, falls back to preferred time + jitter
-  - ✅ Auto-relationship inference from co-attendees (>=2 shared meetings → `user_relationships` with `source: "calendar"`)
-  - Outlook sync deferred to Phase 5
-- ✅ **Manager question bank + sub-org chart**
-  - ✅ `createdByUserId` + `teamScope` columns on `questionnaires` table (migration 0004)
-  - ✅ Manager-scoped API routes: GET/POST/PATCH questionnaires (ownership check), GET org-chart (BFS reporting tree), POST relationships (both users must be in tree)
-  - ✅ `getReportingTree()` BFS helper walks `users.managerId` for full direct/indirect report tree
-  - ✅ Question bank page ("My Team" vs "Org-Wide" sections) + Create Questionnaire modal (name, category, verbatim, dynamic themes)
-  - ✅ Org chart page: CSS flexbox tree with recursive `TreeNode` component, relationship threads overlay, stats cards
-  - ✅ `selectQuestionnaire()` updated to prefer team-scoped questionnaires for the user's team
-  - RBAC enforced: `requireRole("manager")` preHandler, ownership checks on PATCH, tree-scope checks on relationships
-- Core values mapping in feedback analysis (already implemented in Phase 2 analysis pipeline)
-- Language flagging + manager coaching alerts (already implemented in Phase 2 analysis pipeline)
-- AI theme discovery from comms analysis (deferred — requires LLM SDK wiring)
+**Intelligence:** Kudos system, email notifications (Resend + 3 templates + worker), Google Calendar sync (OAuth, token refresh, event upsert, co-attendee relationship inference), manager question bank + org chart, admin mutation UIs.
 
-**Not implemented in Phase 3 (deferred):**
-- Demo chat interactions (animated preview + live interactive demo) — deferred to Phase 4
-- Outlook calendar integration — deferred to Phase 5
+**Phase 4:** 1:1 live sessions (WebSocket, agenda generator, action items), rate limiting, leaderboard API (DB-backed, weighted composite), escalation pipeline (5 endpoints, audit trail), Google Chat adapter, notification preferences page, onboarding wizard (3-step + middleware redirect).
 
-**New dependencies added:** `resend`, `googleapis`
-**New migrations:** 0002 (notification_preferences), 0003 (calendar_tokens), 0004 (questionnaire scope columns)
+**Auth:** NextAuth.js with DB sessions (`@auth/drizzle-adapter`), Google OAuth, RBAC (`requireAuth`/`requireRole` preHandlers), edge-safe cookie middleware, role/onboarding guards in server layouts, auth sync to control plane.
 
-### Phase 4: Google Chat Adapter + Beta Launch (Weeks 13-16)
-- [x] **1:1 Meeting Sessions** — replaced chat-style notes with real-time live sessions
-  - Database: `one_on_one_sessions`, `one_on_one_action_items`, `one_on_one_agenda_items` (migration 0007)
-  - REST API: full CRUD for sessions, action items, agenda items (10 endpoints)
-  - Agenda generator: auto-populates from open action items, flagged feedback, kudos, team questionnaire themes
-  - WebSocket (`@fastify/websocket`): real-time notes relay, presence, request-edit, Redis-backed persistence
-  - Frontend: `SessionEditor` (manager), `SessionViewer` (employee), `SessionList`, schedule form
-  - Pages: manager `/team/members/[userId]/one-on-one`, employee `/dashboard/one-on-ones/[sessionId]`
-- [x] **Rate limiting** — `@fastify/rate-limit` with 100 req/min global limit, tenant-aware key generator
-- [x] **LLM gateway route injection** — `app.llm` and `app.adapters` decorated on FastifyInstance with TS declaration merging
-- [x] **Leaderboard API** — real DB query on `engagement_scores` + `users`, weighted composite score, ISO week grouping
-- [x] **Escalation pipeline** — expanded schema (migration 0008), standalone filing, full CRUD (5 endpoints), audit trail notes
-  - Types: harassment, bias, retaliation, other; Severities: low/medium/high/critical
-  - Statuses: open → investigating → resolved/dismissed
-  - Any user can file, admins manage, reporter + admin can view/add notes
-- [x] **Google Chat adapter** — verification token auth (no JWT), `sendMessage` via Chat API Cards v2, `resolveUser` via members API
-- [x] **Notification preferences page** — `/dashboard/settings` with toggle rows, server actions, sidebar nav link
-- [x] **Onboarding wizard** — 3-step flow (profile, notifications, calendar), middleware redirect, `PATCH /users/me/onboarding` endpoint
-- Google Workspace app setup + admin installation at beta company
-- Demo chat interactions (animated preview + live interactive demo, deferred from Phase 3)
-- **Beta launch with Google Chat company**
+**Code quality:** Two code review rounds (93 findings, all resolved). TOCTOU race prevention, escalation authorization, circular manager detection, input validation, DB constraints, error boundaries, prompt injection sanitization.
 
-**New dependencies added (Phase 4):** `@fastify/rate-limit`
-**New migrations (Phase 4):** 0008 (escalation pipeline expansion)
+### Beta Launch Blocklist
+- [ ] Google Workspace admin setup — install GChat app at beta company
+- [ ] Wire LLM provider SDK (Anthropic) into `ai-core` gateway
+- [ ] End-to-end test: GChat webhook → conversation → analysis → dashboard
+- [ ] Demo chat interactions page (animated preview + live interactive)
+- [ ] Production deployment (Railway) + env config
 
-### Phase 5: Advanced Features + Teams (Weeks 17-20)
-- Calibration engine
-- Pulse check: comms ingestion + follow-up
-- 360 manager reviews (aggregated upward feedback)
-- Self-reflection interactions + reflections page
-- Relationship web visualization (D3.js — replace CSS flexbox org chart)
-- Data export, blind review mode
-- Microsoft Teams adapter (third platform)
-- Outlook calendar integration
-- AI theme discovery (requires LLM SDK wiring)
-
----
-
-## Verification
-
-- **Chat agnosticism:** Write a test that sends the same OutboundMessage through each adapter and verifies platform-native formatting
-- **Conversation flow:** End-to-end test: schedule → initiate → 3-turn conversation → close → verify feedback_entries + engagement_scores populated
-- **Questionnaire modes:** Verify adaptive mode produces varied phrasing across conversations; verbatim mode produces identical wording
-- **RBAC:** Test that employee cannot access `/api/v1/feedback/flagged`, manager can see team but not other teams, admin sees all
-- **Encryption:** Verify `feedback_entries.raw_content` is encrypted at rest, decrypts correctly on read
-- **Leaderboard:** Run 10 scored interactions, verify top 3 ranking is correct
-- **Escalation:** Submit flagged feedback, verify it appears in HR feed and not in manager dashboard
-- **Calibration:** Seed biased reviewer data, verify leniency/severity detection fires
-
----
-
-## Code Review Findings
-
-Consolidated from three review passes (manual static analysis, Claude review, Codex/GPT review). First review (40 findings) had **37 fixed**; remaining 3 were acceptable pre-beta.
-
-**Batch fix (2026-02-18):** 42 of 55 findings fixed in one pass. Changes span 18 files across API, packages, and web app. All typechecks pass. Remaining items are architectural (multi-tenant isolation, N+1 query batching) or require deeper refactoring (calendar token encryption, full WS auth migration).
-
-### Critical / High (16) — 12 fixed, 4 open
-
-- [x] 1. **Header-based auth bypass in non-production** — Invalid secret now returns 401 instead of silent fallback
-- [x] 2. **Invalid internal secret silently falls back to `dev-org`** — Same fix: `tenant-context.ts` rejects invalid secrets
-- [ ] 3. **Webhook tenant attribution is unsafe** — Requires platform metadata → tenant mapping (architectural)
-- [x] 4. **WebSocket token exposed in URL** — Fixed in prior review: uses subprotocol auth
-- [ ] 5. **Calendar OAuth tokens stored unencrypted** — Requires pgcrypto integration (deferred)
-- [x] 6. **Prompt injection risk in LLM prompts** — Fixed in prior review: `stripControlChars` + `<user_provided_data>` tags
-- [x] 7. **Conversation lock can expire mid-job** — TTL increased to 60s + automatic heartbeat every 15s
-- [x] 8. **Slack signature verification uses re-serialized body** — Fixed in prior review: `__rawBody` passthrough in chat routes
-- [x] 9. **`LLMGateway.embed()` is broken** — Factory now registers embedding provider when adapter supports it
-- [x] 10. **Neo4j operations have no error handling** — Fixed in prior review: all ops have try-catch with console.error
-- [x] 11. **Unvalidated WebSocket message payloads** — Fixed in prior review: type guards on all WS messages
-- [x] 12. **Missing transaction in initiateConversation** — Fixed in prior review: uses `db.transaction()`
-- [x] 13. **Hardcoded sidebar usernames** — Fixed in prior review: reads from `session.user?.name`
-- [x] 14. **Missing session ownership check (1:1)** — Fixed in prior review: `employeeId` check on page load
-- [x] 15. **Tenant pool eviction can leak memory** — Fixed in prior review: `seq` tiebreaker prevents stale eviction
-- [ ] 16. **Multi-tenant isolation is logical only** — Requires control plane DB routing (architectural)
-
-### Medium — Security / Authorization (6) — 5 fixed, 1 open
-
-- [ ] 17. **IDOR: any user can read any user profile** — Intentional for now: users need to see colleague profiles for peer review context. Will scope in Phase 5 with visibility settings.
-- [x] 18. **IDOR: any user can read anyone's kudos** — Employees now scoped to own kudos; managers/admins can view others
-- [x] 19. **Demo conversation reply lacks ownership check** — Checks `state.reviewerId === callerId`
-- [x] 20. **Error handler leaks internal messages** — Sanitized to safe messages per status code
-- [x] 21. **Missing input validation on admin form submissions** — All admin server actions now use Zod schemas
-- [x] 22. **No runtime validation on webhook/queue payloads** — WS `content_update` validates `typeof msg.content === "string"`
-
-### Medium — Database & Schema (9) — 8 fixed, 1 open
-
-- [x] 23. **Migration `0010` references control-plane table in tenant migrations** — Guarded with `IF EXISTS` table check
-- [x] 24. **Migration `0011` exists but missing from journal** — Added to `_journal.json`
-- [x] 25. **Schema vs migration mismatch on cascade behavior** — Migration 0012 recreates FK with `ON DELETE CASCADE`
-- [x] 26. **Escalation schema allows orphaned records** — Migration 0012 adds CHECK: `feedback_entry_id IS NOT NULL OR reporter_id IS NOT NULL`
-- [x] 27. **Missing composite indexes for hot query patterns** — 4 composite indexes added (schema + migration 0012)
-- [ ] 28. **No DB-level check constraints for enums/time ordering** — Deferred: app-level validation sufficient pre-beta
-- [x] 29. **Missing unique constraint on escalations per feedback** — Already in migration 0011 (now tracked in journal)
-- [x] 30. **Missing "cancelled" status for 1:1 sessions** — Added to validation schemas (`updateSessionSchema`, `sessionQuerySchema`)
-- [ ] 31. **N+1 queries in demo route + scheduler** — Requires query batching refactor (deferred)
-
-### Medium — Infrastructure & Workers (7) — 5 fixed, 2 open
-
-- [x] 32. **Scheduled jobs hardcoded to `dev-org`** — Uses `ORG_ID` env var with `dev-org` fallback + TODO for multi-tenant
-- [x] 33. **Worker dispatch silently ignores unknown job types** — Default cases now throw errors in both switch statements
-- [x] 34. **Adapters return empty string for missing platform IDs** — Both adapters now throw on missing IDs
-- [ ] 35. **WebSocket room cleanup incomplete** — Already has staleness timer (5min); one-sided leak is bounded. Acceptable pre-beta.
-- [x] 36. **Analysis pipeline uses console.error** — Uses injected `logger` parameter (piped from Fastify logger)
-- [ ] 37. **LLM JSON parse fallback generates unreliable scores** — Heuristic is acceptable fallback; structured output guarantee deferred to LLM SDK wiring
-- [ ] 38. **Cross-package coupling in adapters** — Architectural: adapters need `ChatPlatform` type from `@revualy/shared`. Acceptable.
-
-### Medium — Frontend (6) — 3 fixed, 3 open
-
-- [ ] 39. **Missing error boundaries on dashboard pages** — Requires `error.tsx` files per route group (deferred)
-- [ ] 40. **Optimistic WS updates without rollback** — Acceptable UX trade-off pre-beta; manager is source of truth
-- [x] 41. **Hardcoded fallback `ws://localhost:3000`** — Fixed in prior review: only connects if `NEXT_PUBLIC_WS_URL` is set
-- [ ] 42. **Stale data from sequential 1:1 API calls** — Acceptable pre-beta: rare race condition
-- [x] 43. **OpenAI adapter doesn't extract system messages** — Separates system messages from user/assistant before API call
-- [x] 44. **Neo4j driver initialization race condition** — Synchronous init prevents duplicate drivers
-
-### Low (11) — 7 fixed, 4 open
-
-- [x] 45. **Unsafe type assertions on Neo4j results** — Null-safe with `elementId` + `identity.low` fallback
-- [x] 46. **Neo4j node-ID handling is brittle** — Uses `elementId` with `identity.low` fallback
-- [x] 47. **`generateId()` relies on implicit global `crypto`** — Explicit `import { randomUUID } from "node:crypto"`
-- [x] 48. **`retryAsync` retries all errors including non-transient** — Error classification (4xx, auth, validation) + jitter added
-- [x] 49. **Date fields weakly validated** — `dueDate` now requires `YYYY-MM-DD` regex
-- [ ] 50. **`as any` cast in 1:1 page** — Minor, deferred
-- [x] 51. **GChat card ID uses `Date.now()`** — Uses `crypto.randomUUID()`
-- [x] 52. **Missing null check on Slack `event.user`** — Fixed in prior review: guard on line 91
-- [ ] 53. **`console.warn` in production WS components** — Fixed in prior review: no console.warn present
-- [ ] 54. **`LLMProvider` typed as generic `string`** — Already a union type `"anthropic" | "openai"` (false positive)
-- [ ] 55. **Inconsistent error handling in server actions** — Minor, deferred
-
-### Testing Gaps
-- No lock-expiry race tests for conversation processing
-- No contract tests for webhook verification with raw payload fixtures
-- No worker-type validation tests ensuring unknown job types fail loudly
-- No error boundary tests for dashboard pages
-- Minimal overall test coverage across the codebase
+### Phase 5 Backlog
+- [ ] Calibration engine (leniency/severity detection, cross-team comparison)
+- [ ] Pulse check system (comms ingestion, organic follow-up, sentiment aggregation)
+- [ ] 360 manager reviews (aggregated upward feedback)
+- [ ] Self-reflection interactions + reflections page
+- [ ] Relationship web visualization (D3.js force graph)
+- [ ] Data export + blind review mode
+- [ ] Microsoft Teams adapter
+- [ ] Outlook calendar integration
+- [ ] AI theme discovery from communications
+- [ ] N+1 query optimization + test coverage

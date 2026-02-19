@@ -1,5 +1,12 @@
 # Revualy — Claude Code Instructions
 
+## Context Recovery (post-compaction / clear / startup)
+Before doing any work after compaction, `/clear`, or session start, re-orient:
+1. Read `docs/plan.md` lines 1-50 (brief + spec) and last 50 lines (active context)
+2. Run `git log --oneline -10` and `git diff --stat` to see recent work + uncommitted changes
+3. Check task list (`TaskList`) if one exists
+4. Only then proceed with the user's request
+
 ## What is this project?
 AI-powered peer review platform. Feedback interactions happen via chat (Slack, Google Chat, Teams). The system is **chat-platform agnostic** — core logic is fully decoupled from any specific platform via an adapter pattern.
 
