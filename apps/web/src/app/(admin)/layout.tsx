@@ -17,14 +17,15 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (!session) redirect("/login");
+  const isDemoMode = process.env.DEMO_MODE === "true";
+  if (!session && !isDemoMode) redirect("/login");
 
-  // /settings/* requires admin
-  if (session.role !== "admin") {
+  // /settings/* requires admin (skip role check in demo mode)
+  if (session && session.role !== "admin") {
     redirect("/dashboard");
   }
 
-  const userName = session.user?.name ?? undefined;
+  const userName = session?.user?.name ?? (isDemoMode ? "Demo Admin" : undefined);
 
   return (
     <div className="flex min-h-screen bg-cream">

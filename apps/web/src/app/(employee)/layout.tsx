@@ -18,7 +18,8 @@ export default async function EmployeeLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const userName = session?.user?.name ?? undefined;
+  const isDemoMode = process.env.DEMO_MODE === "true";
+  const userName = session?.user?.name ?? (isDemoMode ? "Demo User" : undefined);
 
   return (
     <div className="flex min-h-screen bg-cream">

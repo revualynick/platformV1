@@ -16,6 +16,12 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isLoggedIn = !!sessionToken;
+  const isDemoMode = process.env.DEMO_MODE === "true";
+
+  // Demo mode: allow unauthenticated access to all routes
+  if (isDemoMode && !isLoggedIn && pathname !== "/login") {
+    return NextResponse.next();
+  }
 
   // Authenticated user on login page → redirect to home hub
   if (isLoggedIn && pathname === "/login") {
