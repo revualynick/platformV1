@@ -36,12 +36,12 @@ export const calibrationRoutes: FastifyPluginAsync = async (app) => {
     // Generate fresh report
     const report = await generateCalibrationReport(db, week);
 
-    // Store for future lookups
+    // Store for future lookups — use onConflictDoNothing to handle concurrent generation
     await db.insert(calibrationReports).values({
       orgId,
       weekStarting: week,
       data: report,
-    });
+    }).onConflictDoNothing({ target: [calibrationReports.weekStarting] });
 
     return reply.send({ data: report });
   });

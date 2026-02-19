@@ -78,9 +78,18 @@ export async function runAnalysisPipeline(
   const flagResult =
     results[3].status === "fulfilled"
       ? results[3].value
-      : { shouldFlag: false, severity: "coaching" as const, reason: "", flaggedContent: "" };
+      : { shouldFlag: false, severity: "low" as const, reason: "", flaggedContent: "" };
   const valuesResult =
     results[4].status === "fulfilled" ? results[4].value : [];
+
+  // Cap LLM-generated content before DB write
+  const MAX_SUMMARY_LENGTH = 2000;
+  const MAX_FLAGGED_CONTENT_LENGTH = 5000;
+  const MAX_EVIDENCE_LENGTH = 1000;
+
+  const safeSummary = summaryResult.slice(0, MAX_SUMMARY_LENGTH);
+  const safeFlaggedContent = flagResult.flaggedContent.slice(0, MAX_FLAGGED_CONTENT_LENGTH);
+  const safeReason = flagResult.reason.slice(0, MAX_SUMMARY_LENGTH);
 
   // Track and log any failures for debugging (#32)
   const stepNames = ["sentiment", "engagement", "summary", "flags", "values"];
@@ -103,7 +112,7 @@ export async function runAnalysisPipeline(
         subjectId: conversation.subjectId,
         interactionType: conversation.interactionType,
         rawContent,
-        aiSummary: summaryResult,
+        aiSummary: safeSummary,
         sentiment: sentimentResult,
         engagementScore: engagementResult.score,
         wordCount: engagementResult.wordCount,
@@ -119,7 +128,7 @@ export async function runAnalysisPipeline(
           feedbackEntryId: feedbackEntry.id,
           coreValueId: v.coreValueId,
           score: v.score,
-          evidence: v.evidence,
+          evidence: v.evidence.slice(0, MAX_EVIDENCE_LENGTH),
         })),
       );
     }
@@ -127,9 +136,9 @@ export async function runAnalysisPipeline(
     if (flagResult.shouldFlag) {
       await tx.insert(escalations).values({
         feedbackEntryId: feedbackEntry.id,
-        severity: flagResult.severity,
-        reason: flagResult.reason,
-        flaggedContent: flagResult.flaggedContent,
+        severity: mapFlagSeverity(flagResult.severity),
+        reason: safeReason,
+        flaggedContent: safeFlaggedContent,
       });
     }
   });
@@ -262,6 +271,15 @@ ${content}`,
 }
 
 // ── Problematic Language Detection ──────────────────────
+
+function mapFlagSeverity(flagSeverity: string): string {
+  switch (flagSeverity) {
+    case "coaching": return "low";
+    case "warning": return "medium";
+    case "critical": return "critical";
+    default: return "medium";
+  }
+}
 
 interface FlagResult {
   shouldFlag: boolean;

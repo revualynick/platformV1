@@ -20,7 +20,8 @@
   "dependencies": {
     "@revualy/chat-core": "workspace:*",
     "@revualy/shared": "workspace:*",
-    "botbuilder": "^4.23.0"
+    "botbuilder": "^4.23.0",
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.11",

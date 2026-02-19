@@ -194,6 +194,7 @@ export const feedbackEntries = pgTable(
       .defaultNow(),
   },
   (table) => [
+    unique("uq_feedback_entry_conversation").on(table.conversationId),
     index("idx_feedback_entries_subject_id").on(table.subjectId),
     index("idx_feedback_entries_reviewer_id").on(table.reviewerId),
     index("idx_feedback_entries_created_at").on(table.createdAt),

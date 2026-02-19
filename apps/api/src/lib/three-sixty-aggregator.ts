@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   threeSixtyReviews,
@@ -95,42 +95,45 @@ export async function aggregateThreeSixtyReview(
     { totalScore: number; count: number; valueId: string }
   >();
 
-  if (feedbackEntryIds.length > 0) {
-    for (const entryId of feedbackEntryIds) {
-      const scores = await db
+  const allValueScores = feedbackEntryIds.length > 0
+    ? await db
         .select({
+          feedbackEntryId: feedbackValueScores.feedbackEntryId,
           score: feedbackValueScores.score,
           coreValueId: feedbackValueScores.coreValueId,
         })
         .from(feedbackValueScores)
-        .where(eq(feedbackValueScores.feedbackEntryId, entryId));
+        .where(inArray(feedbackValueScores.feedbackEntryId, feedbackEntryIds))
+    : [];
 
-      for (const s of scores) {
-        const existing = valueScoreMap.get(s.coreValueId);
-        if (existing) {
-          existing.totalScore += s.score;
-          existing.count++;
-        } else {
-          valueScoreMap.set(s.coreValueId, {
-            totalScore: s.score,
-            count: 1,
-            valueId: s.coreValueId,
-          });
-        }
-      }
+  for (const s of allValueScores) {
+    const existing = valueScoreMap.get(s.coreValueId);
+    if (existing) {
+      existing.totalScore += s.score;
+      existing.count++;
+    } else {
+      valueScoreMap.set(s.coreValueId, {
+        totalScore: s.score,
+        count: 1,
+        valueId: s.coreValueId,
+      });
     }
   }
 
   // Resolve core value names
+  const valueIds = [...valueScoreMap.keys()];
+  const allCoreValues = valueIds.length > 0
+    ? await db
+        .select({ id: coreValues.id, name: coreValues.name })
+        .from(coreValues)
+        .where(inArray(coreValues.id, valueIds))
+    : [];
+  const cvNameMap = new Map(allCoreValues.map((cv) => [cv.id, cv.name]));
+
   const valueScores: ThreeSixtyAggregation["valueScores"] = [];
   for (const [, data] of valueScoreMap) {
-    const [cv] = await db
-      .select({ name: coreValues.name })
-      .from(coreValues)
-      .where(eq(coreValues.id, data.valueId));
-
     valueScores.push({
-      valueName: cv?.name ?? "Unknown",
+      valueName: cvNameMap.get(data.valueId) ?? "Unknown",
       avgScore: data.count > 0 ? data.totalScore / data.count : 0,
       evidenceCount: data.count,
     });

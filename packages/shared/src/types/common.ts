@@ -19,7 +19,7 @@ export interface ApiResponse<T> {
   };
 }
 
-export type ChatPlatform = "slack" | "google_chat" | "teams";
+export type ChatPlatform = "slack" | "google_chat" | "teams" | "internal";
 
 export type UserRole = "employee" | "manager" | "admin" | "hr";
 

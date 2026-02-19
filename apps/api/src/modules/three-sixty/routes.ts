@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import {
   threeSixtyReviews,
   threeSixtyResponses,
@@ -24,10 +24,11 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
     const { db } = request.tenant;
     const userId = getAuthenticatedUserId(request);
     const body = parseBody(createThreeSixtySchema, request.body);
+    const reviewerIds = [...new Set(body.reviewerIds)];
 
-    // Verify the subject exists and is a manager
+    // Verify the subject exists
     const [subject] = await db
-      .select({ id: users.id, role: users.role, name: users.name })
+      .select({ id: users.id })
       .from(users)
       .where(eq(users.id, body.subjectId));
 
@@ -35,20 +36,20 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: "Subject user not found" });
     }
 
-    // Verify all reviewers exist
-    for (const reviewerId of body.reviewerIds) {
-      const [reviewer] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, reviewerId));
+    // Batch verify all reviewers exist
+    const existingReviewers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(inArray(users.id, reviewerIds));
 
-      if (!reviewer) {
-        return reply.code(400).send({ error: `Reviewer ${reviewerId} not found` });
-      }
+    const existingIds = new Set(existingReviewers.map((r) => r.id));
+    const missingIds = reviewerIds.filter((id) => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      return reply.code(400).send({ error: `Reviewer(s) not found: ${missingIds.join(", ")}` });
     }
 
     // Subject cannot be one of the reviewers
-    if (body.reviewerIds.includes(body.subjectId)) {
+    if (reviewerIds.includes(body.subjectId)) {
       return reply.code(400).send({ error: "Subject cannot be a reviewer of themselves" });
     }
 
@@ -58,12 +59,12 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         .values({
           subjectId: body.subjectId,
           initiatedById: userId,
-          targetReviewerCount: body.reviewerIds.length,
+          targetReviewerCount: reviewerIds.length,
         })
         .returning();
 
       // Create response entries for each reviewer
-      for (const reviewerId of body.reviewerIds) {
+      for (const reviewerId of reviewerIds) {
         await tx.insert(threeSixtyResponses).values({
           reviewId: review.id,
           reviewerId,

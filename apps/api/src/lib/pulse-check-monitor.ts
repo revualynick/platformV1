@@ -64,34 +64,42 @@ export async function evaluatePulseCheckTrigger(
     return { triggered: false };
   }
 
-  // 3. Check cooldown: has this user had a pulse check trigger recently?
+  // 3. Check cooldown + insert inside a transaction to prevent duplicate triggers
+  // from concurrent analysis pipeline completions for the same user.
   const cooldownStart = new Date();
   cooldownStart.setDate(cooldownStart.getDate() - cooldownDays);
 
-  const [recentTrigger] = await db
-    .select({ id: pulseCheckTriggers.id })
-    .from(pulseCheckTriggers)
-    .where(
-      and(
-        eq(pulseCheckTriggers.sourceType, "sentiment_decline"),
-        eq(pulseCheckTriggers.sourceRef, userId),
-        gte(pulseCheckTriggers.createdAt, cooldownStart),
-      ),
-    )
-    .limit(1);
-
-  if (recentTrigger) {
-    return { triggered: false };
-  }
-
-  // 4. Threshold exceeded and no cooldown active: insert trigger
   const reason = `${negativeCount} negative/mixed feedbacks in last ${windowDays} days`;
 
-  await db.insert(pulseCheckTriggers).values({
-    sourceType: "sentiment_decline",
-    sourceRef: userId,
-    sentiment: "negative",
+  const triggered = await db.transaction(async (tx) => {
+    const [recentTrigger] = await tx
+      .select({ id: pulseCheckTriggers.id })
+      .from(pulseCheckTriggers)
+      .where(
+        and(
+          eq(pulseCheckTriggers.sourceType, "sentiment_decline"),
+          eq(pulseCheckTriggers.sourceRef, userId),
+          gte(pulseCheckTriggers.createdAt, cooldownStart),
+        ),
+      )
+      .limit(1);
+
+    if (recentTrigger) {
+      return false;
+    }
+
+    await tx.insert(pulseCheckTriggers).values({
+      sourceType: "sentiment_decline",
+      sourceRef: userId,
+      sentiment: "negative",
+    });
+
+    return true;
   });
+
+  if (!triggered) {
+    return { triggered: false };
+  }
 
   log.info(`[PulseCheck] Triggered for user ${userId} in org ${orgId}: ${reason}`);
 

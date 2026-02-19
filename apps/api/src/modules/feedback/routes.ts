@@ -84,6 +84,46 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { db, userId } = request.tenant;
 
+      if (!userId) {
+        return reply.code(401).send({ error: "Authentication required" });
+      }
+
+      // Look up role first to determine DB-level filter
+      const [caller] = await db
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, userId));
+
+      if (!caller) {
+        return reply.code(401).send({ error: "User not found" });
+      }
+
+      if (caller.role === "manager") {
+        // Fetch direct report IDs, then filter at the DB level
+        const reports = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.managerId, userId));
+        const reportIds = reports.map((r) => r.id);
+
+        if (reportIds.length === 0) {
+          return reply.send({ data: [] });
+        }
+
+        const flagged = await db
+          .select({
+            escalation: escalations,
+            feedback: feedbackEntries,
+          })
+          .from(escalations)
+          .innerJoin(feedbackEntries, eq(escalations.feedbackEntryId, feedbackEntries.id))
+          .where(inArray(feedbackEntries.subjectId, reportIds))
+          .orderBy(desc(escalations.createdAt));
+
+        return reply.send({ data: flagged });
+      }
+
+      // Admins see all
       const flagged = await db
         .select({
           escalation: escalations,
@@ -92,29 +132,6 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
         .from(escalations)
         .innerJoin(feedbackEntries, eq(escalations.feedbackEntryId, feedbackEntries.id))
         .orderBy(desc(escalations.createdAt));
-
-      // Admins see all; managers only see escalations for their direct reports
-      if (userId) {
-        const [caller] = await db
-          .select({ role: users.role })
-          .from(users)
-          .where(eq(users.id, userId));
-
-        if (caller && caller.role === "manager") {
-          // Get direct report IDs
-          const reports = await db
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.managerId, userId));
-          const reportIds = new Set(reports.map((r) => r.id));
-          reportIds.add(userId); // include self
-
-          const filtered = flagged.filter(
-            (f) => f.feedback.subjectId && reportIds.has(f.feedback.subjectId),
-          );
-          return reply.send({ data: filtered });
-        }
-      }
 
       return reply.send({ data: flagged });
     },

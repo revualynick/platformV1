@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import {
   discoveredThemes,
   coreValues,
@@ -91,11 +91,10 @@ export const themeRoutes: FastifyPluginAsync = async (app) => {
           : null;
 
         // Check if a theme with the same name already exists (case-insensitive)
-        const conditions = [eq(discoveredThemes.name, theme.name)];
         const [existing] = await db
           .select({ id: discoveredThemes.id, status: discoveredThemes.status })
           .from(discoveredThemes)
-          .where(and(...conditions));
+          .where(sql`lower(${discoveredThemes.name}) = lower(${theme.name})`);
 
         if (existing) {
           // Update existing theme — but don't overwrite accepted/rejected status

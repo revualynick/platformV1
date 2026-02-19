@@ -8,6 +8,7 @@ import type {
 import { retryAsync } from "@revualy/chat-core";
 import type { ChatPlatform } from "@revualy/shared";
 import type { Activity, ConversationReference } from "botbuilder";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import crypto from "node:crypto";
 import { buildAdaptiveCard } from "./cards.js";
 
@@ -26,6 +27,14 @@ const ALLOWED_SERVICE_URLS = [
 const BOT_FRAMEWORK_TOKEN_URL =
   "https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token";
 
+const BOT_FRAMEWORK_OPENID_METADATA =
+  "https://login.botframework.com/v1/.well-known/openidconfiguration";
+
+const EXPECTED_ISSUER = "https://api.botframework.com";
+
+const MAX_USER_CACHE_SIZE = 10_000;
+const MAX_CONVERSATION_REFS_SIZE = 10_000;
+
 /**
  * Microsoft Teams adapter.
  * Uses Bot Framework REST API + Adaptive Cards for messaging.
@@ -38,6 +47,7 @@ export class TeamsAdapter implements ChatAdapter {
   private conversationRefs = new Map<string, ConversationReference>();
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
+  private jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
   constructor(config: TeamsAdapterConfig) {
     this.appId = config.appId;
@@ -45,7 +55,7 @@ export class TeamsAdapter implements ChatAdapter {
   }
 
   async verifyWebhook(
-    _headers: Record<string, string>,
+    headers: Record<string, string>,
     body: unknown,
   ): Promise<WebhookVerification> {
     const activity = body as Partial<Activity>;
@@ -71,6 +81,23 @@ export class TeamsAdapter implements ChatAdapter {
     }
 
     if (!activity.from || !activity.conversation) {
+      return { isValid: false };
+    }
+
+    const authHeader = headers["authorization"];
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      if (process.env.NODE_ENV === "production") {
+        return { isValid: false };
+      }
+      console.warn(
+        "TeamsAdapter.verifyWebhook: no Authorization header — skipping JWT verification (non-production)",
+      );
+      return { isValid: true };
+    }
+
+    const token = authHeader.slice("Bearer ".length);
+    const jwtValid = await this.verifyBotFrameworkJwt(token);
+    if (!jwtValid) {
       return { isValid: false };
     }
 
@@ -191,11 +218,23 @@ export class TeamsAdapter implements ChatAdapter {
     // this is a no-op (consistent with other adapter implementations).
   }
 
+  private evictIfNeeded(map: Map<string, unknown>, maxSize: number): void {
+    if (map.size <= maxSize) return;
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) {
+      map.delete(firstKey);
+    }
+  }
+
   private cacheUserFromActivity(activity: Partial<Activity>): void {
     if (activity.from?.id && activity.from?.name) {
       this.userCache.set(activity.from.id, {
         name: activity.from.name,
       });
+      this.evictIfNeeded(
+        this.userCache as Map<string, unknown>,
+        MAX_USER_CACHE_SIZE,
+      );
     }
   }
 
@@ -210,6 +249,45 @@ export class TeamsAdapter implements ChatAdapter {
       user: activity.from,
     };
     this.conversationRefs.set(activity.conversation.id, ref);
+    this.evictIfNeeded(
+      this.conversationRefs as Map<string, unknown>,
+      MAX_CONVERSATION_REFS_SIZE,
+    );
+  }
+
+  private async getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
+    if (this.jwks) return this.jwks;
+
+    const metadataRes = await fetch(BOT_FRAMEWORK_OPENID_METADATA);
+    if (!metadataRes.ok) {
+      throw new Error(
+        `Failed to fetch Bot Framework OpenID metadata: ${metadataRes.status}`,
+      );
+    }
+    const metadata = (await metadataRes.json()) as { jwks_uri: string };
+    if (!metadata.jwks_uri) {
+      throw new Error("Bot Framework OpenID metadata missing jwks_uri");
+    }
+
+    this.jwks = createRemoteJWKSet(new URL(metadata.jwks_uri));
+    return this.jwks;
+  }
+
+  private async verifyBotFrameworkJwt(token: string): Promise<boolean> {
+    try {
+      const jwks = await this.getJwks();
+      await jwtVerify(token, jwks, {
+        issuer: EXPECTED_ISSUER,
+        audience: this.appId,
+      });
+      return true;
+    } catch (err) {
+      console.warn(
+        "TeamsAdapter: JWT verification failed:",
+        err instanceof Error ? err.message : err,
+      );
+      return false;
+    }
   }
 
   private async getAccessToken(): Promise<string> {

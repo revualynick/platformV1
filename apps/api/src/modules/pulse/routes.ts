@@ -121,40 +121,39 @@ export const pulseRoutes: FastifyPluginAsync = async (app) => {
       const { db } = request.tenant;
       const body = parseBody(updatePulseCheckConfigSchema, request.body);
 
-      // Check if config row exists
-      const [existing] = await db.select().from(pulseCheckConfig).limit(1);
+      const result = await db.transaction(async (tx) => {
+        const [existing] = await tx.select().from(pulseCheckConfig).limit(1);
 
-      if (!existing) {
-        // Create the config row with provided values + defaults
-        const [created] = await db
-          .insert(pulseCheckConfig)
-          .values({
-            negativeSentimentThreshold: body.negativeSentimentThreshold ?? 2,
-            windowDays: body.windowDays ?? 7,
-            cooldownDays: body.cooldownDays ?? 14,
-            isEnabled: body.isEnabled ?? true,
-          })
+        if (!existing) {
+          const [created] = await tx
+            .insert(pulseCheckConfig)
+            .values({
+              negativeSentimentThreshold: body.negativeSentimentThreshold ?? 2,
+              windowDays: body.windowDays ?? 7,
+              cooldownDays: body.cooldownDays ?? 14,
+              isEnabled: body.isEnabled ?? true,
+            })
+            .returning();
+          return created;
+        }
+
+        const updates: Record<string, unknown> = { updatedAt: new Date() };
+        if (body.negativeSentimentThreshold !== undefined)
+          updates.negativeSentimentThreshold = body.negativeSentimentThreshold;
+        if (body.windowDays !== undefined) updates.windowDays = body.windowDays;
+        if (body.cooldownDays !== undefined)
+          updates.cooldownDays = body.cooldownDays;
+        if (body.isEnabled !== undefined) updates.isEnabled = body.isEnabled;
+
+        const [updated] = await tx
+          .update(pulseCheckConfig)
+          .set(updates)
+          .where(eq(pulseCheckConfig.id, existing.id))
           .returning();
+        return updated;
+      });
 
-        return reply.send(created);
-      }
-
-      // Update existing config
-      const updates: Record<string, unknown> = { updatedAt: new Date() };
-      if (body.negativeSentimentThreshold !== undefined)
-        updates.negativeSentimentThreshold = body.negativeSentimentThreshold;
-      if (body.windowDays !== undefined) updates.windowDays = body.windowDays;
-      if (body.cooldownDays !== undefined)
-        updates.cooldownDays = body.cooldownDays;
-      if (body.isEnabled !== undefined) updates.isEnabled = body.isEnabled;
-
-      const [updated] = await db
-        .update(pulseCheckConfig)
-        .set(updates)
-        .where(eq(pulseCheckConfig.id, existing.id))
-        .returning();
-
-      return reply.send(updated);
+      return reply.send(result);
     },
   );
 };

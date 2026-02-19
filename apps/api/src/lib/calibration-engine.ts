@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, lt, sql } from "drizzle-orm";
 import {
   feedbackEntries,
   users,
@@ -50,7 +50,7 @@ export interface CalibrationReport {
 function computeStdDev(values: number[], mean: number): number {
   if (values.length < 2) return 0;
   const sumSquares = values.reduce((acc, v) => acc + (v - mean) ** 2, 0);
-  return Math.sqrt(sumSquares / values.length);
+  return Math.sqrt(sumSquares / (values.length - 1));
 }
 
 function sentimentToNumeric(sentiment: string): number {
@@ -115,7 +115,7 @@ export async function generateCalibrationReport(
     .where(
       and(
         gte(feedbackEntries.createdAt, new Date(weekStartStr)),
-        lte(feedbackEntries.createdAt, new Date(weekEndStr)),
+        lt(feedbackEntries.createdAt, new Date(weekEndStr)),
       ),
     );
 

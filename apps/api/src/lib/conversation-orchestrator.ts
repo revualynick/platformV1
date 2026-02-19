@@ -249,6 +249,7 @@ async function closeConversation(
   });
 
   // Update conversation status
+  // Denormalized counter — should match COUNT(*) of conversation_messages for this conversation
   await db
     .update(conversations)
     .set({

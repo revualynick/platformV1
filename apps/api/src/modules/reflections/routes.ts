@@ -226,7 +226,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         reviewerId: userId,
         subjectId: userId, // self-reflection: reviewer === subject
         interactionType: "self_reflection",
-        platform: "slack", // dummy — adapter not registered, sends are no-op
+        platform: "internal", // self-reflections don't go through any chat platform
         channelId: "self-reflection",
         questionnaireId: selectedQuestionnaire.id,
       },
@@ -245,13 +245,25 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         })
         .where(eq(selfReflections.id, existing.id));
     } else {
-      await db.insert(selfReflections).values({
+      const [inserted] = await db.insert(selfReflections).values({
         userId,
         conversationId: state.conversationId,
         weekStarting: weekStart,
         status: "in_progress",
         promptTheme,
-      });
+      }).onConflictDoNothing({ target: [selfReflections.userId, selfReflections.weekStarting] }).returning();
+
+      if (!inserted) {
+        // Another request won the race — return the existing reflection
+        const [existing2] = await db.select().from(selfReflections).where(
+          and(eq(selfReflections.userId, userId), eq(selfReflections.weekStarting, weekStart))
+        );
+        return reply.code(409).send({
+          error: "A reflection already exists for this week",
+          reflectionId: existing2?.id,
+          status: existing2?.status,
+        });
+      }
     }
 
     const openingMessage =
@@ -311,8 +323,8 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
           }));
           extracted = await extractReflectionData(app.llm, llmMessages);
         }
-      } catch {
-        // Extraction is best-effort; user-provided data takes priority
+      } catch (err) {
+        request.log.warn({ err, reflectionId: id }, "Reflection data extraction failed (best-effort)");
       }
     }
 

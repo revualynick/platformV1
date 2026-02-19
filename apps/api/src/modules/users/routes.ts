@@ -18,7 +18,20 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     if (managerId) conditions.push(eq(users.managerId, managerId));
 
     const { limit = "200" } = request.query as { limit?: string };
-    const result = await db.select().from(users).where(and(...conditions)).limit(Math.min(parseInt(limit, 10) || 200, 500));
+    const result = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        teamId: users.teamId,
+        managerId: users.managerId,
+        timezone: users.timezone,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(and(...conditions))
+      .limit(Math.min(parseInt(limit, 10) || 200, 500));
     return reply.send({ data: result });
   });
 
@@ -123,7 +136,35 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/:id/engagement — Engagement scores for user
   app.get("/:id/engagement", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
+    const { db, userId } = request.tenant;
+
+    if (!userId) {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
+
+    // RBAC: employees see own engagement only, managers see their direct reports', admins see all
+    if (id !== userId) {
+      const [caller] = await db
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, userId));
+
+      if (!caller || caller.role === "employee") {
+        return reply.code(403).send({ error: "You can only view your own engagement scores" });
+      }
+
+      if (caller.role === "manager") {
+        const [subject] = await db
+          .select({ managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, id));
+
+        if (!subject || subject.managerId !== userId) {
+          return reply.code(403).send({ error: "You can only view engagement scores for your direct reports" });
+        }
+      }
+      // Admins pass through
+    }
 
     const scores = await db
       .select()

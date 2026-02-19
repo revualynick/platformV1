@@ -156,8 +156,8 @@ ${numbered}`,
     return parsed.map((t) => ({
       name: String(t.name ?? "").slice(0, 200),
       description: String(t.description ?? ""),
-      frequency: Math.max(0, Math.round(t.frequency ?? 0)),
-      confidence: Math.max(0, Math.min(1, t.confidence ?? 0)),
+      frequency: Math.max(0, Math.round(Number(t.frequency) || 0)),
+      confidence: Math.max(0, Math.min(1, Number(t.confidence) || 0)),
       relatedCoreValueName: t.related_core_value || undefined,
       sampleEvidence: Array.isArray(t.sample_evidence)
         ? t.sample_evidence.slice(0, 5).map(String)

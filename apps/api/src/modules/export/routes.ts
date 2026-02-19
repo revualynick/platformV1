@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import {
   feedbackEntries,
   feedbackValueScores,
@@ -32,13 +32,13 @@ function sendCSV(reply: import("fastify").FastifyReply, csv: string, filenamePre
  * Each unique reviewer ID maps to "Reviewer 1", "Reviewer 2", etc.
  * Consistent within a single export but not identifiable across exports.
  */
-function buildBlindMap(ids: (string | null)[]): Map<string, string> {
+function buildBlindMap(ids: (string | null)[], prefix = "Reviewer"): Map<string, string> {
   const map = new Map<string, string>();
   let counter = 0;
   for (const id of ids) {
     if (id && !map.has(id)) {
       counter++;
-      map.set(id, `Reviewer ${counter}`);
+      map.set(id, `${prefix} ${counter}`);
     }
   }
   return map;
@@ -96,11 +96,13 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const userMap = new Map<string, string>();
-    if (userIds.size > 0) {
-      const allUsers = await db
+    const userIdArray = [...userIds];
+    if (userIdArray.length > 0) {
+      const relevantUsers = await db
         .select({ id: users.id, name: users.name })
-        .from(users);
-      for (const u of allUsers) userMap.set(u.id, u.name);
+        .from(users)
+        .where(inArray(users.id, userIdArray));
+      for (const u of relevantUsers) userMap.set(u.id, u.name);
     }
 
     // Fetch value scores + core value names
@@ -115,7 +117,8 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
           evidence: feedbackValueScores.evidence,
         })
         .from(feedbackValueScores)
-        .innerJoin(coreValues, eq(feedbackValueScores.coreValueId, coreValues.id));
+        .innerJoin(coreValues, eq(feedbackValueScores.coreValueId, coreValues.id))
+        .where(inArray(feedbackValueScores.feedbackEntryId, entryIds));
 
       // Group by feedbackEntryId: "Value1: 0.8, Value2: 0.6"
       const grouped = new Map<string, { name: string; score: number; evidence: string }[]>();
@@ -136,15 +139,18 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Build blind map if needed
+    // Build blind maps if needed
     const blindMap = query.blind
       ? buildBlindMap(entries.map((e) => e.reviewerId))
+      : null;
+    const blindSubjectMap = query.blind
+      ? buildBlindMap(entries.map((e) => e.subjectId), "Subject")
       : null;
 
     const rows = entries.map((e) => ({
       date: e.createdAt.toISOString(),
       reviewer: blindMap ? blindMap.get(e.reviewerId) ?? "Anonymous" : (userMap.get(e.reviewerId) ?? "Unknown"),
-      subject: userMap.get(e.subjectId) ?? "Unknown",
+      subject: blindSubjectMap ? blindSubjectMap.get(e.subjectId) ?? "Anonymous" : (userMap.get(e.subjectId) ?? "Unknown"),
       interactionType: e.interactionType,
       sentiment: e.sentiment,
       engagementScore: e.engagementScore,
@@ -253,11 +259,17 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(escalations.createdAt));
 
     // Resolve names
-    const allUsers = await db
-      .select({ id: users.id, name: users.name })
-      .from(users);
+    const escalationUserIds = new Set<string>();
+    for (const r of rows) {
+      if (r.reporterId) escalationUserIds.add(r.reporterId);
+      if (r.subjectId) escalationUserIds.add(r.subjectId);
+    }
+    const escUserArray = [...escalationUserIds];
+    const escUsers = escUserArray.length > 0
+      ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, escUserArray))
+      : [];
     const userMap = new Map<string, string>();
-    for (const u of allUsers) userMap.set(u.id, u.name);
+    for (const u of escUsers) userMap.set(u.id, u.name);
 
     // Build blind map for reporters if needed
     const blindMap = query.blind
