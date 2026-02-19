@@ -15,12 +15,17 @@ jobs:
     name: Build & Typecheck
     runs-on: ubuntu-latest
 
+    # Build-time placeholders — Next.js needs these at `next build` but
+    # postgres.js connects lazily so no real DB connection is attempted.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      INTERNAL_API_SECRET: ci-placeholder
+      NEXTAUTH_SECRET: ci-placeholder
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
