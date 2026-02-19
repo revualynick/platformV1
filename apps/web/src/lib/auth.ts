@@ -120,8 +120,10 @@ const adapter = {
   },
 };
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const nextAuth = NextAuth({
   adapter,
+
+  trustHost: true,
 
   providers: [
     Google({
@@ -192,3 +194,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+
+/**
+ * Session getter — wraps NextAuth's auth() to return a synthetic demo session
+ * when DEMO_MODE=true and no real authenticated session exists.
+ * This lets all pages render with mock data instead of redirecting to /login.
+ */
+export async function auth() {
+  const session = await nextAuth.auth();
+  if (session) return session;
+
+  if (process.env.DEMO_MODE === "true") {
+    return {
+      user: {
+        id: "demo-user",
+        name: "Demo User",
+        email: "demo@revualy.com",
+        image: null,
+        onboardingCompleted: true,
+      },
+      role: "admin",
+      orgId: process.env.ORG_ID ?? "demo-org",
+      teamId: null,
+      expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    } as import("next-auth").Session;
+  }
+
+  return null;
+}
