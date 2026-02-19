@@ -34,6 +34,7 @@ RUN corepack enable && corepack prepare pnpm@10.29.3 --activate
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV CI=true
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 revualy
