@@ -20,9 +20,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
-    "generate:cp": "drizzle-kit generate --config=drizzle.config.control-plane.ts",
     "migrate": "drizzle-kit migrate",
-    "migrate:cp": "drizzle-kit migrate --config=drizzle.config.control-plane.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "clean": "rm -rf dist"

@@ -96,7 +96,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
 
     if (!updated) return reply.code(404).send({ error: "User not found" });
 
-    // Sync changed auth-relevant fields to control plane session store
+    // Sync changed auth-relevant fields to authUsers table
     if (body.role !== undefined || body.teamId !== undefined) {
       const syncUpdates: { role?: string; teamId?: string | null } = {};
       if (body.role !== undefined) syncUpdates.role = body.role;

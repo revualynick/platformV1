@@ -223,8 +223,7 @@ async function start() {
   app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification)");
 
   // ── Repeatable cron jobs ───────────────────────────────
-  // TODO: In multi-tenant mode, enumerate orgs from control plane and enqueue per-org.
-  // For now, single-tenant uses ORG_ID env var or falls back to "dev-org".
+  // Per-tenant deployment: single org per instance.
   const cronOrgId = process.env.ORG_ID ?? "dev-org";
 
   // Weekly digest: Monday 9:00 AM UTC

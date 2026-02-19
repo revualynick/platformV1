@@ -187,7 +187,7 @@ revualy/
 
 **Auth:** NextAuth.js with DB sessions (`@auth/drizzle-adapter`), Google OAuth, RBAC (`requireAuth`/`requireRole` preHandlers), edge-safe cookie middleware, role/onboarding guards in server layouts.
 
-**Code quality:** Three code review rounds (130+ findings, all resolved). TOCTOU race prevention, timing-safe secret comparison, OAuth state HMAC validation, input validation (Zod schemas on all endpoints), DB constraints, error boundaries, prompt injection sanitization, fail-closed defaults. 64 unit tests (vitest).
+**Code quality:** Three code review rounds (130+ findings, all resolved). TOCTOU race prevention, timing-safe secret comparison, OAuth state HMAC validation, input validation (Zod schemas on all endpoints), DB constraints, error boundaries, prompt injection sanitization, fail-closed defaults. 64 unit tests (vitest). Post-Phase 6 full codebase audit confirmed zero critical/high issues, no unused dependencies, no stale Neo4j or TENANT_DATABASE_URL references.
 
 ### Architecture Refresh (Phase 6 — in progress)
 
@@ -209,6 +209,8 @@ revualy/
 - [x] Dockerfiles for Railway deployment (API + web)
 - [x] `.env.example` with all required env vars documented
 - [x] Railway deployment guide (`docs/deployment.md`)
+
+**Cleanup (low priority):** Dead control plane code remains (`packages/db/src/client.ts` exports, `schema/control-plane.ts`, `drizzle.config.control-plane.ts`, `migrations-control-plane/`). Kept for potential future use by demo/marketing site. Two stale comments reference "control plane" (`server.ts:226` TODO, `users/routes.ts:99`). `auth.ts` still has `CONTROL_PLANE_DATABASE_URL` fallback (harmless — only used during build).
 
 ### Beta Launch Blocklist
 - [x] Phase 6 architecture changes (above)

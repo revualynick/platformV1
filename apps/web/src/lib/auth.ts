@@ -31,7 +31,6 @@ const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 // so no actual connection is attempted at build time.
 const { db: tenantDb } = createTenantClient(
   process.env.DATABASE_URL ||
-    process.env.CONTROL_PLANE_DATABASE_URL ||
     "postgresql://build:build@localhost:5432/build_placeholder",
 );
 
