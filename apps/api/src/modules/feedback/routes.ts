@@ -131,7 +131,8 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
         })
         .from(escalations)
         .innerJoin(feedbackEntries, eq(escalations.feedbackEntryId, feedbackEntries.id))
-        .orderBy(desc(escalations.createdAt));
+        .orderBy(desc(escalations.createdAt))
+        .limit(500);
 
       return reply.send({ data: flagged });
     },

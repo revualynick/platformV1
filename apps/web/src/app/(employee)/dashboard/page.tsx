@@ -132,7 +132,7 @@ async function loadDashboardData() {
       recentFeedback: mockFeedback,
       valuesScores: mockValuesScores,
       oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
-      hasManager: true,
+      hasManager: false,
     };
   }
 }

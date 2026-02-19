@@ -136,7 +136,7 @@ async function loadEmployeeData(userId: string) {
       const entries = feedbackResult.value.data;
       feedback = entries.map((e) => ({
         id: e.id,
-        fromName: e.reviewerId,
+        fromName: "Peer",
         date: new Date(e.createdAt).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
@@ -201,7 +201,7 @@ async function loadEmployeeData(userId: string) {
     }
 
     // Verify this is a direct report
-    let isDirectReport = true;
+    let isDirectReport = false;
     if (reportsResult.status === "fulfilled") {
       isDirectReport = reportsResult.value.data.some((m) => m.id === userId);
     }

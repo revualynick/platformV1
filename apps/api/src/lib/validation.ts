@@ -61,6 +61,12 @@ export const updateThemeSchema = z.object({
 
 // ── Users ──────────────────────────────────────────────
 
+export const listUsersQuerySchema = z.object({
+  teamId: z.string().uuid().optional(),
+  managerId: z.string().uuid().optional(),
+  limit: z.string().optional(),
+});
+
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   role: z.enum(["employee", "manager", "admin"]).optional(),
@@ -288,6 +294,11 @@ export const idParamSchema = z.object({
 
 export const qidParamSchema = z.object({
   qid: uuid,
+});
+
+export const sessionItemParamSchema = z.object({
+  id: uuid,
+  itemId: uuid,
 });
 
 // ── Helpers ────────────────────────────────────────────

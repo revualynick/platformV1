@@ -218,10 +218,11 @@ export class TeamsAdapter implements ChatAdapter {
     // this is a no-op (consistent with other adapter implementations).
   }
 
-  private evictIfNeeded(map: Map<string, unknown>, maxSize: number): void {
+  private evictIfNeeded(map: Map<string, unknown>, maxSize: number, label: string): void {
     if (map.size <= maxSize) return;
     const firstKey = map.keys().next().value;
     if (firstKey !== undefined) {
+      console.warn(`[Teams] Evicting ${label} cache entry: ${firstKey}`);
       map.delete(firstKey);
     }
   }
@@ -234,6 +235,7 @@ export class TeamsAdapter implements ChatAdapter {
       this.evictIfNeeded(
         this.userCache as Map<string, unknown>,
         MAX_USER_CACHE_SIZE,
+        "user",
       );
     }
   }
@@ -252,6 +254,7 @@ export class TeamsAdapter implements ChatAdapter {
     this.evictIfNeeded(
       this.conversationRefs as Map<string, unknown>,
       MAX_CONVERSATION_REFS_SIZE,
+      "conversation",
     );
   }
 

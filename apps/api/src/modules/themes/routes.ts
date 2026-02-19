@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import {
   discoveredThemes,
   coreValues,
@@ -81,6 +81,16 @@ export const themeRoutes: FastifyPluginAsync = async (app) => {
         orgValues.map((v) => [v.name.toLowerCase(), v.id]),
       );
 
+      // Batch-load all existing themes for case-insensitive name lookup
+      const existingThemes = await db
+        .select({ id: discoveredThemes.id, name: discoveredThemes.name, status: discoveredThemes.status })
+        .from(discoveredThemes);
+
+      const existingByName = new Map<string, { id: string; status: string | null }>();
+      for (const t of existingThemes) {
+        existingByName.set(t.name.toLowerCase(), { id: t.id, status: t.status });
+      }
+
       // Upsert discovered themes into the database
       const now = new Date();
       const upserted = [];
@@ -90,11 +100,7 @@ export const themeRoutes: FastifyPluginAsync = async (app) => {
           ? nameToId.get(theme.relatedCoreValueName.toLowerCase()) ?? null
           : null;
 
-        // Check if a theme with the same name already exists (case-insensitive)
-        const [existing] = await db
-          .select({ id: discoveredThemes.id, status: discoveredThemes.status })
-          .from(discoveredThemes)
-          .where(sql`lower(${discoveredThemes.name}) = lower(${theme.name})`);
+        const existing = existingByName.get(theme.name.toLowerCase());
 
         if (existing) {
           // Update existing theme — but don't overwrite accepted/rejected status

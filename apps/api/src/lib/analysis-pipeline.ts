@@ -68,7 +68,7 @@ export async function runAnalysisPipeline(
 
   // Extract results with safe defaults for any failures
   const sentimentResult =
-    results[0].status === "fulfilled" ? results[0].value : "neutral" as Sentiment;
+    results[0].status === "fulfilled" ? results[0].value : "neutral";
   const engagementResult =
     results[1].status === "fulfilled"
       ? results[1].value

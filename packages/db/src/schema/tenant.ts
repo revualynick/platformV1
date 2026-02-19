@@ -690,7 +690,7 @@ export const calibrationReports = pgTable(
       .defaultNow(),
   },
   (table) => [
-    unique("uq_calibration_report_week").on(table.weekStarting),
+    unique("uq_calibration_report_org_week").on(table.orgId, table.weekStarting),
     index("idx_calibration_reports_week_starting").on(table.weekStarting),
   ],
 );

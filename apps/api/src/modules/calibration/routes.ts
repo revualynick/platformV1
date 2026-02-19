@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { calibrationReports } from "@revualy/db";
 import { requireRole } from "../../lib/rbac.js";
 import { generateCalibrationReport } from "../../lib/calibration-engine.js";
@@ -23,11 +23,16 @@ export const calibrationRoutes: FastifyPluginAsync = async (app) => {
 
     const { db, orgId } = request.tenant;
 
-    // Check for existing stored report
+    // Check for existing stored report (scoped to org)
     const [existing] = await db
       .select()
       .from(calibrationReports)
-      .where(eq(calibrationReports.weekStarting, week));
+      .where(
+        and(
+          eq(calibrationReports.orgId, orgId),
+          eq(calibrationReports.weekStarting, week),
+        ),
+      );
 
     if (existing) {
       return reply.send({ data: existing.data as CalibrationReport });
@@ -41,14 +46,14 @@ export const calibrationRoutes: FastifyPluginAsync = async (app) => {
       orgId,
       weekStarting: week,
       data: report,
-    }).onConflictDoNothing({ target: [calibrationReports.weekStarting] });
+    }).onConflictDoNothing({ target: [calibrationReports.orgId, calibrationReports.weekStarting] });
 
     return reply.send({ data: report });
   });
 
   // GET /calibration/history — List past calibration reports
   app.get("/calibration/history", async (request, reply) => {
-    const { db } = request.tenant;
+    const { db, orgId } = request.tenant;
 
     const rows = await db
       .select({
@@ -57,6 +62,7 @@ export const calibrationRoutes: FastifyPluginAsync = async (app) => {
         createdAt: calibrationReports.createdAt,
       })
       .from(calibrationReports)
+      .where(eq(calibrationReports.orgId, orgId))
       .orderBy(desc(calibrationReports.weekStarting))
       .limit(52);
 

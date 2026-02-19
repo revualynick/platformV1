@@ -31,7 +31,7 @@ async function handleWebhook(
     await conversationQueue.add("reply", {
       type: "reply",
       orgId,
-      conversationId: message.threadId ?? "", // thread maps to conversation
+      conversationId: message.threadId || message.platformChannelId || message.id,
       userMessage: message.text,
       platform,
       platformUserId: message.platformUserId,

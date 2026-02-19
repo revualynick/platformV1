@@ -63,13 +63,10 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         })
         .returning();
 
-      // Create response entries for each reviewer
-      for (const reviewerId of reviewerIds) {
-        await tx.insert(threeSixtyResponses).values({
-          reviewId: review.id,
-          reviewerId,
-        });
-      }
+      // Create response entries for each reviewer (batch insert)
+      await tx.insert(threeSixtyResponses).values(
+        reviewerIds.map((reviewerId) => ({ reviewId: review.id, reviewerId })),
+      );
 
       return review;
     });
@@ -291,34 +288,37 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         updates.completedAt = new Date();
       }
 
-      const [updated] = await db
-        .update(threeSixtyResponses)
-        .set(updates)
-        .where(eq(threeSixtyResponses.id, id))
-        .returning();
+      const result = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(threeSixtyResponses)
+          .set(updates)
+          .where(eq(threeSixtyResponses.id, id))
+          .returning();
 
-      // Update the review's completed count
-      if (body.status === "completed") {
-        const completedResponses = await db
-          .select()
-          .from(threeSixtyResponses)
-          .where(
-            and(
-              eq(threeSixtyResponses.reviewId, response.reviewId),
-              eq(threeSixtyResponses.status, "completed"),
-            ),
-          );
+        if (body.status === "completed") {
+          const completedResponses = await tx
+            .select()
+            .from(threeSixtyResponses)
+            .where(
+              and(
+                eq(threeSixtyResponses.reviewId, response.reviewId),
+                eq(threeSixtyResponses.status, "completed"),
+              ),
+            );
 
-        await db
-          .update(threeSixtyReviews)
-          .set({
-            completedReviewerCount: completedResponses.length,
-            updatedAt: new Date(),
-          })
-          .where(eq(threeSixtyReviews.id, response.reviewId));
-      }
+          await tx
+            .update(threeSixtyReviews)
+            .set({
+              completedReviewerCount: completedResponses.length,
+              updatedAt: new Date(),
+            })
+            .where(eq(threeSixtyReviews.id, response.reviewId));
+        }
 
-      return reply.send(updated);
+        return updated;
+      });
+
+      return reply.send(result);
     },
   );
 };

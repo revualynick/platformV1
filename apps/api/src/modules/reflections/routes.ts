@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Queue } from "bullmq";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import {
   selfReflections,
   conversationMessages,
@@ -89,26 +89,24 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
     let currentStreak = 0;
     if (rows.length > 0) {
       const currentWeek = getCurrentWeekMonday();
-      let expectedWeek = new Date(currentWeek);
+      let expectedMs = new Date(currentWeek).getTime();
+      const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
       for (const row of rows) {
         const rowWeek = row.weekStarting;
-        if (rowWeek === expectedWeek.toISOString().slice(0, 10)) {
+        const expectedStr = new Date(expectedMs).toISOString().slice(0, 10);
+
+        if (rowWeek === expectedStr) {
           currentStreak++;
-          expectedWeek.setUTCDate(expectedWeek.getUTCDate() - 7);
-        } else if (
-          currentStreak === 0 &&
-          rowWeek ===
-            new Date(
-              expectedWeek.getTime() - 7 * 24 * 60 * 60 * 1000,
-            )
-              .toISOString()
-              .slice(0, 10)
-        ) {
-          // Allow the streak to start from previous week if current week isn't done yet
-          expectedWeek.setUTCDate(expectedWeek.getUTCDate() - 7);
-          currentStreak++;
-          expectedWeek.setUTCDate(expectedWeek.getUTCDate() - 7);
+          expectedMs -= WEEK_MS;
+        } else if (currentStreak === 0) {
+          const prevExpectedStr = new Date(expectedMs - WEEK_MS).toISOString().slice(0, 10);
+          if (rowWeek === prevExpectedStr) {
+            currentStreak++;
+            expectedMs = expectedMs - 2 * WEEK_MS;
+          } else {
+            break;
+          }
         } else {
           break;
         }
@@ -190,15 +188,23 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         ),
       );
 
+    const qIds = allQuestionnaires.map((q) => q.id);
+    const allThemes = qIds.length > 0
+      ? await db.select().from(questionnaireThemes).where(inArray(questionnaireThemes.questionnaireId, qIds))
+      : [];
+
+    const themesByQId = new Map<string, (typeof allThemes)[number][]>();
+    for (const t of allThemes) {
+      const list = themesByQId.get(t.questionnaireId) ?? [];
+      list.push(t);
+      themesByQId.set(t.questionnaireId, list);
+    }
+
     let selectedQuestionnaire = null;
     let promptTheme: string | null = null;
     for (const q of allQuestionnaires) {
-      const qThemes = await db
-        .select()
-        .from(questionnaireThemes)
-        .where(eq(questionnaireThemes.questionnaireId, q.id));
-
-      if (qThemes.length > 0) {
+      const qThemes = themesByQId.get(q.id);
+      if (qThemes && qThemes.length > 0) {
         selectedQuestionnaire = q;
         promptTheme = qThemes[0].intent;
         break;
@@ -218,43 +224,20 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(500).send({ error: "Analysis queue not initialized" });
     }
 
-    const state: ConversationState = await initiateConversation(
-      db,
-      { llm: app.llm, adapters: emptyAdapters, analysisQueue },
-      {
-        orgId,
-        reviewerId: userId,
-        subjectId: userId, // self-reflection: reviewer === subject
-        interactionType: "self_reflection",
-        platform: "internal", // self-reflections don't go through any chat platform
-        channelId: "self-reflection",
-        questionnaireId: selectedQuestionnaire.id,
-      },
-    );
-
-    await setConversationState(state);
-
-    // Create or update the self_reflections row
+    // Claim the slot FIRST to prevent race conditions.
+    // If existing row is in "pending" state, update it; otherwise insert.
+    let claimedId: string;
     if (existing) {
-      await db
-        .update(selfReflections)
-        .set({
-          status: "in_progress",
-          conversationId: state.conversationId,
-          promptTheme,
-        })
-        .where(eq(selfReflections.id, existing.id));
+      claimedId = existing.id;
     } else {
-      const [inserted] = await db.insert(selfReflections).values({
+      const [claimed] = await db.insert(selfReflections).values({
         userId,
-        conversationId: state.conversationId,
         weekStarting: weekStart,
-        status: "in_progress",
+        status: "pending",
         promptTheme,
       }).onConflictDoNothing({ target: [selfReflections.userId, selfReflections.weekStarting] }).returning();
 
-      if (!inserted) {
-        // Another request won the race — return the existing reflection
+      if (!claimed) {
         const [existing2] = await db.select().from(selfReflections).where(
           and(eq(selfReflections.userId, userId), eq(selfReflections.weekStarting, weekStart))
         );
@@ -264,7 +247,35 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
           status: existing2?.status,
         });
       }
+      claimedId = claimed.id;
     }
+
+    // Now safe to create the conversation -- we hold the slot
+    const state: ConversationState = await initiateConversation(
+      db,
+      { llm: app.llm, adapters: emptyAdapters, analysisQueue },
+      {
+        orgId,
+        reviewerId: userId,
+        subjectId: userId,
+        interactionType: "self_reflection",
+        platform: "internal",
+        channelId: "self-reflection",
+        questionnaireId: selectedQuestionnaire.id,
+      },
+    );
+
+    await setConversationState(state);
+
+    // Update the claimed row with conversation details
+    await db
+      .update(selfReflections)
+      .set({
+        status: "in_progress",
+        conversationId: state.conversationId,
+        promptTheme,
+      })
+      .where(eq(selfReflections.id, claimedId));
 
     const openingMessage =
       state.messages[state.messages.length - 1]?.content ?? "";

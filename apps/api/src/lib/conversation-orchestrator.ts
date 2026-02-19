@@ -75,6 +75,17 @@ export async function initiateConversation(
     db.select().from(users).where(eq(users.id, params.subjectId)),
   ]);
 
+  // 2. Null guards — bail early if required data is missing
+  if (!questionnaire) {
+    throw Object.assign(new Error("Questionnaire not found"), { statusCode: 404 });
+  }
+  if (!reviewer) {
+    throw Object.assign(new Error("Reviewer not found"), { statusCode: 404 });
+  }
+  if (!subject) {
+    throw Object.assign(new Error("Subject not found"), { statusCode: 404 });
+  }
+
   // 3. Select 2-3 themes for this conversation (don't use all every time)
   const maxThemes = Math.min(themes.length, params.interactionType === "self_reflection" ? 3 : 2);
   const selectedThemes = themes.slice(0, maxThemes);
@@ -445,7 +456,7 @@ async function getCurrentTheme(
 export function stripControlChars(input: string): string {
   return input
     .replace(/[\x00-\x1f\x7f]/g, "")  // control chars
-    .replace(/[`"\\]/g, "")            // backticks, double quotes, backslashes
+    .replace(/[`"\\<>']/g, "")         // backticks, quotes, backslashes, angle brackets
     .replace(/\n/g, " ")               // newlines → spaces
     .slice(0, 200);
 }

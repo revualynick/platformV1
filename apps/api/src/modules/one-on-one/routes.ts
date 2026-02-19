@@ -11,6 +11,7 @@ import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac
 import {
   parseBody,
   idParamSchema,
+  sessionItemParamSchema,
   createSessionSchema,
   updateSessionSchema,
   sessionQuerySchema,
@@ -72,8 +73,6 @@ async function resolveOneOnOnePair(
 
   return null;
 }
-
-const itemIdParamSchema = idParamSchema;
 
 export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
   // POST / — Create/schedule a session (manager only)
@@ -300,10 +299,9 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
 
   // PATCH /:id/action-items/:itemId
   app.patch("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
-    const { id } = parseBody(idParamSchema, request.params);
+    const { id, itemId } = parseBody(sessionItemParamSchema, request.params);
     const { db } = request.tenant;
     const userId = getAuthenticatedUserId(request);
-    const itemId = (request.params as Record<string, string>).itemId;
     const body = parseBody(updateActionItemSchema, request.body);
 
     const session = await verifySessionAccess(db, id, userId);
@@ -346,10 +344,9 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
 
   // DELETE /:id/action-items/:itemId
   app.delete("/:id/action-items/:itemId", { preHandler: requireAuth }, async (request, reply) => {
-    const { id } = parseBody(idParamSchema, request.params);
+    const { id, itemId } = parseBody(sessionItemParamSchema, request.params);
     const { db } = request.tenant;
     const userId = getAuthenticatedUserId(request);
-    const itemId = (request.params as Record<string, string>).itemId;
 
     const session = await verifySessionAccess(db, id, userId);
     if (!session) {
@@ -402,10 +399,9 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
 
   // PATCH /:id/agenda/:itemId
   app.patch("/:id/agenda/:itemId", { preHandler: requireAuth }, async (request, reply) => {
-    const { id } = parseBody(idParamSchema, request.params);
+    const { id, itemId } = parseBody(sessionItemParamSchema, request.params);
     const { db } = request.tenant;
     const userId = getAuthenticatedUserId(request);
-    const itemId = (request.params as Record<string, string>).itemId;
     const body = parseBody(updateAgendaItemSchema, request.body);
 
     const session = await verifySessionAccess(db, id, userId);

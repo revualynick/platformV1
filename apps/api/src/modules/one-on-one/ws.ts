@@ -6,6 +6,12 @@ import { getTenantDb } from "@revualy/db";
 import { oneOnOneSessions } from "@revualy/db";
 import { verifyWsToken } from "../../lib/ws-auth.js";
 
+function getTenantDbUrl(): string {
+  const url = process.env.TENANT_DATABASE_URL;
+  if (!url) throw new Error("TENANT_DATABASE_URL is required");
+  return url;
+}
+
 interface Room {
   managerSocket: WebSocket | null;
   employeeSocket: WebSocket | null;
@@ -65,10 +71,7 @@ async function persistNotes(room: Room) {
   }
 
   // Save to database
-  const DEV_DB_URL =
-    process.env.TENANT_DATABASE_URL ??
-    "postgres://revualy:revualy@localhost:5432/revualy_dev";
-  const db = getTenantDb(room.orgId, DEV_DB_URL);
+  const db = getTenantDb(room.orgId, getTenantDbUrl());
 
   await db
     .update(oneOnOneSessions)
@@ -80,7 +83,7 @@ function schedulePersist(room: Room) {
   if (room.persistTimer) return; // Already scheduled
   room.persistTimer = setTimeout(async () => {
     room.persistTimer = null;
-    await persistNotes(room).catch(() => {});
+    await persistNotes(room).catch((err) => console.warn("[WS] Persist failed for session", room.sessionId, err));
   }, PERSIST_INTERVAL);
 }
 
@@ -193,10 +196,7 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
       const orgId = payload.orgId;
 
       // Resolve tenant database
-      const DEV_DB_URL =
-        process.env.TENANT_DATABASE_URL ??
-        "postgres://revualy:revualy@localhost:5432/revualy_dev";
-      const db = getTenantDb(orgId, DEV_DB_URL);
+      const db = getTenantDb(orgId, getTenantDbUrl());
 
       const [session] = await db
         .select()
@@ -279,6 +279,11 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
               sendJson(socket, { type: "error", message: "content must be a string" });
               return;
             }
+            const MAX_CONTENT_LENGTH = 500_000; // 500KB
+            if (msg.content.length > MAX_CONTENT_LENGTH) {
+              sendJson(socket, { type: "error", message: "Content too large (max 500KB)" });
+              break;
+            }
             room.lastContent = msg.content;
             // Broadcast to employee
             sendJson(room.employeeSocket, {
@@ -299,7 +304,8 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
           }
 
           case "agenda_toggle": {
-            // Relay to the other participant
+            if (typeof msg.itemId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.itemId)) break;
+            if (typeof msg.covered !== "boolean") break;
             const target = isManager ? room.employeeSocket : room.managerSocket;
             sendJson(target, {
               type: "agenda_updated",
@@ -310,6 +316,8 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
           }
 
           case "action_toggle": {
+            if (typeof msg.itemId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.itemId)) break;
+            if (typeof msg.completed !== "boolean") break;
             const target = isManager ? room.employeeSocket : room.managerSocket;
             sendJson(target, {
               type: "action_updated",

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { users, engagementScores } from "@revualy/db";
-import { parseBody, idParamSchema, updateUserSchema } from "../../lib/validation.js";
+import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema } from "../../lib/validation.js";
 import { requireAuth } from "../../lib/rbac.js";
 import { syncAuthUser } from "../../lib/auth-sync.js";
 
@@ -11,13 +11,13 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   // GET /users — List active users, optionally filtered by teamId or managerId
   app.get("/", async (request, reply) => {
     const { db } = request.tenant;
-    const { teamId, managerId } = request.query as { teamId?: string; managerId?: string };
+    const query = parseBody(listUsersQuerySchema, request.query);
 
     const conditions = [eq(users.isActive, true)];
-    if (teamId) conditions.push(eq(users.teamId, teamId));
-    if (managerId) conditions.push(eq(users.managerId, managerId));
+    if (query.teamId) conditions.push(eq(users.teamId, query.teamId));
+    if (query.managerId) conditions.push(eq(users.managerId, query.managerId));
 
-    const { limit = "200" } = request.query as { limit?: string };
+    const limit = Math.min(parseInt(query.limit ?? "200", 10) || 200, 500);
     const result = await db
       .select({
         id: users.id,
@@ -31,7 +31,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       })
       .from(users)
       .where(and(...conditions))
-      .limit(Math.min(parseInt(limit, 10) || 200, 500));
+      .limit(limit);
     return reply.send({ data: result });
   });
 

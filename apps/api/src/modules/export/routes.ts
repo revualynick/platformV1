@@ -86,7 +86,8 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       })
       .from(feedbackEntries)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(feedbackEntries.createdAt));
+      .orderBy(desc(feedbackEntries.createdAt))
+      .limit(50000);
 
     // Resolve user names for reviewer/subject
     const userIds = new Set<string>();
@@ -204,7 +205,8 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       .innerJoin(users, eq(engagementScores.userId, users.id))
       .leftJoin(teams, eq(users.teamId, teams.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(engagementScores.weekStarting));
+      .orderBy(desc(engagementScores.weekStarting))
+      .limit(50000);
 
     const data = rows.map((r) => ({
       week: r.weekStarting,
@@ -256,7 +258,8 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       })
       .from(escalations)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(escalations.createdAt));
+      .orderBy(desc(escalations.createdAt))
+      .limit(50000);
 
     // Resolve names
     const escalationUserIds = new Set<string>();
@@ -311,6 +314,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
     const rows = await db
       .select({
+        id: users.id,
         name: users.name,
         email: users.email,
         role: users.role,
@@ -323,12 +327,9 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       .leftJoin(teams, eq(users.teamId, teams.id))
       .orderBy(users.name);
 
-    // Resolve manager names
-    const allUsers = await db
-      .select({ id: users.id, name: users.name })
-      .from(users);
+    // Build manager name map from the already-fetched rows
     const userMap = new Map<string, string>();
-    for (const u of allUsers) userMap.set(u.id, u.name);
+    for (const r of rows) userMap.set(r.id, r.name);
 
     const data = rows.map((r) => ({
       name: r.name,

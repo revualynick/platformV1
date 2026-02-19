@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getTenantDb, type TenantDb } from "@revualy/db";
 
@@ -37,7 +38,11 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
 
   // Require a valid internal secret to trust headers
   if (INTERNAL_SECRET) {
-    if (secret !== INTERNAL_SECRET) {
+    if (
+      !secret ||
+      secret.length !== INTERNAL_SECRET.length ||
+      !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(INTERNAL_SECRET))
+    ) {
       const err = new Error("Invalid internal API secret");
       (err as Error & { statusCode: number }).statusCode = 401;
       throw err;
