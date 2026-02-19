@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, or, asc, desc } from "drizzle-orm";
+import { eq, and, or, asc, desc, inArray } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   users,
@@ -122,9 +122,6 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       conditions.push(eq(oneOnOneSessions.employeeId, pair.employeeId));
     } else {
       // Return all sessions where user is manager or employee
-      // Build with OR — but drizzle doesn't support OR easily in conditions array
-      // So we'll do two queries and merge
-      const { or } = await import("drizzle-orm");
       conditions.push(
         or(
           eq(oneOnOneSessions.managerId, userId),

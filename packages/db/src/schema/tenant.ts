@@ -475,6 +475,19 @@ export const pulseCheckTriggers = pgTable(
   ],
 );
 
+export const pulseCheckConfig = pgTable("pulse_check_config", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  negativeSentimentThreshold: integer("negative_sentiment_threshold")
+    .notNull()
+    .default(2),
+  windowDays: integer("window_days").notNull().default(7),
+  cooldownDays: integer("cooldown_days").notNull().default(14),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // ── Notification Preferences ──────────────────────────
 
 export const notificationPreferences = pgTable(
@@ -601,6 +614,40 @@ export const oneOnOneAgendaItems = pgTable(
   ],
 );
 
+// ── Self Reflections ──────────────────────────────────
+
+export const selfReflections = pgTable(
+  "self_reflections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    conversationId: uuid("conversation_id").references(() => conversations.id),
+    weekStarting: date("week_starting").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    mood: varchar("mood", { length: 20 }),
+    highlights: text("highlights"),
+    challenges: text("challenges"),
+    goalForNextWeek: text("goal_for_next_week"),
+    engagementScore: integer("engagement_score"),
+    promptTheme: varchar("prompt_theme", { length: 100 }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_self_reflection_user_week").on(table.userId, table.weekStarting),
+    index("idx_self_reflections_user_id").on(table.userId),
+    index("idx_self_reflections_status").on(table.status),
+    index("idx_self_reflections_week_starting").on(table.weekStarting),
+  ],
+);
+
 // ── Calendar Events ────────────────────────────────────
 
 // ── Manager Notes ─────────────────────────────────────
@@ -625,6 +672,126 @@ export const managerNotes = pgTable(
   },
   (table) => [
     index("idx_manager_notes_manager_subject").on(table.managerId, table.subjectId),
+  ],
+);
+
+// ── Calibration Reports ───────────────────────────────
+
+export const calibrationReports = pgTable(
+  "calibration_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id").notNull(),
+    weekStarting: date("week_starting").notNull(),
+    data: jsonb("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_calibration_report_week").on(table.weekStarting),
+    index("idx_calibration_reports_week_starting").on(table.weekStarting),
+  ],
+);
+
+// ── 360 Reviews ───────────────────────────────────────
+
+export const threeSixtyReviews = pgTable(
+  "three_sixty_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id),
+    initiatedById: uuid("initiated_by_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 20 }).notNull().default("collecting"),
+    targetReviewerCount: integer("target_reviewer_count").notNull().default(5),
+    completedReviewerCount: integer("completed_reviewer_count").default(0),
+    aggregatedData: jsonb("aggregated_data"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_three_sixty_reviews_subject_id").on(table.subjectId),
+    index("idx_three_sixty_reviews_status").on(table.status),
+    index("idx_three_sixty_reviews_initiated_by").on(table.initiatedById),
+  ],
+);
+
+export const threeSixtyResponses = pgTable(
+  "three_sixty_responses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => threeSixtyReviews.id, { onDelete: "cascade" }),
+    reviewerId: uuid("reviewer_id")
+      .notNull()
+      .references(() => users.id),
+    feedbackEntryId: uuid("feedback_entry_id").references(
+      () => feedbackEntries.id,
+    ),
+    conversationId: uuid("conversation_id").references(
+      () => conversations.id,
+    ),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_three_sixty_responses_review_id").on(table.reviewId),
+    index("idx_three_sixty_responses_reviewer_id").on(table.reviewerId),
+    unique("uq_three_sixty_response_review_reviewer").on(
+      table.reviewId,
+      table.reviewerId,
+    ),
+  ],
+);
+
+// ── Discovered Themes ─────────────────────────────────
+
+export const discoveredThemes = pgTable(
+  "discovered_themes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 200 }).notNull(),
+    description: text("description"),
+    frequency: integer("frequency").notNull().default(0),
+    confidence: real("confidence").notNull().default(0),
+    trend: varchar("trend", { length: 20 }).default("stable"), // rising | stable | declining
+    relatedCoreValueId: uuid("related_core_value_id").references(
+      () => coreValues.id,
+      { onDelete: "set null" },
+    ),
+    sampleEvidence: jsonb("sample_evidence").$type<string[]>().default([]),
+    status: varchar("status", { length: 20 }).default("suggested"), // suggested | accepted | rejected | archived
+    acceptedAsThemeId: uuid("accepted_as_theme_id").references(
+      () => questionnaireThemes.id,
+      { onDelete: "set null" },
+    ),
+    discoveredAt: timestamp("discovered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_discovered_themes_status").on(table.status),
+    index("idx_discovered_themes_discovered_at").on(table.discoveredAt),
   ],
 );
 

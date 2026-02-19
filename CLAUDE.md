@@ -13,11 +13,13 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phase 1 (Foundation), Phase 2 (Core Loop), Phase 3 (Intelligence) complete. Phase 4 mostly complete.** See `docs/plan.md` for full checklists.
+**Phases 1-5 complete.** See `docs/plan.md` for full checklists.
 
-Phase 4 complete: 1:1 sessions, rate limiting (`@fastify/rate-limit`), LLM gateway injection (`app.llm`/`app.adapters`), leaderboard API (DB-backed), escalation pipeline (5 endpoints + audit trail), Google Chat adapter (verification token + Chat API), notification preferences page (`/dashboard/settings`), onboarding wizard (3-step flow + middleware redirect).
+Phase 4: 1:1 sessions, rate limiting, LLM gateway injection, leaderboard API, escalation pipeline, Google Chat adapter, notification preferences, onboarding wizard.
 
-**Next up:** Google Workspace admin setup, demo chat interactions, beta launch.
+Phase 5: Calibration engine, pulse check system, 360 manager reviews, self-reflection interactions + live reflections page, D3.js relationship graph, data export + blind review, Teams adapter (complete), AI theme discovery, N+1 optimization, 64 unit tests.
+
+**Next up:** Google Workspace admin setup, end-to-end GChat test, production deployment (Railway).
 
 ## Repo structure
 ```
@@ -61,12 +63,9 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
-## Known gaps (as of Phase 4 — mostly complete)
-- Reflections page is pure mock (no self-reflection API — Phase 5)
-- LLM gateway has no provider SDKs wired (Anthropic/OpenAI)
+## Known gaps (post Phase 5)
 - GChat adapter: needs Google Workspace admin setup to test end-to-end
-- Teams adapter: full stub (Phase 5)
-- Outlook calendar integration not built (Phase 5 — Google Calendar done)
+- Outlook calendar integration not built (Google Calendar done)
 - 1:1 agenda generator is data-only (no LLM prioritization yet — upgradable later)
-- Demo chat interactions page not built (deferred from Phase 3)
 - Google Workspace app installation/admin setup pending beta company
+- Production deployment (Railway) + env config not done

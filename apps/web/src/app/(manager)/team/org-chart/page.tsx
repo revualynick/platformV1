@@ -4,6 +4,7 @@ import {
   orgThreads as mockThreads,
   threadTagColors,
 } from "@/lib/mock-data";
+import { OrgChartClient } from "./org-chart-client";
 
 interface OrgNode {
   id: string;
@@ -35,7 +36,7 @@ async function loadOrgChart(): Promise<{ nodes: OrgNode[]; edges: OrgEdge[] }> {
   }
 
   // Mock fallback
-  const nodes: OrgNode[] = mockPeople.slice(1, 9).map((p) => ({
+  const nodes: OrgNode[] = mockPeople.map((p) => ({
     id: p.id,
     name: p.name,
     role: p.role,
@@ -44,7 +45,7 @@ async function loadOrgChart(): Promise<{ nodes: OrgNode[]; edges: OrgEdge[] }> {
   }));
 
   const edges: OrgEdge[] = [
-    ...mockPeople.slice(1, 9)
+    ...mockPeople
       .filter((p) => p.reportsTo && nodes.find((n) => n.id === p.reportsTo))
       .map((p) => ({
         id: `report-${p.id}`,
@@ -74,12 +75,10 @@ async function loadOrgChart(): Promise<{ nodes: OrgNode[]; edges: OrgEdge[] }> {
 }
 
 function buildTree(nodes: OrgNode[], edges: OrgEdge[]) {
-  // Find root (node with managerId not in the set)
   const nodeIds = new Set(nodes.map((n) => n.id));
   const root = nodes.find((n) => !n.managerId || !nodeIds.has(n.managerId));
   if (!root) return null;
 
-  // Build children map
   const childrenMap = new Map<string, OrgNode[]>();
   for (const node of nodes) {
     if (node.managerId && nodeIds.has(node.managerId)) {
@@ -96,6 +95,7 @@ const roleColors: Record<string, string> = {
   admin: "bg-terracotta/10 text-terracotta",
   manager: "bg-forest/10 text-forest",
   director: "bg-forest/10 text-forest",
+  vp: "bg-forest/10 text-forest",
   lead: "bg-sky-100 text-sky-700",
   employee: "bg-stone-100 text-stone-600",
   senior: "bg-violet-100 text-violet-700",
@@ -119,7 +119,6 @@ function TreeNode({
 
   return (
     <div className="flex flex-col items-center">
-      {/* Node card */}
       <div className="w-44 rounded-xl border border-stone-200/60 bg-white p-3 text-center" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-xs font-medium text-stone-600">
           {node.name.split(" ").map((n) => n[0]).join("")}
@@ -149,15 +148,12 @@ function TreeNode({
         )}
       </div>
 
-      {/* Connector line */}
       {children.length > 0 && (
         <div className="h-6 w-px bg-stone-200" />
       )}
 
-      {/* Children */}
       {children.length > 0 && (
         <div className="flex gap-4">
-          {/* Horizontal connector bar */}
           {children.length > 1 && (
             <div className="absolute" />
           )}
@@ -181,6 +177,7 @@ export default async function OrgChartPage() {
   const { nodes, edges } = await loadOrgChart();
   const threads = edges.filter((e) => e.type === "thread");
   const tree = buildTree(nodes, edges);
+  const uniqueTeams = [...new Set(nodes.map((n) => n.team).filter(Boolean))] as string[];
 
   return (
     <div className="max-w-6xl">
@@ -214,11 +211,21 @@ export default async function OrgChartPage() {
         ))}
       </div>
 
+      {/* Relationship Web (Force Graph) */}
+      <OrgChartClient
+        nodes={nodes}
+        edges={edges}
+        uniqueTeams={uniqueTeams}
+      />
+
       {/* Tree View */}
       <div
-        className="card-enter overflow-x-auto rounded-2xl border border-stone-200/60 bg-white p-8"
+        className="card-enter mt-6 overflow-x-auto rounded-2xl border border-stone-200/60 bg-white p-8"
         style={{ animationDelay: "200ms", boxShadow: "var(--shadow-sm)" }}
       >
+        <h3 className="mb-6 font-display text-base font-semibold text-stone-800">
+          Hierarchy View
+        </h3>
         {tree ? (
           <div className="flex justify-center">
             <TreeNode
@@ -254,11 +261,11 @@ export default async function OrgChartPage() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium text-stone-700">
-                      {fromNode?.name ?? "—"}
+                      {fromNode?.name ?? "---"}
                     </span>
-                    <span className="text-xs text-stone-300">↔</span>
+                    <span className="text-xs text-stone-300">&#x2194;</span>
                     <span className="text-sm font-medium text-stone-700">
-                      {toNode?.name ?? "—"}
+                      {toNode?.name ?? "---"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

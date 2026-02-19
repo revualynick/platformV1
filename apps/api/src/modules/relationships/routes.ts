@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, or, and } from "drizzle-orm";
+import { eq, or, and, inArray } from "drizzle-orm";
 import { users, teams, userRelationships } from "@revualy/db";
 import {
   parseBody,
@@ -45,49 +45,66 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
       // Admins pass through
     }
 
-    // Fetch the user and their connections
-    const allUsers = await db.select().from(users).where(eq(users.isActive, true));
-    const allTeams = await db.select().from(teams);
-    const allRelationships = await db
-      .select()
-      .from(userRelationships)
-      .where(
-        and(
-          eq(userRelationships.isActive, true),
-          or(
-            eq(userRelationships.fromUserId, id),
-            eq(userRelationships.toUserId, id),
+    // 1. Fetch relationships + direct reports + manager in parallel (not all users)
+    const [relationships, directReports, [centerUser]] = await Promise.all([
+      db
+        .select()
+        .from(userRelationships)
+        .where(
+          and(
+            eq(userRelationships.isActive, true),
+            or(
+              eq(userRelationships.fromUserId, id),
+              eq(userRelationships.toUserId, id),
+            ),
           ),
         ),
-      );
+      db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.managerId, id), eq(users.isActive, true))),
+      db
+        .select({ id: users.id, managerId: users.managerId })
+        .from(users)
+        .where(eq(users.id, id)),
+    ]);
 
-    // Build connected user IDs (the user + anyone linked via thread or reporting)
+    // 2. Build connected user IDs from relationships + reporting lines
     const connectedIds = new Set<string>([id]);
-    allRelationships.forEach((r) => {
+    relationships.forEach((r) => {
       connectedIds.add(r.fromUserId);
       connectedIds.add(r.toUserId);
     });
-    // Also include direct reports and manager
-    allUsers.forEach((u) => {
-      if (u.managerId === id) connectedIds.add(u.id);
-      if (u.id === id && u.managerId) connectedIds.add(u.managerId);
-    });
+    directReports.forEach((u) => connectedIds.add(u.id));
+    if (centerUser?.managerId) connectedIds.add(centerUser.managerId);
 
-    const teamMap = new Map(allTeams.map((t) => [t.id, t.name]));
+    // 3. Batch fetch only connected users
+    const connectedIdArray = [...connectedIds];
+    const connectedUsers = connectedIdArray.length > 0
+      ? await db
+          .select({ id: users.id, name: users.name, role: users.role, teamId: users.teamId, managerId: users.managerId })
+          .from(users)
+          .where(inArray(users.id, connectedIdArray))
+      : [];
 
-    const nodes = allUsers
-      .filter((u) => connectedIds.has(u.id))
-      .map((u) => ({
-        id: u.id,
-        name: u.name,
-        role: u.role,
-        team: u.teamId ? teamMap.get(u.teamId) ?? null : null,
-        managerId: u.managerId,
-      }));
+    // 4. Batch fetch only referenced teams
+    const teamIds = [...new Set(connectedUsers.map((u) => u.teamId).filter((t): t is string => t !== null))];
+    const referencedTeams = teamIds.length > 0
+      ? await db.select({ id: teams.id, name: teams.name }).from(teams).where(inArray(teams.id, teamIds))
+      : [];
+    const teamMap = new Map(referencedTeams.map((t) => [t.id, t.name]));
 
-    // Reporting edges: parent→child for each user with managerId
-    const reportingEdges = allUsers
-      .filter((u) => connectedIds.has(u.id) && u.managerId && connectedIds.has(u.managerId))
+    const nodes = connectedUsers.map((u) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+      team: u.teamId ? teamMap.get(u.teamId) ?? null : null,
+      managerId: u.managerId,
+    }));
+
+    // Reporting edges: parent->child for each user with managerId within the subgraph
+    const reportingEdges = connectedUsers
+      .filter((u) => u.managerId && connectedIds.has(u.managerId))
       .map((u) => ({
         id: `report-${u.managerId}-${u.id}`,
         from: u.managerId!,
@@ -100,7 +117,7 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
       }));
 
     // Thread edges from user_relationships
-    const threadEdges = allRelationships.map((r) => ({
+    const threadEdges = relationships.map((r) => ({
       id: r.id,
       from: r.fromUserId,
       to: r.toUserId,

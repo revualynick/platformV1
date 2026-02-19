@@ -66,3 +66,88 @@ export interface EscalationAuditEntry {
   notes: string | null;
   createdAt: ISODateTime;
 }
+
+export type SelfReflectionStatus = "pending" | "in_progress" | "completed" | "skipped";
+
+export type ReflectionMood =
+  | "energized"
+  | "focused"
+  | "reflective"
+  | "tired"
+  | "optimistic"
+  | "stressed";
+
+export interface SelfReflection {
+  id: UUID;
+  userId: UUID;
+  conversationId: UUID | null;
+  weekStarting: string;
+  status: SelfReflectionStatus;
+  mood: string | null;
+  highlights: string | null;
+  challenges: string | null;
+  goalForNextWeek: string | null;
+  engagementScore: number | null;
+  promptTheme: string | null;
+  completedAt: ISODateTime | null;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
+}
+
+export interface ReflectionStats {
+  totalCompleted: number;
+  avgEngagementScore: number | null;
+  currentStreak: number;
+  topMood: string | null;
+}
+
+export interface ThreeSixtyAggregation {
+  subjectId: string;
+  subjectName: string;
+  reviewerCount: number;
+  avgEngagementScore: number;
+  sentimentDistribution: Record<string, number>;
+  valueScores: Array<{
+    valueName: string;
+    avgScore: number;
+    evidenceCount: number;
+  }>;
+  strengths: string[];
+  growthAreas: string[];
+  overallSummary: string;
+}
+
+export type ThreeSixtyReviewStatus =
+  | "collecting"
+  | "analyzing"
+  | "completed"
+  | "cancelled";
+
+export type ThreeSixtyResponseStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "declined";
+
+export interface ThreeSixtyReview {
+  id: UUID;
+  subjectId: UUID;
+  initiatedById: UUID;
+  status: ThreeSixtyReviewStatus;
+  targetReviewerCount: number;
+  completedReviewerCount: number;
+  aggregatedData: ThreeSixtyAggregation | null;
+  startedAt: ISODateTime;
+  completedAt: ISODateTime | null;
+}
+
+export interface ThreeSixtyResponse {
+  id: UUID;
+  reviewId: UUID;
+  reviewerId: UUID;
+  feedbackEntryId: UUID | null;
+  conversationId: UUID | null;
+  status: ThreeSixtyResponseStatus;
+  invitedAt: ISODateTime;
+  completedAt: ISODateTime | null;
+}

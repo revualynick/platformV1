@@ -26,14 +26,16 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
 
     // Verify caller has a legitimate relationship to the subject
     if (body.subjectId && body.subjectId !== userId) {
-      const [caller] = await db
-        .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
-        .from(users)
-        .where(eq(users.id, userId));
-      const [subject] = await db
-        .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
-        .from(users)
-        .where(eq(users.id, body.subjectId));
+      const [[caller], [subject]] = await Promise.all([
+        db
+          .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, userId)),
+        db
+          .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, body.subjectId)),
+      ]);
 
       if (!caller || !subject) {
         return reply.code(400).send({ error: "Invalid user" });

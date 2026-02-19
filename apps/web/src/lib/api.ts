@@ -775,3 +775,39 @@ export async function completeOnboarding() {
     method: "PATCH",
   });
 }
+
+// ── Self Reflections ────────────────────────────────
+
+export interface SelfReflectionRow {
+  id: string;
+  userId: string;
+  conversationId: string | null;
+  weekStarting: string;
+  status: "pending" | "in_progress" | "completed" | "skipped";
+  mood: string | null;
+  highlights: string | null;
+  challenges: string | null;
+  goalForNextWeek: string | null;
+  engagementScore: number | null;
+  promptTheme: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReflectionStatsRow {
+  totalCompleted: number;
+  avgEngagementScore: number | null;
+  currentStreak: number;
+  topMood: string | null;
+}
+
+export async function getReflections(limit = 12) {
+  return apiFetch<{ data: SelfReflectionRow[] }>(
+    `/api/v1/reflections?limit=${limit}`,
+  );
+}
+
+export async function getReflectionStats() {
+  return apiFetch<ReflectionStatsRow>("/api/v1/reflections/stats");
+}

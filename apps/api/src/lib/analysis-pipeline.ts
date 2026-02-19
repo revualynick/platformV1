@@ -9,6 +9,7 @@ import {
   escalations,
 } from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
+import { evaluatePulseCheckTrigger } from "./pulse-check-monitor.js";
 
 /**
  * Run the full analysis pipeline on a closed conversation.
@@ -26,22 +27,21 @@ export async function runAnalysisPipeline(
   llm: LLMGateway,
   conversationId: string,
   logger: Pick<Console, "error" | "warn" | "info"> = console,
+  orgId?: string,
 ): Promise<AnalysisPipelineResult> {
-  // 1. Fetch conversation + messages
-  const [conversation] = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId));
+  // 1. Fetch conversation + messages in parallel
+  const [[conversation], messages] = await Promise.all([
+    db.select().from(conversations).where(eq(conversations.id, conversationId)),
+    db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conversationId))
+      .orderBy(conversationMessages.createdAt),
+  ]);
 
   if (!conversation) {
     return { success: false, failedSteps: ["fetch"], feedbackEntryId: null };
   }
-
-  const messages = await db
-    .select()
-    .from(conversationMessages)
-    .where(eq(conversationMessages.conversationId, conversationId))
-    .orderBy(conversationMessages.createdAt);
 
   // Extract user-only messages (the actual feedback content)
   const userMessages = messages.filter((m) => m.role === "user");
@@ -133,6 +133,13 @@ export async function runAnalysisPipeline(
       });
     }
   });
+
+  // Fire-and-forget: evaluate pulse check trigger for the feedback subject
+  if (feedbackEntryId) {
+    evaluatePulseCheckTrigger(db, conversation.subjectId, orgId ?? "", logger).catch(
+      (err) => logger.error(`[PulseCheck] Evaluation failed for subject ${conversation.subjectId}:`, err),
+    );
+  }
 
   return {
     success: failedSteps.length === 0,

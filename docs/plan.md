@@ -146,7 +146,7 @@ revualy/
 
 ### What's Built (Phases 1-4) ✅
 
-**Foundation:** Monorepo (Turborepo + pnpm), PostgreSQL schema (14 migrations via Drizzle), control-plane + tenant DB pattern, Slack adapter (complete), GChat adapter (complete), Teams adapter (stub), LLM gateway abstraction, Fastify API (16 route modules), BullMQ (5 queues + workers + graceful shutdown), Next.js dashboards (all pages wired to live API with mock fallback).
+**Foundation:** Monorepo (Turborepo + pnpm), PostgreSQL schema (19 migrations via Drizzle), control-plane + tenant DB pattern, Slack adapter (complete), GChat adapter (complete), Teams adapter (complete), LLM gateway abstraction (Anthropic SDK wired), Fastify API (22 route modules), BullMQ (5 queues + workers + graceful shutdown), Next.js dashboards (all pages wired to live API with mock fallback).
 
 **Core Loop:** Conversation orchestrator (multi-turn state machine), AI question generation (theme-aware, verbatim support), feedback analysis pipeline (sentiment, engagement, values, flagging, summary — parallel with graceful degradation), interaction scheduler (daily cron, calendar-aware, Neo4j peer selection), Redis conversation state, full CRUD for users, relationships, questionnaires, feedback, org config.
 
@@ -156,23 +156,17 @@ revualy/
 
 **Auth:** NextAuth.js with DB sessions (`@auth/drizzle-adapter`), Google OAuth, RBAC (`requireAuth`/`requireRole` preHandlers), edge-safe cookie middleware, role/onboarding guards in server layouts, auth sync to control plane.
 
-**Code quality:** Two code review rounds (93 findings, all resolved). TOCTOU race prevention, escalation authorization, circular manager detection, input validation, DB constraints, error boundaries, prompt injection sanitization.
+**Code quality:** Three code review rounds (93+ findings, all resolved). TOCTOU race prevention, escalation authorization, circular manager detection, input validation, DB constraints, error boundaries, prompt injection sanitization. 64 unit tests (vitest).
+
+**Phase 5 (complete):** Calibration engine (reviewer bias detection, cross-team comparison, std-dev alerts), pulse check system (sentiment monitoring, configurable thresholds, cooldown, auto-trigger), 360 manager reviews (initiate/collect/aggregate workflow, admin + reviewer RBAC), self-reflection interactions (conversation-based, LLM extraction, reflections page wired to live API), relationship web visualization (D3.js force graph, team coloring, drag/zoom/click), data export + blind review mode (CSV/JSON, PII sanitization, anonymous labeling), Microsoft Teams adapter (Bot Framework REST API, Adaptive Cards, OAuth2), AI theme discovery (batch LLM clustering, upsert/promote to questionnaire themes), N+1 query optimization (parallelized queries in orchestrator/pipeline/relationships), test coverage (64 tests across 4 suites).
 
 ### Beta Launch Blocklist
 - [ ] Google Workspace admin setup — install GChat app at beta company
-- [ ] Wire LLM provider SDK (Anthropic) into `ai-core` gateway
+- [x] Wire LLM provider SDK (Anthropic) into `ai-core` gateway
 - [ ] End-to-end test: GChat webhook → conversation → analysis → dashboard
-- [ ] Demo chat interactions page (animated preview + live interactive)
+- [x] Demo chat interactions page (animated preview + live interactive)
 - [ ] Production deployment (Railway) + env config
 
-### Phase 5 Backlog
-- [ ] Calibration engine (leniency/severity detection, cross-team comparison)
-- [ ] Pulse check system (comms ingestion, organic follow-up, sentiment aggregation)
-- [ ] 360 manager reviews (aggregated upward feedback)
-- [ ] Self-reflection interactions + reflections page
-- [ ] Relationship web visualization (D3.js force graph)
-- [ ] Data export + blind review mode
-- [ ] Microsoft Teams adapter
+### Remaining Backlog
 - [ ] Outlook calendar integration
-- [ ] AI theme discovery from communications
-- [ ] N+1 query optimization + test coverage
+- [ ] Production monitoring + alerting

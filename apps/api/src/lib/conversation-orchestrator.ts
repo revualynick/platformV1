@@ -63,27 +63,17 @@ export async function initiateConversation(
     questionnaireId: string;
   },
 ): Promise<ConversationState> {
-  // 1. Fetch questionnaire and themes
-  const [questionnaire] = await db
-    .select()
-    .from(questionnaires)
-    .where(eq(questionnaires.id, params.questionnaireId));
-
-  const themes = await db
-    .select()
-    .from(questionnaireThemes)
-    .where(eq(questionnaireThemes.questionnaireId, params.questionnaireId))
-    .orderBy(questionnaireThemes.sortOrder);
-
-  // 2. Fetch reviewer and subject names for personalization
-  const [reviewer] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, params.reviewerId));
-  const [subject] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, params.subjectId));
+  // 1. Fetch questionnaire, themes, reviewer, and subject in parallel
+  const [[questionnaire], themes, [reviewer], [subject]] = await Promise.all([
+    db.select().from(questionnaires).where(eq(questionnaires.id, params.questionnaireId)),
+    db
+      .select()
+      .from(questionnaireThemes)
+      .where(eq(questionnaireThemes.questionnaireId, params.questionnaireId))
+      .orderBy(questionnaireThemes.sortOrder),
+    db.select().from(users).where(eq(users.id, params.reviewerId)),
+    db.select().from(users).where(eq(users.id, params.subjectId)),
+  ]);
 
   // 3. Select 2-3 themes for this conversation (don't use all every time)
   const maxThemes = Math.min(themes.length, params.interactionType === "self_reflection" ? 3 : 2);
@@ -199,17 +189,12 @@ export async function handleReply(
     state.phase = "follow_up";
   }
 
-  // 4. Generate next question
-  const currentTheme = await getCurrentTheme(db, state);
-  const [questionnaire] = await db
-    .select()
-    .from(questionnaires)
-    .where(eq(questionnaires.id, state.questionnaireId));
-
-  const [subject] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, state.subjectId));
+  // 4. Generate next question — fetch theme, questionnaire, and subject in parallel
+  const [currentTheme, [questionnaire], [subject]] = await Promise.all([
+    getCurrentTheme(db, state),
+    db.select().from(questionnaires).where(eq(questionnaires.id, state.questionnaireId)),
+    db.select().from(users).where(eq(users.id, state.subjectId)),
+  ]);
 
   const nextQuestion = await generateQuestion(deps.llm, {
     theme: currentTheme,
@@ -404,7 +389,7 @@ Respond with exactly ONE word: "follow_up" if the answer is vague and needs elab
 
 // ── Utilities ────────────────────────────────────────────
 
-function getMaxMessages(type: InteractionType): number {
+export function getMaxMessages(type: InteractionType): number {
   switch (type) {
     case "peer_review":
       return 5;
@@ -419,7 +404,7 @@ function getMaxMessages(type: InteractionType): number {
   }
 }
 
-function getClosingMessage(type: InteractionType): string {
+export function getClosingMessage(type: InteractionType): string {
   switch (type) {
     case "peer_review":
       return "Thanks so much for sharing your thoughts! Your feedback makes a real difference. Have a great rest of your day.";
@@ -456,7 +441,7 @@ async function getCurrentTheme(
 }
 
 /** Strip control characters, quotes, and special chars to mitigate prompt injection via user-provided names. */
-function stripControlChars(input: string): string {
+export function stripControlChars(input: string): string {
   return input
     .replace(/[\x00-\x1f\x7f]/g, "")  // control chars
     .replace(/[`"\\]/g, "")            // backticks, double quotes, backslashes

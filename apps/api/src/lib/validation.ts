@@ -212,6 +212,74 @@ export const createEscalationNoteSchema = z.object({
   action: z.string().min(1).max(100).optional().default("Note added"),
 });
 
+// ── 360 Reviews ─────────────────────────────────────
+
+export const createThreeSixtySchema = z.object({
+  subjectId: uuid,
+  reviewerIds: z.array(uuid).min(3).max(15),
+});
+
+export const updateThreeSixtyResponseSchema = z.object({
+  status: z.enum(["completed", "declined"]),
+});
+
+export const threeSixtyCompleteSchema = z.object({
+  force: z.boolean().optional().default(false),
+});
+
+// ── Pulse Check Config ───────────────────────────────
+
+export const updatePulseCheckConfigSchema = z.object({
+  negativeSentimentThreshold: z.number().int().min(1).max(50).optional(),
+  windowDays: z.number().int().min(1).max(90).optional(),
+  cooldownDays: z.number().int().min(1).max(90).optional(),
+  isEnabled: z.boolean().optional(),
+});
+
+export const userIdParamSchema = z.object({
+  userId: uuid,
+});
+
+// ── Data Export ──────────────────────────────────────
+
+export const exportQuerySchema = z.object({
+  format: z.enum(["csv", "json"]).default("json"),
+  blind: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+
+export const exportUsersQuerySchema = z.object({
+  format: z.enum(["csv", "json"]).default("json"),
+});
+
+// ── Self Reflections ────────────────────────────────
+
+export const completeReflectionSchema = z.object({
+  mood: z.enum(["energized", "focused", "reflective", "tired", "optimistic", "stressed"]),
+  highlights: z.string().max(2000).optional(),
+  challenges: z.string().max(2000).optional(),
+  goalForNextWeek: z.string().max(2000).optional(),
+});
+
+// ── Theme Discovery ─────────────────────────────────
+
+export const triggerDiscoverySchema = z.object({
+  windowDays: z.number().int().min(7).max(90).default(30),
+});
+
+export const discoveredThemeQuerySchema = z.object({
+  status: z.enum(["suggested", "accepted", "rejected", "archived"]).optional(),
+});
+
+export const updateDiscoveredThemeSchema = z.object({
+  status: z.enum(["accepted", "rejected", "archived"]),
+});
+
+export const promoteThemeSchema = z.object({
+  questionnaireId: uuid,
+});
+
 // ── Params ─────────────────────────────────────────────
 
 export const idParamSchema = z.object({

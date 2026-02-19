@@ -1,27 +1,113 @@
-import { selfReflections, engagementHistory } from "@/lib/mock-data";
+import { getReflections, getReflectionStats } from "@/lib/api";
+import type { SelfReflectionRow, ReflectionStatsRow } from "@/lib/api";
+import { selfReflections as mockReflections } from "@/lib/mock-data";
 
 const moodStyles: Record<string, { emoji: string; bg: string; text: string }> = {
-  energized: { emoji: "⚡", bg: "bg-positive/10", text: "text-positive" },
-  focused: { emoji: "🎯", bg: "bg-forest/10", text: "text-forest" },
-  reflective: { emoji: "💭", bg: "bg-violet-100", text: "text-violet-600" },
-  tired: { emoji: "🌙", bg: "bg-amber/10", text: "text-warning" },
-  optimistic: { emoji: "☀️", bg: "bg-sky-50", text: "text-sky-600" },
-  stressed: { emoji: "🔥", bg: "bg-danger/10", text: "text-danger" },
+  energized: { emoji: "\u26A1", bg: "bg-positive/10", text: "text-positive" },
+  focused: { emoji: "\uD83C\uDFAF", bg: "bg-forest/10", text: "text-forest" },
+  reflective: { emoji: "\uD83D\uDCAD", bg: "bg-violet-100", text: "text-violet-600" },
+  tired: { emoji: "\uD83C\uDF19", bg: "bg-amber/10", text: "text-warning" },
+  optimistic: { emoji: "\u2600\uFE0F", bg: "bg-sky-50", text: "text-sky-600" },
+  stressed: { emoji: "\uD83D\uDD25", bg: "bg-danger/10", text: "text-danger" },
 };
 
-export default function ReflectionsPage() {
-  const completedCount = selfReflections.filter((r) => r.status === "complete").length;
-  const avgScore = Math.round(
-    selfReflections.reduce((sum, r) => sum + r.engagementScore, 0) /
-      selfReflections.length,
-  );
+interface ReflectionDisplay {
+  id: string;
+  week: string;
+  status: string;
+  promptTheme: string | null;
+  highlights: string | null;
+  challenges: string | null;
+  goalForNextWeek: string | null;
+  mood: string;
+  engagementScore: number | null;
+}
 
-  // Count mood occurrences
-  const moodCounts: Record<string, number> = {};
-  selfReflections.forEach((r) => {
-    moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
+function formatWeekDate(isoDate: string): string {
+  const d = new Date(isoDate + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
   });
-  const topMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0];
+}
+
+function mapApiToDisplay(row: SelfReflectionRow): ReflectionDisplay {
+  return {
+    id: row.id,
+    week: formatWeekDate(row.weekStarting),
+    status: row.status,
+    promptTheme: row.promptTheme,
+    highlights: row.highlights,
+    challenges: row.challenges,
+    goalForNextWeek: row.goalForNextWeek,
+    mood: row.mood ?? "reflective",
+    engagementScore: row.engagementScore,
+  };
+}
+
+function mapMockToDisplay(
+  mock: (typeof mockReflections)[number],
+): ReflectionDisplay {
+  return {
+    id: mock.id,
+    week: mock.week,
+    status: mock.status,
+    promptTheme: mock.promptTheme,
+    highlights: mock.highlights,
+    challenges: mock.challenges,
+    goalForNextWeek: mock.goalForNextWeek,
+    mood: mock.mood,
+    engagementScore: mock.engagementScore,
+  };
+}
+
+export default async function ReflectionsPage() {
+  let reflections: ReflectionDisplay[];
+  let completedCount: number;
+  let avgScore: number | null;
+  let topMood: string | null;
+  let currentStreak: number;
+
+  const [reflectionsResult, statsResult] = await Promise.allSettled([
+    getReflections(12),
+    getReflectionStats(),
+  ]);
+
+  if (
+    reflectionsResult.status === "fulfilled" &&
+    reflectionsResult.value.data.length > 0
+  ) {
+    reflections = reflectionsResult.value.data.map(mapApiToDisplay);
+  } else {
+    reflections = mockReflections.map(mapMockToDisplay);
+  }
+
+  if (statsResult.status === "fulfilled") {
+    const stats: ReflectionStatsRow = statsResult.value;
+    completedCount = stats.totalCompleted;
+    avgScore = stats.avgEngagementScore;
+    topMood = stats.topMood;
+    currentStreak = stats.currentStreak;
+  } else {
+    completedCount = mockReflections.filter((r) => r.status === "complete").length;
+    avgScore = Math.round(
+      mockReflections.reduce((sum, r) => sum + r.engagementScore, 0) /
+        mockReflections.length,
+    );
+    const moodCounts: Record<string, number> = {};
+    mockReflections.forEach((r) => {
+      moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
+    });
+    const topEntry = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0];
+    topMood = topEntry ? topEntry[0] : null;
+    currentStreak = completedCount;
+  }
+
+  const topMoodLabel = topMood
+    ? topMood.charAt(0).toUpperCase() + topMood.slice(1)
+    : "\u2014";
 
   return (
     <div className="max-w-5xl">
@@ -48,19 +134,19 @@ export default function ReflectionsPage() {
           },
           {
             label: "Avg Quality",
-            value: avgScore.toString(),
+            value: avgScore != null ? avgScore.toString() : "\u2014",
             sub: "Engagement score",
             color: "text-forest",
           },
           {
             label: "Top Mood",
-            value: topMood ? topMood[0].charAt(0).toUpperCase() + topMood[0].slice(1) : "—",
-            sub: topMood ? `${topMood[1]} times` : "",
+            value: topMoodLabel,
+            sub: topMood ? "" : "",
             color: "text-stone-900",
           },
           {
             label: "Streak",
-            value: `${completedCount}w`,
+            value: `${currentStreak}w`,
             sub: "Consecutive reflections",
             color: "text-terracotta",
           },
@@ -93,7 +179,7 @@ export default function ReflectionsPage() {
           Mood Over Time
         </h3>
         <div className="flex items-center gap-1">
-          {selfReflections
+          {reflections
             .slice()
             .reverse()
             .map((r) => {
@@ -102,12 +188,12 @@ export default function ReflectionsPage() {
                 <div key={r.id} className="flex flex-1 flex-col items-center gap-2">
                   <div
                     className={`flex h-10 w-10 items-center justify-center rounded-xl ${mood.bg} text-lg`}
-                    title={`${r.mood} — ${r.week}`}
+                    title={`${r.mood} \u2014 ${r.week}`}
                   >
                     {mood.emoji}
                   </div>
                   <span className="text-[10px] text-stone-400">
-                    {r.week.replace(", 2026", "")}
+                    {r.week.replace(/, \d{4}$/, "")}
                   </span>
                 </div>
               );
@@ -117,8 +203,9 @@ export default function ReflectionsPage() {
 
       {/* Reflections */}
       <div className="space-y-5">
-        {selfReflections.map((reflection, i) => {
+        {reflections.map((reflection, i) => {
           const mood = moodStyles[reflection.mood] ?? moodStyles.reflective;
+          const score = reflection.engagementScore;
           return (
             <div
               key={reflection.id}
@@ -143,17 +230,19 @@ export default function ReflectionsPage() {
                   <span className="text-[10px] uppercase tracking-wider text-stone-300">
                     {reflection.promptTheme}
                   </span>
-                  <span
-                    className={`font-display text-base font-semibold tabular-nums ${
-                      reflection.engagementScore >= 80
-                        ? "text-forest"
-                        : reflection.engagementScore >= 60
-                          ? "text-warning"
-                          : "text-danger"
-                    }`}
-                  >
-                    {reflection.engagementScore}
-                  </span>
+                  {score != null && (
+                    <span
+                      className={`font-display text-base font-semibold tabular-nums ${
+                        score >= 80
+                          ? "text-forest"
+                          : score >= 60
+                            ? "text-warning"
+                            : "text-danger"
+                      }`}
+                    >
+                      {score}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -165,7 +254,7 @@ export default function ReflectionsPage() {
                     Highlights
                   </p>
                   <p className="text-sm leading-relaxed text-stone-600">
-                    {reflection.highlights}
+                    {reflection.highlights || "\u2014"}
                   </p>
                 </div>
 
@@ -175,7 +264,7 @@ export default function ReflectionsPage() {
                     Challenges
                   </p>
                   <p className="text-sm leading-relaxed text-stone-600">
-                    {reflection.challenges}
+                    {reflection.challenges || "\u2014"}
                   </p>
                 </div>
 
@@ -185,7 +274,7 @@ export default function ReflectionsPage() {
                     Goal for Next Week
                   </p>
                   <p className="text-sm leading-relaxed text-stone-600">
-                    {reflection.goalForNextWeek}
+                    {reflection.goalForNextWeek || "\u2014"}
                   </p>
                 </div>
               </div>

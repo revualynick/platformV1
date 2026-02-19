@@ -296,7 +296,7 @@ export function createWorkers(config: WorkerConfig) {
         process.env.TENANT_DATABASE_URL ?? "",
       );
 
-      await runAnalysisPipeline(db, llm, conversationId);
+      await runAnalysisPipeline(db, llm, conversationId, console, orgId);
     },
     { connection, concurrency: 3 },
   );
