@@ -13,6 +13,8 @@ import {
 
 export const escalationRoutes: FastifyPluginAsync = async (app) => {
   // POST / — File an escalation (any authenticated user)
+  // Authorization: users can only escalate if they have a relationship to the subject
+  // (e.g., same team, direct report, or self). Admins can file against anyone.
   app.post("/", { preHandler: requireAuth }, async (request, reply) => {
     const { db } = request.tenant;
     const userId = getAuthenticatedUserId(request);
@@ -20,6 +22,36 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
 
     if (!body.feedbackEntryId && !body.subjectId) {
       return reply.code(400).send({ error: "Either feedbackEntryId or subjectId is required" });
+    }
+
+    // Verify caller has a legitimate relationship to the subject
+    if (body.subjectId && body.subjectId !== userId) {
+      const [caller] = await db
+        .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
+        .from(users)
+        .where(eq(users.id, userId));
+      const [subject] = await db
+        .select({ role: users.role, teamId: users.teamId, managerId: users.managerId })
+        .from(users)
+        .where(eq(users.id, body.subjectId));
+
+      if (!caller || !subject) {
+        return reply.code(400).send({ error: "Invalid user" });
+      }
+
+      // Admins can file against anyone
+      if (caller.role !== "admin") {
+        // Managers can file against their direct reports
+        const isDirectReport = subject.managerId === userId;
+        // Team members can file against each other
+        const isSameTeam = caller.teamId && subject.teamId && caller.teamId === subject.teamId;
+        // Employee can file against their own manager
+        const isOwnManager = caller.managerId === body.subjectId;
+
+        if (!isDirectReport && !isSameTeam && !isOwnManager) {
+          return reply.code(403).send({ error: "You can only file escalations involving colleagues you work with" });
+        }
+      }
     }
 
     const created = await db.transaction(async (tx) => {

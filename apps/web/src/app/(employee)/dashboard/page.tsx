@@ -6,6 +6,7 @@ import type { OneOnOneSession } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
+import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import {
   currentUser as mockUser,
   recentFeedback as mockFeedback,
@@ -228,9 +229,11 @@ export default async function EmployeeDashboard() {
             <h3 className="font-display text-base font-semibold text-stone-800">Engagement Trend</h3>
             <span className="text-xs text-stone-400">Last 6 weeks</span>
           </div>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-            <EngagementChart data={data.engagementHistory} />
-          </Suspense>
+          <ChartErrorBoundary>
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+              <EngagementChart data={data.engagementHistory} />
+            </Suspense>
+          </ChartErrorBoundary>
         </div>
 
         <div
@@ -241,9 +244,11 @@ export default async function EmployeeDashboard() {
             <h3 className="font-display text-base font-semibold text-stone-800">Values Alignment</h3>
             <span className="text-xs text-stone-400">Avg scores</span>
           </div>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-            <ValuesRadar data={data.valuesScores} />
-          </Suspense>
+          <ChartErrorBoundary>
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+              <ValuesRadar data={data.valuesScores} />
+            </Suspense>
+          </ChartErrorBoundary>
         </div>
       </div>
 

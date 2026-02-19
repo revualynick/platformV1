@@ -135,6 +135,9 @@ async function start() {
     (llmProvider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined) ||
     (llmProvider === "openai" ? process.env.OPENAI_API_KEY : undefined) ||
     "";
+  if (!llmApiKey) {
+    app.log.warn(`No LLM API key found for provider "${llmProvider}" — LLM calls will fail at runtime`);
+  }
   const llm = createLLMGateway({
     provider: llmProvider,
     apiKey: llmApiKey,
@@ -148,22 +151,38 @@ async function start() {
   const adapters = new AdapterRegistry();
 
   // Register chat adapters when credentials are available
-  if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_SIGNING_SECRET) {
-    adapters.register(new SlackAdapter({
-      botToken: process.env.SLACK_BOT_TOKEN,
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-      appToken: process.env.SLACK_APP_TOKEN,
-    }));
-    app.log.info("Slack adapter registered");
+  if (process.env.SLACK_BOT_TOKEN) {
+    if (!process.env.SLACK_SIGNING_SECRET) {
+      app.log.warn("SLACK_BOT_TOKEN is set but SLACK_SIGNING_SECRET is missing — Slack adapter not registered");
+    } else {
+      adapters.register(new SlackAdapter({
+        botToken: process.env.SLACK_BOT_TOKEN,
+        signingSecret: process.env.SLACK_SIGNING_SECRET,
+        appToken: process.env.SLACK_APP_TOKEN,
+      }));
+      app.log.info("Slack adapter registered");
+    }
   }
 
-  if (process.env.GCHAT_SERVICE_ACCOUNT_KEY && process.env.GCHAT_VERIFICATION_TOKEN) {
-    adapters.register(new GoogleChatAdapter({
-      serviceAccountKeyJson: process.env.GCHAT_SERVICE_ACCOUNT_KEY,
-      projectId: process.env.GCHAT_PROJECT_ID ?? "",
-      verificationToken: process.env.GCHAT_VERIFICATION_TOKEN,
-    }));
-    app.log.info("Google Chat adapter registered");
+  if (process.env.GCHAT_SERVICE_ACCOUNT_KEY) {
+    if (!process.env.GCHAT_VERIFICATION_TOKEN) {
+      app.log.warn("GCHAT_SERVICE_ACCOUNT_KEY is set but GCHAT_VERIFICATION_TOKEN is missing — GChat adapter not registered");
+    } else {
+      adapters.register(new GoogleChatAdapter({
+        serviceAccountKeyJson: process.env.GCHAT_SERVICE_ACCOUNT_KEY,
+        projectId: process.env.GCHAT_PROJECT_ID ?? "",
+        verificationToken: process.env.GCHAT_VERIFICATION_TOKEN,
+      }));
+      app.log.info("Google Chat adapter registered");
+    }
+  }
+
+  // Validate encryption key early if set (fails at runtime otherwise)
+  if (process.env.ENCRYPTION_KEY) {
+    const key = process.env.ENCRYPTION_KEY;
+    if (key.length !== 64 || !/^[0-9a-fA-F]{64}$/.test(key)) {
+      app.log.error("ENCRYPTION_KEY must be 64 hex characters — encryption operations will fail");
+    }
   }
 
   // Expose on app so route handlers can access app.llm / app.adapters

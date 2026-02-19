@@ -63,7 +63,7 @@ export async function syncReportsTo(
   orgId: string,
   userId: string,
   managerId: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = getOrgSession(orgId);
     try {
@@ -74,11 +74,13 @@ export async function syncReportsTo(
          SET r.updatedAt = datetime()`,
         { userId, managerId },
       );
+      return { ok: true };
     } finally {
       await session.close();
     }
   } catch (err) {
     console.error("[Neo4j] syncReportsTo failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -89,7 +91,7 @@ export async function removeReportsTo(
   orgId: string,
   userId: string,
   managerId: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = getOrgSession(orgId);
     try {
@@ -98,11 +100,13 @@ export async function removeReportsTo(
          DELETE r`,
         { userId, managerId },
       );
+      return { ok: true };
     } finally {
       await session.close();
     }
   } catch (err) {
     console.error("[Neo4j] removeReportsTo failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -121,7 +125,7 @@ export async function syncThread(
     tags: string[];
     relationshipId: string;
   },
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = getOrgSession(orgId);
     try {
@@ -144,11 +148,13 @@ export async function syncThread(
           tags: properties.tags,
         },
       );
+      return { ok: true };
     } finally {
       await session.close();
     }
   } catch (err) {
     console.error("[Neo4j] syncThread failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -158,7 +164,7 @@ export async function syncThread(
 export async function removeThread(
   orgId: string,
   relationshipId: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = getOrgSession(orgId);
     try {
@@ -167,11 +173,13 @@ export async function removeThread(
          DELETE r`,
         { relId: relationshipId },
       );
+      return { ok: true };
     } finally {
       await session.close();
     }
   } catch (err) {
     console.error("[Neo4j] removeThread failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -181,7 +189,7 @@ export async function removeThread(
 export async function syncUserNode(
   orgId: string,
   user: { id: string; name: string; role: string; teamId: string | null },
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = getOrgSession(orgId);
     try {
@@ -190,11 +198,13 @@ export async function syncUserNode(
          SET u.name = $name, u.role = $role, u.teamId = $teamId, u.updatedAt = datetime()`,
         { id: user.id, name: user.name, role: user.role, teamId: user.teamId },
       );
+      return { ok: true };
     } finally {
       await session.close();
     }
   } catch (err) {
     console.error("[Neo4j] syncUserNode failed:", err);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

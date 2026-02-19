@@ -366,8 +366,8 @@ async function decideNextAction(
   state: ConversationState,
   lastReply: string,
 ): Promise<"follow_up" | "next_theme" | "close"> {
-  // If we've used all themes, close
-  if (state.currentThemeIndex >= state.selectedThemes.length - 1 && state.phase !== "opening") {
+  // If we've explored all themes (index is past the last one after increment), close
+  if (state.currentThemeIndex >= state.selectedThemes.length && state.phase !== "opening") {
     return "close";
   }
 
@@ -455,9 +455,13 @@ async function getCurrentTheme(
     : null;
 }
 
-/** Strip control characters and limit length to mitigate prompt injection via user-provided names. */
+/** Strip control characters, quotes, and special chars to mitigate prompt injection via user-provided names. */
 function stripControlChars(input: string): string {
-  return input.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 200);
+  return input
+    .replace(/[\x00-\x1f\x7f]/g, "")  // control chars
+    .replace(/[`"\\]/g, "")            // backticks, double quotes, backslashes
+    .replace(/\n/g, " ")               // newlines → spaces
+    .slice(0, 200);
 }
 
 async function sendMessage(

@@ -138,7 +138,10 @@ export const managerNoteQuerySchema = z.object({
 
 export const createSessionSchema = z.object({
   employeeId: uuid,
-  scheduledAt: z.string().datetime(),
+  scheduledAt: z.string().datetime().refine(
+    (dt) => new Date(dt) > new Date(),
+    { message: "scheduledAt must be in the future" },
+  ),
 });
 
 export const updateSessionSchema = z.object({

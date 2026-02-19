@@ -47,17 +47,28 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
   // GET /conversations — List recent conversations (admin only)
   app.get("/", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { db } = request.tenant;
-    const { limit = "20", status } = request.query as { limit?: string; status?: string };
+    const { limit: rawLimit = "20", status } = request.query as { limit?: string; status?: string };
 
+    // Validate limit
+    const parsedLimit = parseInt(rawLimit, 10);
+    const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 200)
+      : 20;
+
+    // Validate status enum
+    const validStatuses = ["initiated", "in_progress", "closed"] as const;
     let query = db.select().from(conversations);
 
     if (status) {
+      if (!validStatuses.includes(status as (typeof validStatuses)[number])) {
+        return reply.code(400).send({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
       query = query.where(eq(conversations.status, status)) as typeof query;
     }
 
     const results = await query
       .orderBy(desc(conversations.createdAt))
-      .limit(parseInt(limit));
+      .limit(safeLimit);
 
     return reply.send({ data: results });
   });

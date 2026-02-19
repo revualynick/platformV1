@@ -62,7 +62,12 @@ export class SlackAdapter implements ChatAdapter {
     const isValid = crypto.timingSafeEqual(myBuf, sigBuf);
 
     // Handle URL verification challenge
-    const parsed = typeof body === "string" ? JSON.parse(body) : body;
+    let parsed: unknown;
+    try {
+      parsed = typeof body === "string" ? JSON.parse(body) : body;
+    } catch {
+      return { isValid: false };
+    }
     if (
       isValid &&
       parsed &&

@@ -33,8 +33,8 @@ export async function retryAsync<T>(
       // Don't retry non-transient errors
       if (isNonTransient(err)) throw err;
       if (i < attempts - 1) {
-        // Exponential backoff with jitter to avoid thundering herd
-        const delay = baseDelay * Math.pow(2, i) * (0.5 + Math.random() * 0.5);
+        // Exponential backoff with jitter, capped at 5s
+        const delay = Math.min(baseDelay * Math.pow(2, i) * (0.5 + Math.random() * 0.5), 5000);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

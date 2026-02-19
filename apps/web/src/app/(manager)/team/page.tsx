@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUsers, getEngagementScores, getFlaggedItems } from "@/lib/api";
 import { TeamTrendChart } from "@/components/charts/team-trend-chart";
+import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import {
   teamMembers as mockTeamMembers,
   flaggedItems as mockFlaggedItems,
@@ -220,9 +221,11 @@ export default async function TeamDashboard() {
               Range: highest — avg — lowest
             </span>
           </div>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-            <TeamTrendChart data={trendData} />
-          </Suspense>
+          <ChartErrorBoundary>
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+              <TeamTrendChart data={trendData} />
+            </Suspense>
+          </ChartErrorBoundary>
         </div>
 
         {/* Leaderboard */}

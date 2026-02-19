@@ -117,21 +117,22 @@ async function seed() {
   console.log(`  ✓ ${valueRows.length} core values`);
 
   // ── Users ───────────────────────────────────────────
+  const SEED_DOMAIN = process.env.SEED_EMAIL_DOMAIN ?? "acmecorp.com";
   const peopleData = [
-    { name: "Dana Whitfield", email: "dana.whitfield@acmecorp.com", role: "admin", team: engineering.id, manager: null as string | null },
-    { name: "Alex Thompson", email: "alex.thompson@acmecorp.com", role: "manager", team: engineering.id, manager: null as string | null },
-    { name: "Jordan Wells", email: "jordan.wells@acmecorp.com", role: "manager", team: corePlatform.id, manager: null as string | null },
-    { name: "Sarah Chen", email: "sarah.chen@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "Marcus Rivera", email: "marcus.rivera@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "Aisha Patel", email: "aisha.patel@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "James Okonkwo", email: "james.okonkwo@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "Elena Volkov", email: "elena.volkov@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "David Kim", email: "david.kim@acmecorp.com", role: "employee", team: corePlatform.id, manager: null as string | null },
-    { name: "Priya Sharma", email: "priya.sharma@acmecorp.com", role: "manager", team: dataML.id, manager: null as string | null },
-    { name: "Tom Nguyen", email: "tom.nguyen@acmecorp.com", role: "employee", team: dataML.id, manager: null as string | null },
-    { name: "Rachel Adams", email: "rachel.adams@acmecorp.com", role: "employee", team: dataML.id, manager: null as string | null },
-    { name: "Leo Park", email: "leo.park@acmecorp.com", role: "employee", team: infra.id, manager: null as string | null },
-    { name: "Nina Torres", email: "nina.torres@acmecorp.com", role: "employee", team: infra.id, manager: null as string | null },
+    { name: "Dana Whitfield", email: `dana.whitfield@${SEED_DOMAIN}`, role: "admin", team: engineering.id, manager: null as string | null },
+    { name: "Alex Thompson", email: `alex.thompson@${SEED_DOMAIN}`, role: "manager", team: engineering.id, manager: null as string | null },
+    { name: "Jordan Wells", email: `jordan.wells@${SEED_DOMAIN}`, role: "manager", team: corePlatform.id, manager: null as string | null },
+    { name: "Sarah Chen", email: `sarah.chen@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "Marcus Rivera", email: `marcus.rivera@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "Aisha Patel", email: `aisha.patel@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "James Okonkwo", email: `james.okonkwo@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "Elena Volkov", email: `elena.volkov@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "David Kim", email: `david.kim@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },
+    { name: "Priya Sharma", email: `priya.sharma@${SEED_DOMAIN}`, role: "manager", team: dataML.id, manager: null as string | null },
+    { name: "Tom Nguyen", email: `tom.nguyen@${SEED_DOMAIN}`, role: "employee", team: dataML.id, manager: null as string | null },
+    { name: "Rachel Adams", email: `rachel.adams@${SEED_DOMAIN}`, role: "employee", team: dataML.id, manager: null as string | null },
+    { name: "Leo Park", email: `leo.park@${SEED_DOMAIN}`, role: "employee", team: infra.id, manager: null as string | null },
+    { name: "Nina Torres", email: `nina.torres@${SEED_DOMAIN}`, role: "employee", team: infra.id, manager: null as string | null },
   ];
 
   const userRows = await db

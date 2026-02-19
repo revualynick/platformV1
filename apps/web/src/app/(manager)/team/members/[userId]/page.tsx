@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import {
   getUser,
@@ -20,6 +21,7 @@ import type {
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
+import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import { NotesSection } from "./notes-section";
 import {
   teamMembers as mockTeamMembers,
@@ -76,6 +78,7 @@ async function loadEmployeeData(userId: string) {
     oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
     currentUserId: managerId ?? "p2",
     isDirectReport: true,
+    usingMockData: true,
   };
 
   if (!managerId) return defaults;
@@ -216,9 +219,10 @@ async function loadEmployeeData(userId: string) {
       oneOnOneSessions,
       currentUserId: managerId,
       isDirectReport,
+      usingMockData: false,
     };
   } catch {
-    return defaults;
+    return { ...defaults, usingMockData: true };
   }
 }
 
@@ -229,6 +233,12 @@ export default async function EmployeeDetailPage({
 }) {
   const { userId } = await params;
   const data = await loadEmployeeData(userId);
+
+  // Enforce direct report access (#6 — frontend auth gap)
+  if (!data.isDirectReport) {
+    redirect("/team/members");
+  }
+
   const { employee, engagementScore, streak, responseRate, engagementHistory, valuesScores, feedback, flaggedItems, notes, oneOnOneSessions, currentUserId } = data;
 
   const initials = employee.name
@@ -238,6 +248,12 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="max-w-6xl">
+      {/* Mock data banner (#14) */}
+      {data.usingMockData && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          Unable to reach the API — showing sample data. Some information may not be current.
+        </div>
+      )}
       {/* Back link */}
       <Link
         href="/team/members"
@@ -296,9 +312,11 @@ export default async function EmployeeDetailPage({
           <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
             Engagement Trend
           </h3>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-            <EngagementChart data={engagementHistory} />
-          </Suspense>
+          <ChartErrorBoundary>
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+              <EngagementChart data={engagementHistory} />
+            </Suspense>
+          </ChartErrorBoundary>
         </div>
         <div
           className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
@@ -307,9 +325,11 @@ export default async function EmployeeDetailPage({
           <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
             Values Alignment
           </h3>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-            <ValuesRadar data={valuesScores} />
-          </Suspense>
+          <ChartErrorBoundary>
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+              <ValuesRadar data={valuesScores} />
+            </Suspense>
+          </ChartErrorBoundary>
         </div>
       </div>
 

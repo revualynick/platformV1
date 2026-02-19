@@ -105,10 +105,17 @@ function stripCodeFences(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith("```")) {
     // Remove opening fence (with optional language tag) and closing fence
-    return trimmed
+    const stripped = trimmed
       .replace(/^```(?:json)?\s*\n?/, "")
       .replace(/\n?```\s*$/, "")
       .trim();
+    // Validate the result is valid JSON; if stripping broke it, return original
+    try {
+      JSON.parse(stripped);
+      return stripped;
+    } catch {
+      return trimmed;
+    }
   }
   return trimmed;
 }

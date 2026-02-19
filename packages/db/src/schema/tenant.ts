@@ -73,6 +73,7 @@ export const userPlatformIdentities = pgTable(
   },
   (table) => [
     unique("uq_user_platform").on(table.userId, table.platform),
+    unique("uq_platform_user_id").on(table.platform, table.platformUserId),
     index("idx_platform_identities_platform_user").on(
       table.platform,
       table.platformUserId,
@@ -149,7 +150,7 @@ export const conversationMessages = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     conversationId: uuid("conversation_id")
       .notNull()
-      .references(() => conversations.id),
+      .references(() => conversations.id, { onDelete: "cascade" }),
     role: varchar("role", { length: 20 }).notNull(), // system | assistant | user
     content: text("content").notNull(),
     platformMessageId: varchar("platform_message_id", { length: 255 }),
@@ -159,6 +160,7 @@ export const conversationMessages = pgTable(
   },
   (table) => [
     index("idx_conversation_messages_conversation_id").on(table.conversationId),
+    index("idx_conversation_messages_conv_created").on(table.conversationId, table.createdAt),
   ],
 );
 
@@ -237,6 +239,7 @@ export const kudos = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index("idx_kudos_giver_id").on(table.giverId),
     index("idx_kudos_receiver_id").on(table.receiverId),
     index("idx_kudos_created_at").on(table.createdAt),
   ],
@@ -335,7 +338,7 @@ export const questions = pgTable("questions", {
   id: uuid("id").primaryKey().defaultRandom(),
   text: text("text").notNull(),
   category: varchar("category", { length: 50 }).notNull(),
-  coreValueId: uuid("core_value_id").references(() => coreValues.id),
+  coreValueId: uuid("core_value_id").references(() => coreValues.id, { onDelete: "set null" }),
   isSystemDefault: boolean("is_system_default").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -452,18 +455,25 @@ export const interactionSchedule = pgTable(
 
 // ── Pulse Checks ───────────────────────────────────────
 
-export const pulseCheckTriggers = pgTable("pulse_check_triggers", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  sourceType: varchar("source_type", { length: 50 }).notNull(),
-  sourceRef: text("source_ref").notNull(),
-  sentiment: varchar("sentiment", { length: 50 }),
-  followUpConversationId: uuid("follow_up_conversation_id").references(
-    () => conversations.id,
-  ),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const pulseCheckTriggers = pgTable(
+  "pulse_check_triggers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceType: varchar("source_type", { length: 50 }).notNull(),
+    sourceRef: text("source_ref").notNull(),
+    sentiment: varchar("sentiment", { length: 50 }),
+    followUpConversationId: uuid("follow_up_conversation_id").references(
+      () => conversations.id,
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_pulse_check_triggers_source_type").on(table.sourceType),
+    index("idx_pulse_check_triggers_created_at").on(table.createdAt),
+  ],
+);
 
 // ── Notification Preferences ──────────────────────────
 

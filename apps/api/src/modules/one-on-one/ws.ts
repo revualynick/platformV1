@@ -131,7 +131,11 @@ function handleDisconnect(sessionId: string) {
     if (room.stalenessTimer) clearTimeout(room.stalenessTimer);
     room.stalenessTimer = setTimeout(() => {
       room.stalenessTimer = null;
-      forceCleanupRoom(sessionId);
+      // Re-check: a reconnect may have happened during the timeout (#22)
+      const current = rooms.get(sessionId);
+      if (!current || (!current.managerSocket && !current.employeeSocket)) {
+        forceCleanupRoom(sessionId);
+      }
     }, STALENESS_TIMEOUT);
   }
 }

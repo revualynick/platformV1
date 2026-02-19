@@ -35,7 +35,12 @@ export class GoogleChatAdapter implements ChatAdapter {
     this.verificationToken = config.verificationToken;
 
     // Initialize Google Chat API client with service account credentials
-    const credentials = JSON.parse(config.serviceAccountKeyJson);
+    let credentials: Record<string, unknown>;
+    try {
+      credentials = JSON.parse(config.serviceAccountKeyJson);
+    } catch (err) {
+      throw new Error(`Invalid service account key JSON: ${err instanceof Error ? err.message : "parse error"}`);
+    }
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/chat.bot"],
@@ -54,8 +59,8 @@ export class GoogleChatAdapter implements ChatAdapter {
 
     // Check bearer token in Authorization header
     const authHeader = headers["authorization"] ?? headers["Authorization"];
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "");
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7); // "Bearer ".length === 7
       if (
         token.length > 0 &&
         token.length === this.verificationToken.length &&

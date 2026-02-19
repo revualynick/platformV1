@@ -46,7 +46,8 @@ async function apiFetch<T>(
     // Don't leak backend error details — log for debugging, expose only status
     const body = await res.text().catch(() => "");
     if (process.env.NODE_ENV === "development") {
-      console.error(`API error ${res.status}: ${path} — ${body}`);
+      // Truncate to prevent leaking large error bodies in dev console (#37)
+      console.error(`API error ${res.status}: ${path} — ${body.slice(0, 500)}`);
     }
     throw new Error(`API request failed: ${res.status} ${path}`);
   }

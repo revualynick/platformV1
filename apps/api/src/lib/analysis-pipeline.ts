@@ -15,19 +15,27 @@ import type { LLMGateway } from "@revualy/ai-core";
  * Each step runs in parallel; individual failures are logged but don't
  * prevent other steps from completing.
  */
+export interface AnalysisPipelineResult {
+  success: boolean;
+  failedSteps: string[];
+  feedbackEntryId: string | null;
+}
+
 export async function runAnalysisPipeline(
   db: TenantDb,
   llm: LLMGateway,
   conversationId: string,
   logger: Pick<Console, "error" | "warn" | "info"> = console,
-): Promise<void> {
+): Promise<AnalysisPipelineResult> {
   // 1. Fetch conversation + messages
   const [conversation] = await db
     .select()
     .from(conversations)
     .where(eq(conversations.id, conversationId));
 
-  if (!conversation) throw new Error(`Conversation ${conversationId} not found`);
+  if (!conversation) {
+    return { success: false, failedSteps: ["fetch"], feedbackEntryId: null };
+  }
 
   const messages = await db
     .select()
@@ -39,7 +47,9 @@ export async function runAnalysisPipeline(
   const userMessages = messages.filter((m) => m.role === "user");
   const rawContent = userMessages.map((m) => m.content).join("\n\n");
 
-  if (!rawContent.trim()) return;
+  if (!rawContent.trim()) {
+    return { success: true, failedSteps: [], feedbackEntryId: null };
+  }
 
   // 2. Fetch org's core values for mapping
   const orgValues = await db
@@ -72,15 +82,18 @@ export async function runAnalysisPipeline(
   const valuesResult =
     results[4].status === "fulfilled" ? results[4].value : [];
 
-  // Log any failures for debugging
+  // Track and log any failures for debugging (#32)
+  const stepNames = ["sentiment", "engagement", "summary", "flags", "values"];
+  const failedSteps: string[] = [];
   results.forEach((r, i) => {
     if (r.status === "rejected") {
-      const stepNames = ["sentiment", "engagement", "summary", "flags", "values"];
+      failedSteps.push(stepNames[i]);
       logger.error(`Analysis step "${stepNames[i]}" failed for conversation ${conversationId}:`, r.reason);
     }
   });
 
   // 4-6. Write feedback entry, value scores, and escalation in a transaction
+  let feedbackEntryId: string | null = null;
   await db.transaction(async (tx) => {
     const [feedbackEntry] = await tx
       .insert(feedbackEntries)
@@ -97,6 +110,8 @@ export async function runAnalysisPipeline(
         hasSpecificExamples: engagementResult.hasExamples,
       })
       .returning();
+
+    feedbackEntryId = feedbackEntry.id;
 
     if (valuesResult.length > 0) {
       await tx.insert(feedbackValueScores).values(
@@ -118,6 +133,12 @@ export async function runAnalysisPipeline(
       });
     }
   });
+
+  return {
+    success: failedSteps.length === 0,
+    failedSteps,
+    feedbackEntryId,
+  };
 }
 
 // ── Sentiment Analysis ──────────────────────────────────

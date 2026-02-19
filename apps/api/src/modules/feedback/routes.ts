@@ -77,12 +77,12 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ data: result, userId: id });
   });
 
-  // GET /feedback/flagged — Flagged items (manager/HR only)
+  // GET /feedback/flagged — Flagged items (manager sees own reports, admin sees all)
   app.get(
     "/feedback/flagged",
     { preHandler: requireRole("manager") },
     async (request, reply) => {
-      const { db } = request.tenant;
+      const { db, userId } = request.tenant;
 
       const flagged = await db
         .select({
@@ -92,6 +92,29 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
         .from(escalations)
         .innerJoin(feedbackEntries, eq(escalations.feedbackEntryId, feedbackEntries.id))
         .orderBy(desc(escalations.createdAt));
+
+      // Admins see all; managers only see escalations for their direct reports
+      if (userId) {
+        const [caller] = await db
+          .select({ role: users.role })
+          .from(users)
+          .where(eq(users.id, userId));
+
+        if (caller && caller.role === "manager") {
+          // Get direct report IDs
+          const reports = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.managerId, userId));
+          const reportIds = new Set(reports.map((r) => r.id));
+          reportIds.add(userId); // include self
+
+          const filtered = flagged.filter(
+            (f) => f.feedback.subjectId && reportIds.has(f.feedback.subjectId),
+          );
+          return reply.send({ data: filtered });
+        }
+      }
 
       return reply.send({ data: flagged });
     },

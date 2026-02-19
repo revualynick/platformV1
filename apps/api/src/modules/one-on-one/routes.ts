@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, or, asc, desc } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   users,
@@ -208,6 +208,7 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
     if (body.summary !== undefined) updates.summary = body.summary;
     if (body.scheduledAt !== undefined) updates.scheduledAt = new Date(body.scheduledAt);
 
+    // Valid status transitions: scheduled→active, active→completed, any→cancelled
     if (body.status === "active" && session.status === "scheduled") {
       updates.status = "active";
       updates.startedAt = new Date();
@@ -227,15 +228,28 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
     } else if (body.status === "completed" && session.status === "active") {
       updates.status = "completed";
       updates.endedAt = new Date();
-    } else if (body.status) {
-      updates.status = body.status;
+    } else if (body.status === "cancelled") {
+      updates.status = "cancelled";
+    } else if (body.status && body.status !== session.status) {
+      return reply.code(400).send({
+        error: `Invalid status transition: ${session.status} → ${body.status}`,
+      });
     }
+
+    // Atomic update with status guard to prevent TOCTOU race
+    const statusGuard = body.status
+      ? and(eq(oneOnOneSessions.id, id), eq(oneOnOneSessions.status, session.status))
+      : eq(oneOnOneSessions.id, id);
 
     const [updated] = await db
       .update(oneOnOneSessions)
       .set(updates)
-      .where(eq(oneOnOneSessions.id, id))
+      .where(statusGuard)
       .returning();
+
+    if (!updated && body.status) {
+      return reply.code(409).send({ error: "Session was modified concurrently, please retry" });
+    }
 
     // Return full session detail
     const [agendaItems, actionItems] = await Promise.all([
@@ -268,6 +282,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: "Session not found" });
     }
 
+    // Validate assigneeId is scoped to the session pair (#30)
+    if (body.assigneeId && body.assigneeId !== session.managerId && body.assigneeId !== session.employeeId) {
+      return reply.code(400).send({ error: "assigneeId must be the manager or employee of this session" });
+    }
+
     const [created] = await db
       .insert(oneOnOneActionItems)
       .values({
@@ -293,6 +312,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
     const session = await verifySessionAccess(db, id, userId);
     if (!session) {
       return reply.code(404).send({ error: "Session not found" });
+    }
+
+    // Validate assigneeId is scoped to the session pair (#30)
+    if (body.assigneeId && body.assigneeId !== session.managerId && body.assigneeId !== session.employeeId) {
+      return reply.code(400).send({ error: "assigneeId must be the manager or employee of this session" });
     }
 
     const updates: Record<string, unknown> = {};

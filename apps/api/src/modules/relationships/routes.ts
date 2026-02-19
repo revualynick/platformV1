@@ -244,6 +244,30 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
     const { db } = request.tenant;
     const body = parseBody(updateManagerSchema, request.body);
 
+    // Prevent circular reporting chains: walk up from the new manager to check
+    // if we'd reach the user being updated (which would create a cycle).
+    if (body.managerId) {
+      if (body.managerId === id) {
+        return reply.code(400).send({ error: "A user cannot be their own manager" });
+      }
+      const allUsers = await db
+        .select({ id: users.id, managerId: users.managerId })
+        .from(users)
+        .where(eq(users.isActive, true));
+      const parentOf = new Map(allUsers.map((u) => [u.id, u.managerId]));
+      // Walk up from the proposed manager; if we hit `id`, it's a cycle
+      let current: string | null = body.managerId;
+      const visited = new Set<string>();
+      while (current) {
+        if (current === id) {
+          return reply.code(400).send({ error: "This assignment would create a circular reporting chain" });
+        }
+        if (visited.has(current)) break; // existing cycle in data — stop walking
+        visited.add(current);
+        current = parentOf.get(current) ?? null;
+      }
+    }
+
     const [updated] = await db
       .update(users)
       .set({ managerId: body.managerId, updatedAt: new Date() })

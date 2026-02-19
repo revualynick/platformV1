@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getEngagementScores } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
+import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import {
   weeklyEngagementDetail as mockWeeklyDetail,
   engagementHistory as mockHistory,
@@ -191,9 +192,11 @@ export default async function EngagementPage() {
           </h3>
           <span className="text-xs text-stone-400">Last 6 weeks</span>
         </div>
-        <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
-          <EngagementChart data={chartData} />
-        </Suspense>
+        <ChartErrorBoundary>
+          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+            <EngagementChart data={chartData} />
+          </Suspense>
+        </ChartErrorBoundary>
       </div>
 
       {/* Weekly history table */}

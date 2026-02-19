@@ -12,9 +12,15 @@ import {
 } from "@/lib/api";
 import { revalidatePath } from "next/cache";
 
+/** Safely extract a string from FormData (returns null if missing or not a string). */
+function getString(fd: FormData, key: string): string | null {
+  const v = fd.get(key);
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
 export async function createSession(formData: FormData) {
-  const employeeId = formData.get("employeeId") as string;
-  const scheduledAt = formData.get("scheduledAt") as string;
+  const employeeId = getString(formData, "employeeId");
+  const scheduledAt = getString(formData, "scheduledAt");
 
   if (!employeeId || !scheduledAt) {
     return { error: "Employee ID and scheduled time are required" };
@@ -30,7 +36,7 @@ export async function createSession(formData: FormData) {
 }
 
 export async function startSession(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
+  const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 
   try {
@@ -43,7 +49,7 @@ export async function startSession(formData: FormData) {
 }
 
 export async function endSession(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
+  const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 
   try {
@@ -56,12 +62,12 @@ export async function endSession(formData: FormData) {
 }
 
 export async function saveNotes(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const notes = formData.get("notes") as string;
+  const sessionId = getString(formData, "sessionId");
+  const notes = formData.get("notes");
   if (!sessionId) return { error: "Session ID is required" };
 
   try {
-    await updateOneOnOneSession(sessionId, { notes: notes ?? "" });
+    await updateOneOnOneSession(sessionId, { notes: typeof notes === "string" ? notes : "" });
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to save notes" };
@@ -69,9 +75,9 @@ export async function saveNotes(formData: FormData) {
 }
 
 export async function addActionItemAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const text = formData.get("text") as string;
-  const assigneeId = formData.get("assigneeId") as string | null;
+  const sessionId = getString(formData, "sessionId");
+  const text = getString(formData, "text");
+  const assigneeId = getString(formData, "assigneeId");
 
   if (!sessionId || !text) return { error: "Session ID and text are required" };
 
@@ -88,8 +94,8 @@ export async function addActionItemAction(formData: FormData) {
 }
 
 export async function toggleActionItemAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const itemId = formData.get("itemId") as string;
+  const sessionId = getString(formData, "sessionId");
+  const itemId = getString(formData, "itemId");
   const completed = formData.get("completed") === "true";
 
   if (!sessionId || !itemId) return { error: "Session ID and item ID are required" };
@@ -104,8 +110,8 @@ export async function toggleActionItemAction(formData: FormData) {
 }
 
 export async function deleteActionItemAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const itemId = formData.get("itemId") as string;
+  const sessionId = getString(formData, "sessionId");
+  const itemId = getString(formData, "itemId");
 
   if (!sessionId || !itemId) return { error: "Session ID and item ID are required" };
 
@@ -119,8 +125,8 @@ export async function deleteActionItemAction(formData: FormData) {
 }
 
 export async function addAgendaItemAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const text = formData.get("text") as string;
+  const sessionId = getString(formData, "sessionId");
+  const text = getString(formData, "text");
 
   if (!sessionId || !text) return { error: "Session ID and text are required" };
 
@@ -134,8 +140,8 @@ export async function addAgendaItemAction(formData: FormData) {
 }
 
 export async function toggleAgendaItemAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
-  const itemId = formData.get("itemId") as string;
+  const sessionId = getString(formData, "sessionId");
+  const itemId = getString(formData, "itemId");
   const covered = formData.get("covered") === "true";
 
   if (!sessionId || !itemId) return { error: "Session ID and item ID are required" };
@@ -150,7 +156,7 @@ export async function toggleAgendaItemAction(formData: FormData) {
 }
 
 export async function generateAgendaAction(formData: FormData) {
-  const sessionId = formData.get("sessionId") as string;
+  const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 
   try {

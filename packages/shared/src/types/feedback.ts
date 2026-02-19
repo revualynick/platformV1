@@ -45,7 +45,7 @@ export interface Escalation {
   feedbackEntryId: UUID | null;
   reporterId: UUID;
   subjectId: UUID;
-  type: string;
+  type: "harassment" | "bias" | "retaliation" | "other";
   severity: EscalationSeverity;
   status: "open" | "investigating" | "resolved" | "dismissed";
   reason: string;

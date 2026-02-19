@@ -54,8 +54,8 @@ export default async function EmployeeSessionDetailPage({
   const { sessionId } = await params;
   const data = await loadSession(sessionId);
 
-  // Verify employee owns this session (#9 — session ownership check)
-  if (data.session.employeeId && data.session.employeeId !== data.currentUserId) {
+  // Verify employee owns this session (#6 — frontend auth gap)
+  if (!data.session.employeeId || data.session.employeeId !== data.currentUserId) {
     redirect("/dashboard/one-on-ones");
   }
 

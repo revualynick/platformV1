@@ -92,6 +92,20 @@
       "when": 1771167946765,
       "tag": "0012_composite_indexes_and_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771167947765,
+      "tag": "0013_indexes_and_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1771167948765,
+      "tag": "0014_schema_hardening",
+      "breakpoints": true
     }
   ]
 }
