@@ -286,6 +286,13 @@ export const promoteThemeSchema = z.object({
   questionnaireId: uuid,
 });
 
+// ── Lead Capture (Demo Mode) ─────────────────────────
+
+export const leadCaptureSchema = z.object({
+  email: z.string().email().max(255),
+  name: z.string().max(255).optional(),
+});
+
 // ── Params ─────────────────────────────────────────────
 
 export const idParamSchema = z.object({

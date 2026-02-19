@@ -5,71 +5,32 @@ import * as tenantSchema from "./schema/tenant.js";
 type TenantClient = ReturnType<typeof createTenantClient>;
 export type TenantDb = TenantClient["db"];
 
-const MAX_POOL_SIZE = 50;
-
-let evictionSeq = 0;
-
-interface PoolEntry {
-  db: TenantDb;
-  sql: ReturnType<typeof postgres>;
-  lastUsed: number;
-  seq: number;
-}
-
-const tenantPool = new Map<string, PoolEntry>();
+// Single-instance cache (one DB per deployment)
+let cachedClient: { db: TenantDb; sql: ReturnType<typeof postgres> } | null =
+  null;
 
 export function createTenantClient(connectionString: string) {
-  const sql = postgres(connectionString, { max: 5 });
+  const sql = postgres(connectionString, { max: 10 });
   const db = drizzle(sql, { schema: tenantSchema });
   return { db, sql };
 }
 
 /**
- * Get or create a tenant database connection.
- * Connections are pooled per org with LRU eviction to prevent unbounded growth.
+ * Get the tenant database connection.
+ * Per-tenant deployment: single DB instance, cached after first call.
  */
-export function getTenantDb(orgId: string, connectionString: string): TenantDb {
-  const entry = tenantPool.get(orgId);
-  if (entry) {
-    entry.lastUsed = Date.now();
-    return entry.db;
-  }
-
-  // Evict least-recently-used entry if at capacity (seq as tiebreaker)
-  if (tenantPool.size >= MAX_POOL_SIZE) {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-    let oldestSeq = Infinity;
-    for (const [key, e] of tenantPool) {
-      if (e.lastUsed < oldestTime || (e.lastUsed === oldestTime && e.seq < oldestSeq)) {
-        oldestTime = e.lastUsed;
-        oldestSeq = e.seq;
-        oldestKey = key;
-      }
-    }
-    if (oldestKey) {
-      const evicted = tenantPool.get(oldestKey);
-      tenantPool.delete(oldestKey);
-      // Close the underlying postgres connection pool
-      evicted?.sql.end({ timeout: 5 }).catch(() => {});
-    }
-  }
-
-  const { db, sql } = createTenantClient(connectionString);
-  tenantPool.set(orgId, { db, sql, lastUsed: Date.now(), seq: evictionSeq++ });
-  return db;
-}
-
-export async function closeTenantDb(orgId: string): Promise<void> {
-  const entry = tenantPool.get(orgId);
-  tenantPool.delete(orgId);
-  if (entry) {
-    await entry.sql.end({ timeout: 5 });
-  }
+export function getTenantDb(
+  _orgId: string,
+  connectionString: string,
+): TenantDb {
+  if (cachedClient) return cachedClient.db;
+  cachedClient = createTenantClient(connectionString);
+  return cachedClient.db;
 }
 
 export async function closeAllTenantDbs(): Promise<void> {
-  const entries = [...tenantPool.values()];
-  tenantPool.clear();
-  await Promise.allSettled(entries.map((e) => e.sql.end({ timeout: 5 })));
+  if (cachedClient) {
+    await cachedClient.sql.end({ timeout: 5 });
+    cachedClient = null;
+  }
 }

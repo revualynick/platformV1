@@ -1,16 +1,15 @@
 import { eq } from "drizzle-orm";
-import { getControlPlaneDb } from "@revualy/db";
-import { authUsers } from "@revualy/db/schema";
+import { authUsers, type TenantDb } from "@revualy/db";
 
 /**
- * Sync Revualy user fields to the authUsers table in the control plane DB.
- * This keeps database session data fresh when admins change a user's
- * role, team, or onboarding status via the API.
+ * Sync Revualy user fields to the authUsers table.
+ * Per-tenant deployment: auth tables are in the same DB as business data.
  *
  * Fire-and-forget: logs errors but never throws (callers shouldn't fail
- * if the control plane DB is temporarily unreachable).
+ * if the update encounters a transient error).
  */
 export async function syncAuthUser(
+  db: TenantDb,
   tenantUserId: string,
   updates: {
     role?: string;
@@ -19,8 +18,7 @@ export async function syncAuthUser(
   },
 ): Promise<void> {
   try {
-    const cpDb = getControlPlaneDb();
-    await cpDb
+    await db
       .update(authUsers)
       .set(updates)
       .where(eq(authUsers.tenantUserId, tenantUserId));

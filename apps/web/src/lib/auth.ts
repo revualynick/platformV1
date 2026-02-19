@@ -3,7 +3,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
-import { createControlPlaneClient } from "@revualy/db";
+import { createTenantClient } from "@revualy/db";
 import {
   authUsers,
   authAccounts,
@@ -15,6 +15,8 @@ import {
  * NextAuth.js v5 configuration.
  *
  * Strategy: Database-backed sessions via @auth/drizzle-adapter.
+ * Per-tenant deployment: auth tables live in the same DB as business data.
+ *
  * On sign-in, we look up the user by email in the Revualy API,
  * then persist org/tenant fields on the authUsers row so the
  * session callback can hydrate them without a JWT.
@@ -24,11 +26,12 @@ import {
 
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
-// Control plane DB for session CRUD. The fallback URL is only used during
+// Tenant DB for session CRUD. The fallback URL is only used during
 // `next build` static analysis — postgres.js connects lazily on first query,
 // so no actual connection is attempted at build time.
-const controlPlaneDb = createControlPlaneClient(
-  process.env.CONTROL_PLANE_DATABASE_URL ||
+const { db: tenantDb } = createTenantClient(
+  process.env.DATABASE_URL ||
+    process.env.CONTROL_PLANE_DATABASE_URL ||
     "postgresql://build:build@localhost:5432/build_placeholder",
 );
 
@@ -40,12 +43,8 @@ function getInternalSecret(): string {
   return secret;
 }
 
-function getDefaultOrgId(): string {
-  const orgId = process.env.DEFAULT_ORG_ID;
-  if (!orgId) {
-    throw new Error("DEFAULT_ORG_ID env var is required");
-  }
-  return orgId;
+function getOrgId(): string {
+  return process.env.ORG_ID ?? process.env.DEFAULT_ORG_ID ?? "";
 }
 
 interface RevualyUser {
@@ -65,7 +64,7 @@ async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
       `${API_URL}/api/v1/auth/lookup?email=${encodeURIComponent(email)}`,
       {
         headers: {
-          "x-org-id": getDefaultOrgId(),
+          "x-org-id": getOrgId(),
           "x-internal-secret": getInternalSecret(),
         },
       },
@@ -88,7 +87,7 @@ async function syncRevualyFields(
   const revualyUser = await lookupUserByEmail(email);
   if (!revualyUser) return;
 
-  await controlPlaneDb
+  await tenantDb
     .update(authUsers)
     .set({
       orgId: revualyUser.orgId,
@@ -101,7 +100,7 @@ async function syncRevualyFields(
 }
 
 // Wrap the adapter so we can populate custom columns after user creation
-const baseAdapter = DrizzleAdapter(controlPlaneDb, {
+const baseAdapter = DrizzleAdapter(tenantDb, {
   usersTable: authUsers,
   accountsTable: authAccounts,
   sessionsTable: authSessions,
@@ -160,7 +159,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user }) {
       // With database sessions, `user` is the authUsers DB row.
       // Read Revualy-specific columns to hydrate the session.
-      const [authUser] = await controlPlaneDb
+      const [authUser] = await tenantDb
         .select({
           orgId: authUsers.orgId,
           tenantUserId: authUsers.tenantUserId,
@@ -174,7 +173,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (authUser) {
         session.user.id = authUser.tenantUserId ?? "";
         session.role = authUser.role ?? "employee";
-        session.orgId = authUser.orgId ?? "";
+        session.orgId = authUser.orgId ?? getOrgId();
         session.teamId = authUser.teamId ?? null;
         session.user.onboardingCompleted =
           authUser.onboardingCompleted ?? true;

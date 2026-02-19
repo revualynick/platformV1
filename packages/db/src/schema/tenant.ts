@@ -11,6 +11,7 @@ import {
   jsonb,
   index,
   unique,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -820,5 +821,93 @@ export const calendarEvents = pgTable(
     index("idx_calendar_events_user_id").on(table.userId),
     index("idx_calendar_events_start_at").on(table.startAt),
     index("idx_calendar_events_user_start").on(table.userId, table.startAt),
+  ],
+);
+
+// ── Auth Tables (NextAuth.js) ─────────────────────────
+// Per-tenant deployment: auth tables live in the same DB as business data.
+
+export const authUsers = pgTable("auth_user", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name"),
+  email: text("email").unique(),
+  emailVerified: timestamp("emailVerified", { mode: "date" }),
+  image: text("image"),
+  // Revualy-specific columns (synced on sign-in)
+  orgId: uuid("org_id"),
+  tenantUserId: uuid("tenant_user_id"),
+  role: varchar("role", { length: 50 }),
+  teamId: uuid("team_id"),
+  onboardingCompleted: boolean("onboarding_completed").default(false),
+});
+
+export const authAccounts = pgTable(
+  "auth_account",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => [
+    primaryKey({
+      columns: [account.provider, account.providerAccountId],
+    }),
+  ],
+);
+
+export const authSessions = pgTable("auth_session", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => authUsers.id, { onDelete: "cascade" }),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const authVerificationTokens = pgTable(
+  "auth_verification_token",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+  },
+  (verificationToken) => [
+    primaryKey({
+      columns: [verificationToken.identifier, verificationToken.token],
+    }),
+  ],
+);
+
+// ── Leads (demo/marketing site) ──────────────────────
+// Used when DEMO_MODE=true for lead capture before demo chat.
+
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: varchar("email", { length: 255 }).notNull(),
+    name: varchar("name", { length: 255 }),
+    conversationCount: integer("conversation_count").notNull().default(0),
+    lastConversationAt: timestamp("last_conversation_at", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_leads_email").on(table.email),
+    index("idx_leads_email").on(table.email),
   ],
 );

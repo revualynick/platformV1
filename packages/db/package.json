@@ -30,7 +30,6 @@
   "dependencies": {
     "@revualy/shared": "workspace:*",
     "drizzle-orm": "^0.39.0",
-    "neo4j-driver": "^5.27.0",
     "postgres": "^3.4.0"
   },
   "devDependencies": {

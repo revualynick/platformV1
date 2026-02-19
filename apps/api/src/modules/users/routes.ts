@@ -101,8 +101,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       const syncUpdates: { role?: string; teamId?: string | null } = {};
       if (body.role !== undefined) syncUpdates.role = body.role;
       if (body.teamId !== undefined) syncUpdates.teamId = body.teamId;
-      await syncAuthUser(id, syncUpdates).catch((err) =>
-        request.log.error({ err }, "Failed to sync auth user to control plane"),
+      await syncAuthUser(db, id, syncUpdates).catch((err) =>
+        request.log.error({ err }, "Failed to sync auth user"),
       );
     }
 
@@ -125,9 +125,9 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
 
     if (!updated) return reply.code(404).send({ error: "User not found" });
 
-    // Sync onboarding status to control plane session store
-    await syncAuthUser(userId, { onboardingCompleted: true }).catch((err) =>
-      request.log.error({ err }, "Failed to sync onboarding status to control plane"),
+    // Sync onboarding status to auth session store
+    await syncAuthUser(db, userId, { onboardingCompleted: true }).catch((err) =>
+      request.log.error({ err }, "Failed to sync onboarding status"),
     );
 
     return reply.send({ success: true });

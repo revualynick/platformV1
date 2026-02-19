@@ -13,25 +13,21 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phases 1-5 complete.** See `docs/plan.md` for full checklists.
+**Phases 1-6 complete.** See `docs/plan.md` for full details.
 
-Phase 4: 1:1 sessions, rate limiting, LLM gateway injection, leaderboard API, escalation pipeline, Google Chat adapter, notification preferences, onboarding wizard.
-
-Phase 5: Calibration engine, pulse check system, 360 manager reviews, self-reflection interactions + live reflections page, D3.js relationship graph, data export + blind review, Teams adapter (complete), AI theme discovery, N+1 optimization, 64 unit tests.
-
-**Next up:** Google Workspace admin setup, end-to-end GChat test, production deployment (Railway).
+**Architecture:** Per-tenant isolated deployments on Railway. Each customer gets `subdomain.revualy.com` with own Postgres + Redis. Marketing/demo site at apex domain with `DEMO_MODE=true`. Single DB per instance (auth + business data). No Neo4j.
 
 ## Repo structure
 ```
-apps/api/         — Fastify server + BullMQ workers (16 route modules, 5 queues)
-apps/web/         — Next.js 15 dashboards (App Router, server components)
+apps/api/         — Fastify server + BullMQ workers (22 route modules, 5 queues)
+apps/web/         — Next.js 15 dashboards (App Router, server components) + marketing pages
 packages/shared/  — Domain types + utilities
 packages/chat-core/         — ChatAdapter interface + AdapterRegistry
 packages/chat-adapter-slack/ — Slack adapter (complete)
-packages/chat-adapter-gchat/ — Google Chat adapter (partial stub)
-packages/chat-adapter-teams/ — Teams adapter (stub)
-packages/ai-core/           — LLMGateway (abstraction only, no SDK wired)
-packages/db/                — Drizzle schema (control plane + tenant), Neo4j ops, seed, migrations
+packages/chat-adapter-gchat/ — Google Chat adapter (complete)
+packages/chat-adapter-teams/ — Teams adapter (complete — Bot Framework + Adaptive Cards)
+packages/ai-core/           — LLM gateway + Anthropic provider
+packages/db/                — Drizzle schema + 23 migrations, seed
 docs/plan.md                — Full architecture + phase checklist
 ```
 
@@ -42,7 +38,7 @@ pnpm turbo typecheck --filter=@revualy/api   # Typecheck API only
 pnpm turbo typecheck --filter=@revualy/web   # Typecheck web only
 pnpm turbo build                  # Build all packages
 pnpm dev                          # Start dev (api + web)
-docker compose up -d              # PostgreSQL, Redis, Neo4j
+docker compose up -d              # PostgreSQL, Redis (local dev)
 ```
 
 ## Web Content Policy
@@ -53,7 +49,7 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Imports:** Use `.js` extensions in import paths (ESM)
 - **Validation:** Zod schemas in `apps/api/src/lib/validation.ts`, use `parseBody()` helper
 - **Auth/RBAC:** `requireAuth` / `requireRole` prehandlers in `apps/api/src/lib/rbac.ts`
-- **Tenant context:** `request.tenant` gives `{ orgId, db, userId }` per request
+- **Tenant context:** `request.tenant` gives `{ orgId, db, userId }` per request. orgId from `ORG_ID` env var (per-tenant deployment).
 - **Error handling:** Global Fastify `setErrorHandler` — 400 for validation, 500 for everything else
 - **Frontend API calls:** Server-side `lib/api.ts` with `Promise.allSettled` + mock fallback
 - **BullMQ:** Workers share queue instances from `createQueues()`. Never create ad-hoc `new Queue()` inside workers.
@@ -63,9 +59,9 @@ docker compose up -d              # PostgreSQL, Redis, Neo4j
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
-## Known gaps (post Phase 5)
+## Known gaps
 - GChat adapter: needs Google Workspace admin setup to test end-to-end
 - Outlook calendar integration not built (Google Calendar done)
-- 1:1 agenda generator is data-only (no LLM prioritization yet — upgradable later)
-- Google Workspace app installation/admin setup pending beta company
-- Production deployment (Railway) + env config not done
+- Curated demo seed data not yet created
+- Stripe billing integration not built
+- Production monitoring + alerting not configured

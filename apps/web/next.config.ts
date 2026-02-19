@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   transpilePackages: ["@revualy/shared"],
   async rewrites() {
     return [

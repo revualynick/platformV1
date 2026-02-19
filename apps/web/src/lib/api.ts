@@ -25,7 +25,7 @@ async function apiFetch<T>(
   }
 
   const authHeaders: Record<string, string> = {
-    "x-org-id": session.orgId,
+    "x-org-id": session.orgId || process.env.ORG_ID || "",
     "x-user-id": session.user.id,
     "x-internal-secret": getInternalSecret(),
   };
