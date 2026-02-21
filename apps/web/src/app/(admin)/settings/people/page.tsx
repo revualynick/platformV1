@@ -175,6 +175,7 @@ export default function PeoplePage() {
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [editingThread, setEditingThread] = useState<string | null>(null);
+  const [showThreads, setShowThreads] = useState(true);
   const [drag, setDrag] = useState<{
     id: string;
     offsetX: number;
@@ -348,6 +349,20 @@ export default function PeoplePage() {
         >
           Reset Layout
         </button>
+        <button
+          onClick={() => {
+            setShowThreads((v) => !v);
+            setSelectedThread(null);
+            setEditingThread(null);
+          }}
+          className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${
+            showThreads
+              ? "border-forest/20 bg-forest/[0.06] text-forest hover:bg-forest/10"
+              : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+          }`}
+        >
+          {showThreads ? "Threads On" : "Threads Off"}
+        </button>
         {(hoveredPerson || selectedPerson) && (
           <button
             onClick={() => { setHoveredPerson(null); setSelectedPerson(null); setEditingThread(null); }}
@@ -359,7 +374,7 @@ export default function PeoplePage() {
       </div>
 
       {/* Tag legend */}
-      <div className="card-enter mb-4 flex flex-wrap items-center gap-1.5" style={{ animationDelay: "300ms" }}>
+      <div className={`card-enter mb-4 flex flex-wrap items-center gap-1.5 transition-opacity duration-200 ${showThreads ? "opacity-100" : "pointer-events-none opacity-0"}`} style={{ animationDelay: "300ms" }}>
         <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-stone-400">
           Threads:
         </span>
@@ -438,7 +453,7 @@ export default function PeoplePage() {
               })}
 
             {/* Thread lines (dashed, colored bezier curves with edge anchors + midpoint nodes) */}
-            {orgThreads.map((thread) => {
+            {showThreads && orgThreads.map((thread) => {
               const from = positions[thread.from];
               const to = positions[thread.to];
               if (!from || !to) return null;
@@ -679,7 +694,7 @@ export default function PeoplePage() {
                     {role.label}
                   </text>
                   {/* Thread count dot */}
-                  {threads.length > 0 && (
+                  {showThreads && threads.length > 0 && (
                     <g opacity={isDimmed ? 0.2 : 1} className="transition-opacity duration-200">
                       <circle
                         cx={pos.x + NODE_W - 14}
@@ -771,7 +786,7 @@ export default function PeoplePage() {
         })()}
 
         {/* HTML overlay: Thread edit panel */}
-        {editingThread && !drag && (() => {
+        {showThreads && editingThread && !drag && (() => {
           const thread = orgThreads.find((t) => t.id === editingThread);
           if (!thread) return null;
           const { mid } = getThreadAnchors(thread.from, thread.to, positions);
@@ -844,7 +859,7 @@ export default function PeoplePage() {
       </div>
 
       {/* Thread detail panel below canvas */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-12">
+      {showThreads && <div className="mt-6 grid gap-6 lg:grid-cols-12">
         {/* Thread list */}
         <div className="lg:col-span-7">
           <div
@@ -1013,7 +1028,7 @@ export default function PeoplePage() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
