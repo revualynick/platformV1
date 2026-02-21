@@ -195,6 +195,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [editingThread, setEditingThread] = useState<string | null>(null);
+  const [showThreads, setShowThreads] = useState(true);
   const [drag, setDrag] = useState<{
     id: string;
     offsetX: number;
@@ -287,6 +288,20 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
         >
           Reset Layout
         </button>
+        <button
+          onClick={() => {
+            setShowThreads((v) => !v);
+            setSelectedThread(null);
+            setEditingThread(null);
+          }}
+          className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${
+            showThreads
+              ? "border-forest/20 bg-forest/[0.06] text-forest hover:bg-forest/10"
+              : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+          }`}
+        >
+          {showThreads ? "Threads On" : "Threads Off"}
+        </button>
         {(hoveredPerson || selectedPerson) && (
           <button
             onClick={() => {
@@ -302,7 +317,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
       </div>
 
       {/* Tag legend */}
-      <div className="card-enter mb-4 flex flex-wrap items-center gap-1.5" style={{ animationDelay: "300ms" }}>
+      <div className={`card-enter mb-4 flex flex-wrap items-center gap-1.5 transition-opacity duration-200 ${showThreads ? "opacity-100" : "pointer-events-none opacity-0"}`} style={{ animationDelay: "300ms" }}>
         <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-stone-400">
           Threads:
         </span>
@@ -383,7 +398,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
               })}
 
             {/* Thread lines (dashed, colored bezier curves with edge anchors + midpoint nodes) */}
-            {threads.map((thread) => {
+            {showThreads && threads.map((thread) => {
               const from = positions[thread.from];
               const to = positions[thread.to];
               if (!from || !to) return null;
@@ -646,7 +661,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
                     {role.label}
                   </text>
                   {/* Thread count dot */}
-                  {personThreads.length > 0 && (
+                  {showThreads && personThreads.length > 0 && (
                     <g opacity={isDimmed ? 0.2 : 1} className="transition-opacity duration-200">
                       <circle
                         cx={pos.x + NODE_W - 14}
@@ -765,7 +780,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
           })()}
 
         {/* HTML overlay: Thread edit panel */}
-        {editingThread &&
+        {showThreads && editingThread &&
           !drag &&
           (() => {
             const thread = threads.find((t) => t.id === editingThread);
@@ -846,7 +861,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
       </div>
 
       {/* Thread list below canvas */}
-      <div
+      {showThreads && <div
         className="card-enter mt-6 rounded-2xl border border-stone-200/60 bg-white p-6"
         style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
       >
@@ -942,7 +957,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
             </p>
           )}
         </div>
-      </div>
+      </div>}
     </>
   );
 }
