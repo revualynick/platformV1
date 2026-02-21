@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Lora, Manrope } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import "./globals.css";
 
-const fraunces = Fraunces({
+const lora = Lora({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-display",
@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${manrope.variable}`}>
+    <html lang="en" className={`${lora.variable} ${manrope.variable}`}>
       <body className="min-h-screen bg-cream font-body text-stone-900 antialiased">
         <SessionProvider>{children}</SessionProvider>
       </body>
