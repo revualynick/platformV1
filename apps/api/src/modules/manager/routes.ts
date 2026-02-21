@@ -8,11 +8,16 @@ import {
   userRelationships,
   teams,
   managerNotes,
+  feedbackEntries,
+  feedbackDigests,
+  feedbackValueScores,
+  coreValues,
 } from "@revualy/db";
 import { requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
+  monthParamSchema,
   createQuestionnaireSchema,
   updateQuestionnaireSchema,
   createRelationshipSchema,
@@ -415,5 +420,228 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
     await db.delete(managerNotes).where(eq(managerNotes.id, id));
 
     return reply.send({ id, deleted: true });
+  });
+
+  // ═══════════════════════════════════════════════════════
+  // Team Insights (aggregated feedback digests)
+  // ═══════════════════════════════════════════════════════
+
+  // GET /manager/team-insights — List monthly digests
+  app.get("/team-insights", async (request, reply) => {
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+
+    const digests = await db
+      .select()
+      .from(feedbackDigests)
+      .where(eq(feedbackDigests.managerId, userId))
+      .orderBy(feedbackDigests.monthStarting);
+
+    return reply.send({ data: digests });
+  });
+
+  // GET /manager/team-insights/:month — Single month digest (YYYY-MM)
+  app.get("/team-insights/:month", async (request, reply) => {
+    const { month } = parseBody(monthParamSchema, request.params);
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+
+    const monthStarting = `${month}-01`;
+
+    const [digest] = await db
+      .select()
+      .from(feedbackDigests)
+      .where(
+        and(
+          eq(feedbackDigests.managerId, userId),
+          eq(feedbackDigests.monthStarting, monthStarting),
+        ),
+      );
+
+    if (!digest) return reply.code(404).send({ error: "No digest found for this month" });
+    return reply.send(digest);
+  });
+
+  // POST /manager/team-insights/generate — Aggregate feedback for direct reports
+  app.post("/team-insights/generate", async (request, reply) => {
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+
+    // Get direct reports
+    const directReports = await db
+      .select({ id: users.id, name: users.name, teamId: users.teamId })
+      .from(users)
+      .where(and(eq(users.managerId, userId), eq(users.isActive, true)));
+
+    if (directReports.length === 0) {
+      return reply.code(400).send({ error: "No direct reports found" });
+    }
+
+    const reportIds = directReports.map((r) => r.id);
+
+    // Get current month boundaries
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const monthStarting = monthStart.toISOString().split("T")[0];
+
+    // Fetch feedback entries for direct reports this month (as subjects)
+    const entries = await db
+      .select()
+      .from(feedbackEntries)
+      .where(inArray(feedbackEntries.subjectId, reportIds));
+
+    // Filter to this month in JS (Drizzle date comparison is cleaner this way)
+    const monthEntries = entries.filter((e) => {
+      const created = new Date(e.createdAt);
+      return created >= monthStart && created < monthEnd;
+    });
+
+    // Get value scores for these entries
+    const entryIds = monthEntries.map((e) => e.id);
+    let valueScores: Array<typeof feedbackValueScores.$inferSelect> = [];
+    if (entryIds.length > 0) {
+      valueScores = await db
+        .select()
+        .from(feedbackValueScores)
+        .where(inArray(feedbackValueScores.feedbackEntryId, entryIds));
+    }
+
+    // Get core values for theme names
+    const allValues = await db
+      .select()
+      .from(coreValues)
+      .where(eq(coreValues.isActive, true));
+    const valueNameMap = new Map(allValues.map((v) => [v.id, v.name]));
+
+    // Build per-employee summaries
+    const memberSummaries = directReports.map((report) => {
+      const reportEntries = monthEntries.filter((e) => e.subjectId === report.id);
+      const feedbackCount = reportEntries.length;
+
+      // Average sentiment: positive=1, neutral=0.5, negative=0, mixed=0.5
+      const sentimentScores: number[] = reportEntries.map((e) => {
+        if (e.sentiment === "positive") return 1;
+        if (e.sentiment === "negative") return 0;
+        return 0.5;
+      });
+      const avgSentiment =
+        feedbackCount > 0
+          ? sentimentScores.reduce((a, b) => a + b, 0) / feedbackCount
+          : 0.5;
+
+      // Top themes from value scores
+      const reportEntryIds = new Set(reportEntries.map((e) => e.id));
+      const reportValueScores = valueScores.filter((vs) =>
+        reportEntryIds.has(vs.feedbackEntryId),
+      );
+      const themeCount = new Map<string, number>();
+      for (const vs of reportValueScores) {
+        const name = valueNameMap.get(vs.coreValueId) ?? "Unknown";
+        themeCount.set(name, (themeCount.get(name) ?? 0) + 1);
+      }
+      const topThemes = [...themeCount.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name]) => name);
+
+      // Language quality: % with specific examples
+      const languageQuality =
+        feedbackCount > 0
+          ? reportEntries.filter((e) => e.hasSpecificExamples).length / feedbackCount
+          : 0;
+
+      return {
+        userId: report.id,
+        name: report.name,
+        feedbackCount,
+        avgSentiment: Math.round(avgSentiment * 100) / 100,
+        sentimentTrend: "stable" as const, // TODO: compare with previous month
+        topThemes,
+        languageQuality: Math.round(languageQuality * 100) / 100,
+      };
+    });
+
+    // Team-level aggregation
+    const allMonthSentiments: number[] = monthEntries.map((e) => {
+      if (e.sentiment === "positive") return 1;
+      if (e.sentiment === "negative") return 0;
+      return 0.5;
+    });
+    const overallSentiment =
+      allMonthSentiments.length > 0
+        ? allMonthSentiments.reduce((a, b) => a + b, 0) / allMonthSentiments.length
+        : 0.5;
+
+    const reportsWithFeedback = memberSummaries.filter((m) => m.feedbackCount > 0).length;
+    const participationRate =
+      directReports.length > 0
+        ? reportsWithFeedback / directReports.length
+        : 0;
+
+    // Theme frequency across entire team
+    const themeFrequency: Record<string, number> = {};
+    for (const vs of valueScores) {
+      const name = valueNameMap.get(vs.coreValueId) ?? "Unknown";
+      themeFrequency[name] = (themeFrequency[name] ?? 0) + 1;
+    }
+
+    const topValues = Object.entries(themeFrequency)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name]) => name);
+
+    // Language patterns
+    const constructiveCount = monthEntries.filter((e) => e.hasSpecificExamples).length;
+    const vague = monthEntries.length - constructiveCount;
+
+    const teamId = directReports[0]?.teamId ?? null;
+
+    const data = {
+      memberSummaries,
+      teamHealth: {
+        overallSentiment: Math.round(overallSentiment * 100) / 100,
+        participationRate: Math.round(participationRate * 100) / 100,
+        topValues,
+        themeFrequency,
+        languagePatterns: {
+          constructive: constructiveCount,
+          vague,
+        },
+      },
+      feedbackEntryIds: monthEntries.map((e) => e.id),
+    };
+
+    // Upsert digest
+    const existing = await db
+      .select()
+      .from(feedbackDigests)
+      .where(
+        and(
+          eq(feedbackDigests.managerId, userId),
+          eq(feedbackDigests.monthStarting, monthStarting),
+        ),
+      );
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(feedbackDigests)
+        .set({ data, updatedAt: new Date() })
+        .where(eq(feedbackDigests.id, existing[0].id))
+        .returning();
+      return reply.send(updated);
+    }
+
+    const [created] = await db
+      .insert(feedbackDigests)
+      .values({
+        teamId,
+        managerId: userId,
+        monthStarting,
+        data,
+      })
+      .returning();
+
+    return reply.code(201).send(created);
   });
 };

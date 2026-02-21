@@ -811,3 +811,152 @@ export async function getReflections(limit = 12) {
 export async function getReflectionStats() {
   return apiFetch<ReflectionStatsRow>("/api/v1/reflections/stats");
 }
+
+// ── Campaigns ───────────────────────────────────────────
+
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "collecting"
+  | "analyzing"
+  | "complete";
+
+export interface CampaignRow {
+  id: string;
+  name: string;
+  description: string;
+  questionnaireId: string | null;
+  status: CampaignStatus;
+  startDate: string | null;
+  endDate: string | null;
+  targetAudience: string | null;
+  targetTeamId: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  questionnaire?: {
+    id: string;
+    name: string;
+    themes: Array<{
+      id: string;
+      intent: string;
+      dataGoal: string;
+      examplePhrasings: string[];
+      coreValueId: string | null;
+      sortOrder: number;
+    }>;
+  } | null;
+}
+
+export async function getCampaigns() {
+  return apiFetch<{ data: CampaignRow[] }>("/api/v1/admin/campaigns");
+}
+
+export async function getCampaign(id: string) {
+  return apiFetch<CampaignRow>(`/api/v1/admin/campaigns/${id}`);
+}
+
+export async function createCampaign(data: {
+  name: string;
+  description?: string;
+  questionnaireId?: string;
+  startDate?: string;
+  endDate?: string;
+  targetAudience?: string;
+  targetTeamId?: string;
+}) {
+  return apiFetch<CampaignRow>("/api/v1/admin/campaigns", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCampaign(
+  id: string,
+  data: Partial<{
+    name: string;
+    description: string;
+    questionnaireId: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    targetAudience: string | null;
+    targetTeamId: string | null;
+  }>,
+) {
+  return apiFetch<CampaignRow>(`/api/v1/admin/campaigns/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCampaign(id: string) {
+  return apiFetch<{ id: string; deleted: boolean }>(
+    `/api/v1/admin/campaigns/${id}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function advanceCampaign(id: string) {
+  return apiFetch<CampaignRow>(`/api/v1/admin/campaigns/${id}/advance`, {
+    method: "POST",
+  });
+}
+
+export async function sendCampaignChatMessage(
+  id: string,
+  message: string,
+) {
+  return apiFetch<{ reply: string; suggestions: string[] }>(
+    `/api/v1/admin/campaigns/${id}/ai-chat`,
+    { method: "POST", body: JSON.stringify({ message }) },
+  );
+}
+
+// ── Team Insights ──────────────────────────────────────
+
+export interface MemberSummary {
+  userId: string;
+  name: string;
+  feedbackCount: number;
+  avgSentiment: number;
+  sentimentTrend: "improving" | "stable" | "declining";
+  topThemes: string[];
+  languageQuality: number;
+}
+
+export interface TeamHealth {
+  overallSentiment: number;
+  participationRate: number;
+  topValues: string[];
+  themeFrequency: Record<string, number>;
+  languagePatterns: {
+    constructive: number;
+    vague: number;
+  };
+}
+
+export interface FeedbackDigestRow {
+  id: string;
+  teamId: string | null;
+  managerId: string;
+  monthStarting: string;
+  data: {
+    memberSummaries: MemberSummary[];
+    teamHealth: TeamHealth;
+    feedbackEntryIds: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getTeamInsights() {
+  return apiFetch<{ data: FeedbackDigestRow[] }>(
+    "/api/v1/manager/team-insights",
+  );
+}
+
+export async function getTeamInsightMonth(month: string) {
+  return apiFetch<FeedbackDigestRow>(
+    `/api/v1/manager/team-insights/${month}`,
+  );
+}

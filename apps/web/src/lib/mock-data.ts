@@ -851,3 +851,169 @@ export const escalationDetails = [
     ],
   },
 ];
+
+// ── Campaigns ──────────────────────────────────────────
+
+import type { CampaignRow, FeedbackDigestRow } from "./api";
+
+export const mockCampaigns: CampaignRow[] = [
+  {
+    id: "camp-1",
+    name: "Q1 Sprint Reviews",
+    description: "Bi-weekly peer feedback during sprint retrospectives. Focused on collaboration and code quality.",
+    questionnaireId: "q1",
+    status: "collecting",
+    startDate: "2026-01-06",
+    endDate: "2026-03-31",
+    targetAudience: "Engineering",
+    targetTeamId: null,
+    createdByUserId: "u1",
+    createdAt: "2025-12-15T10:00:00Z",
+    updatedAt: "2026-01-06T09:00:00Z",
+    questionnaire: {
+      id: "q1",
+      name: "Sprint Peer Review",
+      themes: [
+        { id: "t1", intent: "Evaluate collaboration during pair programming", dataGoal: "Identify strong collaborative partnerships", examplePhrasings: ["How did they contribute during pairing?", "Describe their collaboration style"], coreValueId: null, sortOrder: 0 },
+        { id: "t2", intent: "Assess code quality contributions", dataGoal: "Track code quality improvements over time", examplePhrasings: ["How was their code quality this sprint?"], coreValueId: null, sortOrder: 1 },
+      ],
+    },
+  },
+  {
+    id: "camp-2",
+    name: "Manager Effectiveness Survey",
+    description: "Anonymous upward feedback for all people managers. Results shared as aggregated team insights only.",
+    questionnaireId: "q3",
+    status: "scheduled",
+    startDate: "2026-03-01",
+    endDate: "2026-03-15",
+    targetAudience: "All Teams",
+    targetTeamId: null,
+    createdByUserId: "u1",
+    createdAt: "2026-02-01T14:00:00Z",
+    updatedAt: "2026-02-10T11:00:00Z",
+    questionnaire: {
+      id: "q3",
+      name: "Manager Effectiveness",
+      themes: [
+        { id: "t5", intent: "Evaluate manager's communication clarity", dataGoal: "Identify communication improvement areas", examplePhrasings: ["How clearly does your manager communicate expectations?"], coreValueId: null, sortOrder: 0 },
+      ],
+    },
+  },
+  {
+    id: "camp-3",
+    name: "Onboarding Buddy Feedback",
+    description: "Collect feedback from new hires about their onboarding buddy experience after 30 days.",
+    questionnaireId: null,
+    status: "draft",
+    startDate: null,
+    endDate: null,
+    targetAudience: "New Hires",
+    targetTeamId: null,
+    createdByUserId: "u1",
+    createdAt: "2026-02-18T09:00:00Z",
+    updatedAt: "2026-02-18T09:00:00Z",
+    questionnaire: null,
+  },
+  {
+    id: "camp-4",
+    name: "December Pulse Check",
+    description: "End-of-year sentiment check across all departments.",
+    questionnaireId: "q4",
+    status: "complete",
+    startDate: "2025-12-01",
+    endDate: "2025-12-15",
+    targetAudience: "All Teams",
+    targetTeamId: null,
+    createdByUserId: "u1",
+    createdAt: "2025-11-20T10:00:00Z",
+    updatedAt: "2025-12-16T08:00:00Z",
+    questionnaire: {
+      id: "q4",
+      name: "Team Pulse",
+      themes: [
+        { id: "t8", intent: "Gauge team morale", dataGoal: "Track sentiment trends", examplePhrasings: ["How are you feeling about work lately?"], coreValueId: null, sortOrder: 0 },
+      ],
+    },
+  },
+];
+
+// ── Team Insights (Monthly Digests) ────────────────────
+
+export const mockTeamInsights: FeedbackDigestRow[] = [
+  {
+    id: "digest-1",
+    teamId: "team-eng",
+    managerId: "u1",
+    monthStarting: "2026-02-01",
+    data: {
+      memberSummaries: [
+        { userId: "u2", name: "Jamie Chen", feedbackCount: 6, avgSentiment: 0.82, sentimentTrend: "improving", topThemes: ["Ownership", "Collaboration", "Code Quality"], languageQuality: 0.83 },
+        { userId: "u3", name: "Raj Patel", feedbackCount: 5, avgSentiment: 0.74, sentimentTrend: "stable", topThemes: ["Problem Solving", "Communication"], languageQuality: 0.60 },
+        { userId: "u4", name: "Alex Kim", feedbackCount: 4, avgSentiment: 0.65, sentimentTrend: "declining", topThemes: ["Attention to Detail", "Accountability"], languageQuality: 0.75 },
+        { userId: "u5", name: "Priya Sharma", feedbackCount: 7, avgSentiment: 0.91, sentimentTrend: "improving", topThemes: ["Leadership", "Mentoring", "Collaboration"], languageQuality: 0.86 },
+        { userId: "u6", name: "Marcus Jones", feedbackCount: 3, avgSentiment: 0.58, sentimentTrend: "stable", topThemes: ["Initiative"], languageQuality: 0.33 },
+      ],
+      teamHealth: {
+        overallSentiment: 0.74,
+        participationRate: 0.83,
+        topValues: ["Collaboration", "Ownership", "Problem Solving", "Leadership", "Communication"],
+        themeFrequency: { "Collaboration": 12, "Ownership": 8, "Problem Solving": 7, "Leadership": 5, "Communication": 5, "Code Quality": 4, "Mentoring": 3, "Attention to Detail": 3, "Accountability": 2, "Initiative": 2 },
+        languagePatterns: { constructive: 18, vague: 7 },
+      },
+      feedbackEntryIds: ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10"],
+    },
+    createdAt: "2026-02-21T00:00:00Z",
+    updatedAt: "2026-02-21T00:00:00Z",
+  },
+  {
+    id: "digest-2",
+    teamId: "team-eng",
+    managerId: "u1",
+    monthStarting: "2026-01-01",
+    data: {
+      memberSummaries: [
+        { userId: "u2", name: "Jamie Chen", feedbackCount: 5, avgSentiment: 0.76, sentimentTrend: "stable", topThemes: ["Ownership", "Code Quality"], languageQuality: 0.80 },
+        { userId: "u3", name: "Raj Patel", feedbackCount: 4, avgSentiment: 0.72, sentimentTrend: "improving", topThemes: ["Problem Solving", "Communication"], languageQuality: 0.50 },
+        { userId: "u4", name: "Alex Kim", feedbackCount: 5, avgSentiment: 0.70, sentimentTrend: "stable", topThemes: ["Attention to Detail", "Collaboration"], languageQuality: 0.60 },
+        { userId: "u5", name: "Priya Sharma", feedbackCount: 6, avgSentiment: 0.88, sentimentTrend: "stable", topThemes: ["Leadership", "Mentoring"], languageQuality: 0.83 },
+        { userId: "u6", name: "Marcus Jones", feedbackCount: 2, avgSentiment: 0.55, sentimentTrend: "declining", topThemes: ["Initiative"], languageQuality: 0.50 },
+      ],
+      teamHealth: {
+        overallSentiment: 0.72,
+        participationRate: 0.83,
+        topValues: ["Ownership", "Problem Solving", "Leadership", "Collaboration", "Code Quality"],
+        themeFrequency: { "Ownership": 9, "Problem Solving": 6, "Leadership": 5, "Collaboration": 5, "Code Quality": 4, "Mentoring": 3, "Communication": 3, "Attention to Detail": 2, "Initiative": 2 },
+        languagePatterns: { constructive: 15, vague: 7 },
+      },
+      feedbackEntryIds: ["f11", "f12", "f13", "f14", "f15", "f16", "f17", "f18"],
+    },
+    createdAt: "2026-02-01T00:00:00Z",
+    updatedAt: "2026-02-01T00:00:00Z",
+  },
+  {
+    id: "digest-3",
+    teamId: "team-eng",
+    managerId: "u1",
+    monthStarting: "2025-12-01",
+    data: {
+      memberSummaries: [
+        { userId: "u2", name: "Jamie Chen", feedbackCount: 4, avgSentiment: 0.70, sentimentTrend: "stable", topThemes: ["Code Quality", "Collaboration"], languageQuality: 0.75 },
+        { userId: "u3", name: "Raj Patel", feedbackCount: 3, avgSentiment: 0.67, sentimentTrend: "stable", topThemes: ["Communication"], languageQuality: 0.67 },
+        { userId: "u4", name: "Alex Kim", feedbackCount: 4, avgSentiment: 0.68, sentimentTrend: "improving", topThemes: ["Attention to Detail"], languageQuality: 0.50 },
+        { userId: "u5", name: "Priya Sharma", feedbackCount: 5, avgSentiment: 0.86, sentimentTrend: "improving", topThemes: ["Leadership", "Mentoring"], languageQuality: 0.80 },
+        { userId: "u6", name: "Marcus Jones", feedbackCount: 3, avgSentiment: 0.60, sentimentTrend: "stable", topThemes: ["Initiative", "Ownership"], languageQuality: 0.33 },
+      ],
+      teamHealth: {
+        overallSentiment: 0.70,
+        participationRate: 1.0,
+        topValues: ["Leadership", "Code Quality", "Communication", "Collaboration", "Attention to Detail"],
+        themeFrequency: { "Leadership": 5, "Code Quality": 4, "Communication": 4, "Collaboration": 3, "Attention to Detail": 3, "Mentoring": 3, "Initiative": 2, "Ownership": 2 },
+        languagePatterns: { constructive: 12, vague: 7 },
+      },
+      feedbackEntryIds: ["f19", "f20", "f21", "f22", "f23"],
+    },
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  },
+];

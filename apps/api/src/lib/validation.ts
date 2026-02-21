@@ -286,6 +286,38 @@ export const promoteThemeSchema = z.object({
   questionnaireId: uuid,
 });
 
+// ── Team Insights ─────────────────────────────────────
+
+export const monthParamSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM format"),
+});
+
+// ── Campaigns ────────────────────────────────────────
+
+export const createCampaignSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().max(5000).optional(),
+  questionnaireId: uuid.optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format").optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format").optional(),
+  targetAudience: z.string().max(100).optional(),
+  targetTeamId: uuid.optional(),
+});
+
+export const updateCampaignSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(5000).optional(),
+  questionnaireId: uuid.nullable().optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format").nullable().optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format").nullable().optional(),
+  targetAudience: z.string().max(100).nullable().optional(),
+  targetTeamId: uuid.nullable().optional(),
+});
+
+export const campaignChatSchema = z.object({
+  message: z.string().min(1).max(5000),
+});
+
 // ── Lead Capture (Demo Mode) ─────────────────────────
 
 export const leadCaptureSchema = z.object({

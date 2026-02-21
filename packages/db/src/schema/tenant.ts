@@ -430,6 +430,94 @@ export const questionnaireThemes = pgTable(
   ],
 );
 
+// ── Campaigns ─────────────────────────────────────────
+
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description").notNull().default(""),
+    questionnaireId: uuid("questionnaire_id").references(
+      () => questionnaires.id,
+    ),
+    status: varchar("status", { length: 20 })
+      .notNull()
+      .default("draft"), // draft | scheduled | collecting | analyzing | complete
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    targetAudience: varchar("target_audience", { length: 100 }),
+    targetTeamId: uuid("target_team_id").references(() => teams.id),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_campaigns_status").on(table.status),
+    index("idx_campaigns_questionnaire_id").on(table.questionnaireId),
+    index("idx_campaigns_target_team_id").on(table.targetTeamId),
+    index("idx_campaigns_created_by").on(table.createdByUserId),
+    index("idx_campaigns_start_date").on(table.startDate),
+  ],
+);
+
+// ── Feedback Digests ──────────────────────────────────
+
+export const feedbackDigests = pgTable(
+  "feedback_digests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    teamId: uuid("team_id").references(() => teams.id),
+    managerId: uuid("manager_id")
+      .notNull()
+      .references(() => users.id),
+    monthStarting: date("month_starting").notNull(),
+    data: jsonb("data")
+      .notNull()
+      .$type<{
+        memberSummaries: Array<{
+          userId: string;
+          name: string;
+          feedbackCount: number;
+          avgSentiment: number;
+          sentimentTrend: "improving" | "stable" | "declining";
+          topThemes: string[];
+          languageQuality: number;
+        }>;
+        teamHealth: {
+          overallSentiment: number;
+          participationRate: number;
+          topValues: string[];
+          themeFrequency: Record<string, number>;
+          languagePatterns: {
+            constructive: number;
+            vague: number;
+          };
+        };
+        feedbackEntryIds: string[];
+      }>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_feedback_digest_manager_month").on(
+      table.managerId,
+      table.monthStarting,
+    ),
+    index("idx_feedback_digests_manager_id").on(table.managerId),
+    index("idx_feedback_digests_team_id").on(table.teamId),
+    index("idx_feedback_digests_month_starting").on(table.monthStarting),
+  ],
+);
+
 // ── Scheduling ─────────────────────────────────────────
 
 export const interactionSchedule = pgTable(

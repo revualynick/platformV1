@@ -6,7 +6,7 @@ const navItems = [
   { label: "Organization", href: "/settings", icon: "◉" },
   { label: "People", href: "/settings/people", icon: "⊡" },
   { label: "Core Values", href: "/settings/values", icon: "◇" },
-  { label: "Questionnaires", href: "/settings/questions", icon: "◈" },
+  { label: "Campaigns", href: "/settings/campaigns", icon: "◈" },
   { label: "Integrations", href: "/settings/integrations", icon: "⬡" },
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },
 ];

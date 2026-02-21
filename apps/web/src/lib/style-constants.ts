@@ -132,6 +132,43 @@ export const engagementStatusStyles: Record<
   partial: { bg: "bg-amber/10", text: "text-warning", label: "Partial" },
 };
 
+/** Campaign lifecycle status. */
+export const campaignStatusStyles: Record<
+  string,
+  { bg: string; text: string; label: string; dot: string }
+> = {
+  draft: {
+    bg: "bg-stone-100",
+    text: "text-stone-500",
+    label: "Draft",
+    dot: "bg-stone-400",
+  },
+  scheduled: {
+    bg: "bg-sky-50",
+    text: "text-sky-600",
+    label: "Scheduled",
+    dot: "bg-sky-500",
+  },
+  collecting: {
+    bg: "bg-forest/10",
+    text: "text-forest",
+    label: "Collecting",
+    dot: "bg-forest",
+  },
+  analyzing: {
+    bg: "bg-amber/10",
+    text: "text-warning",
+    label: "Analyzing",
+    dot: "bg-warning",
+  },
+  complete: {
+    bg: "bg-positive/10",
+    text: "text-positive",
+    label: "Complete",
+    dot: "bg-positive",
+  },
+};
+
 /* ------------------------------------------------------------------ */
 /*  Trend                                                              */
 /* ------------------------------------------------------------------ */

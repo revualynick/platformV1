@@ -82,7 +82,7 @@ const STATE_KEY_PREFIX = "conv:";
 
 let stateRedis: Redis | null = null;
 
-function getStateRedis(redisUrl?: string): Redis {
+export function getStateRedis(redisUrl?: string): Redis {
   if (!stateRedis) {
     const url = redisUrl ?? process.env.REDIS_URL ?? "redis://localhost:6379";
     stateRedis = new Redis(url, { maxRetriesPerRequest: null, lazyConnect: true });

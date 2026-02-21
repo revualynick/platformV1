@@ -21,6 +21,7 @@ import { oneOnOneRoutes } from "./modules/one-on-one/routes.js";
 import { pulseRoutes } from "./modules/pulse/routes.js";
 import { threeSixtyRoutes } from "./modules/three-sixty/routes.js";
 import { themeRoutes } from "./modules/themes/routes.js";
+import { campaignRoutes } from "./modules/campaigns/routes.js";
 import { demoRoutes, setDemoAnalysisQueue } from "./modules/demo/routes.js";
 import { reflectionRoutes, setReflectionAnalysisQueue } from "./modules/reflections/routes.js";
 import { exportRoutes } from "./modules/export/routes.js";
@@ -106,6 +107,7 @@ async function buildApp() {
   await app.register(kudosRoutes, { prefix: "/api/v1/kudos" });
   await app.register(escalationRoutes, { prefix: "/api/v1/escalations" });
   await app.register(orgRoutes, { prefix: "/api/v1/admin" });
+  await app.register(campaignRoutes, { prefix: "/api/v1/admin/campaigns" });
   await app.register(relationshipsRoutes, { prefix: "/api/v1" });
   await app.register(conversationRoutes, { prefix: "/api/v1/conversations" });
   await app.register(calibrationRoutes, { prefix: "/api/v1" });
