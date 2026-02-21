@@ -1,39 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  --color-cream: #FFFBF5;
-  --color-cream-dark: #F5F0E8;
-  --color-forest: #064E3B;
-  --color-forest-light: #059669;
-  --color-forest-muted: #0D9488;
-  --color-terracotta: #EA580C;
-  --color-terracotta-light: #FB923C;
-  --color-amber: #F59E0B;
-  --color-amber-light: #FDE68A;
-  --color-stone-50: #FAFAF9;
-  --color-stone-100: #F5F5F4;
-  --color-stone-200: #E7E5E4;
-  --color-stone-300: #D6D3D1;
-  --color-stone-400: #A8A29E;
-  --color-stone-500: #78716C;
-  --color-stone-600: #57534E;
-  --color-stone-700: #44403C;
-  --color-stone-800: #292524;
-  --color-stone-900: #1C1917;
-  --color-stone-950: #0C0A09;
-  --color-positive: #059669;
-  --color-warning: #D97706;
-  --color-danger: #DC2626;
-  --font-display: "Playfair Display", serif;
-  --font-body: "Outfit", sans-serif;
+  --color-cream: #FFF3E0;
+  --color-cream-dark: #FAEAD1;
+  --color-forest: #51224A;
+  --color-forest-light: #C9861F;
+  --color-forest-muted: #238A7F;
+  --color-terracotta: #B96D52;
+  --color-terracotta-light: #E2A53D;
+  --color-amber: #E1BC83;
+  --color-amber-light: #FFF3DE;
+  --color-stone-50: #FFFDF8;
+  --color-stone-100: #F7EBDC;
+  --color-stone-200: #E8D2B4;
+  --color-stone-300: #E2C39C;
+  --color-stone-400: #A08060;
+  --color-stone-500: #725744;
+  --color-stone-600: #694631;
+  --color-stone-700: #4A3020;
+  --color-stone-800: #3A2218;
+  --color-stone-900: #2E1C15;
+  --color-stone-950: #1A0F0A;
+  --color-positive: #2C7A58;
+  --color-warning: #B86811;
+  --color-danger: #A93232;
+  --font-display: "Fraunces", serif;
+  --font-body: "Manrope", sans-serif;
 }
 
 /* Warm shadow system */
 :root {
-  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.02);
-  --shadow-md: 0 2px 8px rgba(28, 25, 23, 0.06), 0 1px 4px rgba(28, 25, 23, 0.03);
-  --shadow-lg: 0 8px 24px rgba(28, 25, 23, 0.08), 0 2px 8px rgba(28, 25, 23, 0.04);
-  --shadow-xl: 0 16px 48px rgba(28, 25, 23, 0.1), 0 4px 16px rgba(28, 25, 23, 0.05);
+  --shadow-sm: 0 1px 2px rgba(81, 34, 74, 0.04), 0 1px 3px rgba(81, 34, 74, 0.02);
+  --shadow-md: 0 2px 8px rgba(81, 34, 74, 0.06), 0 1px 4px rgba(81, 34, 74, 0.03);
+  --shadow-lg: 0 8px 24px rgba(81, 34, 74, 0.08), 0 2px 8px rgba(81, 34, 74, 0.04);
+  --shadow-xl: 0 16px 48px rgba(81, 34, 74, 0.1), 0 4px 16px rgba(81, 34, 74, 0.05);
 }
 
 /* Grain texture overlay */
@@ -43,10 +43,9 @@ body::before {
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
+  opacity: 1;
+  background-image: radial-gradient(rgba(81,34,74,0.04) 0.6px, transparent 0.6px);
+  background-size: 6px 6px;
 }
 
 /* Smooth scroll */
@@ -56,7 +55,7 @@ html {
 
 /* Selection color */
 ::selection {
-  background-color: rgba(6, 78, 59, 0.15);
+  background-color: rgba(81, 34, 74, 0.15);
 }
 
 /* Custom scrollbar */
@@ -109,8 +108,8 @@ html {
 
 /* Pulse glow */
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.2); }
-  50% { box-shadow: 0 0 0 8px rgba(5, 150, 105, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 134, 31, 0.2); }
+  50% { box-shadow: 0 0 0 8px rgba(201, 134, 31, 0); }
 }
 
 /* ===== Marketing Landing Page ===== */
@@ -233,14 +232,14 @@ html {
 
 .pricing-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 16px 48px rgba(28, 25, 23, 0.1), 0 4px 16px rgba(28, 25, 23, 0.05);
+  box-shadow: 0 16px 48px rgba(81, 34, 74, 0.1), 0 4px 16px rgba(81, 34, 74, 0.05);
 }
 
 /* Step watermark number */
 .step-watermark {
   font-size: 8rem;
   line-height: 1;
-  color: rgba(5, 150, 105, 0.07);
+  color: rgba(81, 34, 74, 0.07);
   position: absolute;
   top: -1rem;
   left: -0.5rem;

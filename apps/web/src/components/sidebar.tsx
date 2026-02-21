@@ -31,7 +31,10 @@ export function Sidebar({ role, items, userName = "Sarah Chen" }: SidebarProps) 
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 flex h-screen w-[260px] flex-col border-r border-stone-200/80 bg-white/80 backdrop-blur-sm">
+    <aside className="fixed left-0 top-0 flex h-screen w-[260px] flex-col border-r border-[#E2C39C] bg-gradient-to-b from-[#FAEAD1] to-[#F6DFC2] relative overflow-hidden">
+      {/* Sheen overlay */}
+      <div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: "linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.35) 40%, transparent 80%)" }} />
+
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 pt-8 pb-2">
         <div

@@ -20,15 +20,15 @@ export function PathBar() {
           const isLast = i === crumbs.length - 1;
           return (
             <li key={crumb.href} className="flex items-center gap-1.5">
-              {i > 0 && <span className="text-stone-300">/</span>}
+              {i > 0 && <span className="text-stone-300 mx-0.5">/</span>}
               {isLast ? (
-                <span className="font-medium text-stone-700">
+                <span className="font-semibold text-stone-800">
                   {crumb.label}
                 </span>
               ) : (
                 <Link
                   href={crumb.href}
-                  className="text-stone-400 transition-colors hover:text-forest"
+                  className="text-stone-400 underline decoration-forest-light/40 underline-offset-2 transition-colors hover:text-forest hover:decoration-forest-light"
                 >
                   {crumb.label}
                 </Link>
