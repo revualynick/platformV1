@@ -32,7 +32,7 @@ export default async function ManagerLayout({
   return (
     <div className="flex min-h-screen bg-cream">
       <Sidebar role="manager" items={navItems} userName={userName} />
-      <main className="ml-[260px] flex-1 p-8 lg:p-10">
+      <main className="ml-[260px] flex-1 px-6 py-6 lg:px-8 lg:py-8">
         <PathBar />
         {children}
       </main>
