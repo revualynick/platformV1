@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PathNameProvider } from "@/lib/path-context";
 import { auth } from "@/lib/auth";
 import {
   getUser,
@@ -247,6 +248,7 @@ export default async function EmployeeDetailPage({
     .join("");
 
   return (
+    <PathNameProvider names={{ [userId]: employee.name }}>
     <div className="max-w-6xl">
       {/* Mock data banner (#14) */}
       {data.usingMockData && (
@@ -254,13 +256,6 @@ export default async function EmployeeDetailPage({
           Unable to reach the API — showing sample data. Some information may not be current.
         </div>
       )}
-      {/* Back link */}
-      <Link
-        href="/team/members"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 transition-colors hover:text-stone-800"
-      >
-        <span className="text-base">&larr;</span> Team Members
-      </Link>
 
       {/* Employee header */}
       <div
@@ -536,5 +531,6 @@ export default async function EmployeeDetailPage({
         <NotesSection notes={notes} subjectId={userId} />
       </div>
     </div>
+    </PathNameProvider>
   );
 }

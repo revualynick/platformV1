@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { PathNameProvider } from "@/lib/path-context";
 import { getOneOnOneSessions, getOneOnOneSession, getUser, getWsToken } from "@/lib/api";
 import type { OneOnOneSession, OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
@@ -80,15 +80,8 @@ export default async function ManagerOneOnOnePage({
   }
 
   return (
+    <PathNameProvider names={{ [userId]: data.employeeName }}>
     <div className="max-w-6xl">
-      {/* Back link */}
-      <Link
-        href={`/team/members/${userId}`}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 transition-colors hover:text-stone-800"
-      >
-        <span className="text-base">&larr;</span> Back to {data.employeeName}
-      </Link>
-
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
@@ -139,5 +132,6 @@ export default async function ManagerOneOnOnePage({
         />
       </div>
     </div>
+    </PathNameProvider>
   );
 }

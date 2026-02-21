@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { PathNameProvider } from "@/lib/path-context";
 import { getOneOnOneSession, getUser, getWsToken } from "@/lib/api";
 import type { OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
@@ -73,15 +73,14 @@ export default async function ManagerSessionDetailPage({
     }
   }
 
-  return (
-    <div className="max-w-6xl">
-      <Link
-        href={`/team/members/${userId}/one-on-one`}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 transition-colors hover:text-stone-800"
-      >
-        <span className="text-base">&larr;</span> All Sessions
-      </Link>
+  const sessionLabel = new Date(data.session.scheduledAt).toLocaleDateString(
+    "en-US",
+    { month: "short", day: "numeric" },
+  );
 
+  return (
+    <PathNameProvider names={{ [userId]: data.employeeName, [sessionId]: sessionLabel }}>
+    <div className="max-w-6xl">
       <div className="card-enter">
         <SessionEditor
           session={data.session}
@@ -101,5 +100,6 @@ export default async function ManagerSessionDetailPage({
         />
       </div>
     </div>
+    </PathNameProvider>
   );
 }

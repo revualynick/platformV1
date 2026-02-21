@@ -55,7 +55,18 @@ export function Sidebar({ role, items, userName = "Sarah Chen" }: SidebarProps) 
       <nav className="mt-8 flex-1 px-3">
         <ul className="space-y-1">
           {items.map((item) => {
-            const isActive = pathname === item.href;
+            // Longest-prefix match: highlight the most specific nav item
+            // whose href matches the start of the current pathname
+            const isActive =
+              pathname === item.href ||
+              (pathname.startsWith(item.href + "/") &&
+                !items.some(
+                  (other) =>
+                    other !== item &&
+                    other.href.length > item.href.length &&
+                    (pathname === other.href ||
+                      pathname.startsWith(other.href + "/")),
+                ));
             return (
               <li key={item.href}>
                 <Link

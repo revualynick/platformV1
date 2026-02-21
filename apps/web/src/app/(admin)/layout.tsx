@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
+import { PathBar } from "@/components/path-bar";
 import { auth } from "@/lib/auth";
 
 const navItems = [
@@ -30,7 +31,10 @@ export default async function AdminLayout({
   return (
     <div className="flex min-h-screen bg-cream">
       <Sidebar role="admin" items={navItems} userName={userName} />
-      <main className="ml-[260px] flex-1 p-8 lg:p-10">{children}</main>
+      <main className="ml-[260px] flex-1 p-8 lg:p-10">
+        <PathBar />
+        {children}
+      </main>
     </div>
   );
 }

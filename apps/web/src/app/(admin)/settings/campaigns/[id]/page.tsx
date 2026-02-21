@@ -2,7 +2,7 @@ import { getCampaign } from "@/lib/api";
 import type { CampaignRow } from "@/lib/api";
 import { mockCampaigns } from "@/lib/mock-data";
 import { campaignStatusStyles } from "@/lib/style-constants";
-import Link from "next/link";
+import { PathNameProvider } from "@/lib/path-context";
 import { CampaignDetail } from "./campaign-detail";
 
 async function loadCampaign(id: string): Promise<CampaignRow | null> {
@@ -24,25 +24,6 @@ export default async function CampaignDetailPage({
   if (!campaign) {
     return (
       <div className="max-w-6xl">
-        <Link
-          href="/settings/campaigns"
-          className="mb-6 inline-flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-600"
-        >
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 19.5L8.25 12l7.5-7.5"
-            />
-          </svg>
-          Back to Campaigns
-        </Link>
         <div className="rounded-2xl border border-dashed border-stone-200 p-12 text-center">
           <p className="text-sm text-stone-400">Campaign not found.</p>
         </div>
@@ -53,28 +34,8 @@ export default async function CampaignDetailPage({
   const status = campaignStatusStyles[campaign.status];
 
   return (
+    <PathNameProvider names={{ [id]: campaign.name }}>
     <div className="max-w-6xl">
-      {/* Back link */}
-      <Link
-        href="/settings/campaigns"
-        className="card-enter mb-6 inline-flex items-center gap-1.5 text-sm text-stone-400 hover:text-stone-600"
-      >
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 19.5L8.25 12l7.5-7.5"
-          />
-        </svg>
-        Back to Campaigns
-      </Link>
-
       {/* Header */}
       <div
         className="card-enter mb-8 flex items-start justify-between gap-4"
@@ -101,5 +62,6 @@ export default async function CampaignDetailPage({
       {/* Client-side tabbed detail */}
       <CampaignDetail campaign={campaign} />
     </div>
+    </PathNameProvider>
   );
 }
