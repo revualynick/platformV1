@@ -95,7 +95,7 @@ export function CampaignsList({ campaigns }: CampaignsListProps) {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light"
+          className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light"
         >
           + New Campaign
         </button>
@@ -115,7 +115,7 @@ export function CampaignsList({ campaigns }: CampaignsListProps) {
             <Link
               key={campaign.id}
               href={`/settings/campaigns/${campaign.id}`}
-              className="card-enter group rounded-2xl border border-stone-200/60 bg-white p-6 transition-all hover:border-stone-300/60 hover:shadow-md"
+              className="card-enter group rounded-2xl border border-stone-200/60 bg-surface p-6 transition-all hover:border-stone-300/60 hover:shadow-md"
               style={{
                 animationDelay: `${300 + i * 80}ms`,
                 boxShadow: "var(--shadow-sm)",
@@ -278,7 +278,7 @@ export function CampaignsList({ campaigns }: CampaignsListProps) {
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-xl bg-forest px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
               >
                 {isPending ? "Creating..." : "Create Campaign"}
               </button>

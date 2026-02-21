@@ -42,7 +42,7 @@ export function CreateQuestionnaireModal() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light"
+        className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
       >
         Create Questionnaire
       </button>
@@ -56,7 +56,7 @@ export function CreateQuestionnaireModal() {
         onClick={() => !isPending && setOpen(false)}
       />
 
-      <div className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-stone-200/60 bg-white p-6 shadow-xl">
+      <div className="relative w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-stone-200/60 bg-surface p-6 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold text-stone-900">
             Create Questionnaire
@@ -86,7 +86,7 @@ export function CreateQuestionnaireModal() {
                 name="name"
                 required
                 placeholder="e.g. Weekly Code Review"
-                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
+                className="w-full rounded-xl border border-stone-200 bg-surface px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
               />
             </div>
 
@@ -97,7 +97,7 @@ export function CreateQuestionnaireModal() {
               <select
                 name="category"
                 required
-                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
+                className="w-full rounded-xl border border-stone-200 bg-surface px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
               >
                 <option value="peer_review">Peer Review</option>
                 <option value="self_reflection">Self-Reflection</option>
@@ -179,7 +179,7 @@ export function CreateQuestionnaireModal() {
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light disabled:opacity-50 shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
               >
                 {isPending ? "Creating..." : "Create"}
               </button>

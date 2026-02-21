@@ -154,7 +154,7 @@ export default async function EmployeeDashboard() {
       <div className="mb-8 grid gap-6 lg:grid-cols-12">
         {/* Engagement ring card */}
         <div
-          className="card-enter flex flex-col items-center justify-center rounded-2xl border border-stone-200/60 bg-white p-8 lg:col-span-3"
+          className="card-enter flex flex-col items-center justify-center rounded-2xl border border-stone-200/60 bg-surface p-8 lg:col-span-3"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
           <EngagementRing score={data.currentScore} />
@@ -178,17 +178,21 @@ export default async function EmployeeDashboard() {
             { label: "Streak", value: `${data.streak}w`, sub: "Consecutive weeks", color: "text-terracotta" },
             { label: "Avg Quality", value: data.currentScore.toString(), sub: "Across all feedback", color: "text-forest" },
             { label: "Response Rate", value: "100%", sub: "Always responsive", color: "text-forest" },
-          ].map((stat, i) => (
-            <div
-              key={stat.label}
-              className="card-enter flex flex-col rounded-2xl border border-stone-200/60 bg-white p-5"
-              style={{ animationDelay: `${i * 80 + 100}ms`, boxShadow: "var(--shadow-sm)" }}
-            >
-              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">{stat.label}</span>
-              <span className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}>{stat.value}</span>
-              <span className="mt-auto pt-2 text-xs text-stone-400">{stat.sub}</span>
-            </div>
-          ))}
+          ].map((stat, i) => {
+            const railColors = ["bg-forest", "bg-forest-light", "bg-terracotta", "bg-forest-muted"];
+            return (
+              <div
+                key={stat.label}
+                className="card-enter relative flex flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-surface pb-5 pl-7 pr-5 pt-5"
+                style={{ animationDelay: `${i * 80 + 100}ms`, boxShadow: "var(--shadow-sm)" }}
+              >
+                <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">{stat.label}</span>
+                <span className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}>{stat.value}</span>
+                <span className="mt-auto pt-2 text-xs text-stone-400">{stat.sub}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Upcoming interaction */}
@@ -222,7 +226,7 @@ export default async function EmployeeDashboard() {
       {/* Charts row */}
       <div className="mb-8 grid gap-6 lg:grid-cols-12">
         <div
-          className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6 lg:col-span-7"
+          className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-7"
           style={{ animationDelay: "400ms", boxShadow: "var(--shadow-sm)" }}
         >
           <div className="mb-4 flex items-center justify-between">
@@ -237,7 +241,7 @@ export default async function EmployeeDashboard() {
         </div>
 
         <div
-          className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6 lg:col-span-5"
+          className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-5"
           style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -268,14 +272,14 @@ export default async function EmployeeDashboard() {
         </div>
         {!data.hasManager ? (
           <div
-            className="rounded-2xl border border-stone-200/60 bg-white p-5 text-center"
+            className="rounded-2xl border border-stone-200/60 bg-surface p-5 text-center"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
             <p className="text-sm text-stone-400">No manager assigned.</p>
           </div>
         ) : data.oneOnOneSessions.length === 0 ? (
           <div
-            className="rounded-2xl border border-stone-200/60 bg-white p-5 text-center"
+            className="rounded-2xl border border-stone-200/60 bg-surface p-5 text-center"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
             <p className="text-sm text-stone-400">No 1:1 sessions yet.</p>
@@ -289,7 +293,7 @@ export default async function EmployeeDashboard() {
               {nextSession && (
                 <Link
                   href={`/dashboard/one-on-ones/${nextSession.id}`}
-                  className="block rounded-xl border border-stone-200/60 border-l-4 border-l-forest bg-white p-4 transition-all hover:shadow-md"
+                  className="block rounded-xl border border-stone-200/60 border-l-4 border-l-forest bg-surface p-4 transition-all hover:shadow-md"
                   style={{ boxShadow: "var(--shadow-sm)" }}
                 >
                   <div className="flex items-center gap-2.5">
@@ -315,7 +319,7 @@ export default async function EmployeeDashboard() {
               {lastSession && (
                 <Link
                   href={`/dashboard/one-on-ones/${lastSession.id}`}
-                  className="block rounded-xl border border-stone-200/60 bg-white p-4 transition-all hover:shadow-md"
+                  className="block rounded-xl border border-stone-200/60 bg-surface p-4 transition-all hover:shadow-md"
                   style={{ boxShadow: "var(--shadow-sm)" }}
                 >
                   <div className="flex items-center gap-2.5">
@@ -343,7 +347,7 @@ export default async function EmployeeDashboard() {
           {data.recentFeedback.map((fb) => (
             <div
               key={fb.id}
-              className="group rounded-2xl border border-stone-200/60 bg-white p-6 transition-all hover:border-stone-300/60 hover:shadow-md"
+              className="group rounded-2xl border border-stone-200/60 bg-surface p-6 transition-all hover:border-stone-300/60 hover:shadow-md"
               style={{ boxShadow: "var(--shadow-sm)" }}
             >
               <div className="flex items-start justify-between gap-4">

@@ -89,7 +89,7 @@ export default async function TeamMembersPage() {
             <Link
               key={member.id}
               href={`/team/members/${member.id}`}
-              className="group block cursor-pointer rounded-2xl border border-stone-200/60 bg-white p-5 transition-all hover:border-forest/20 hover:shadow-md"
+              className="group block cursor-pointer rounded-2xl border border-stone-200/60 bg-surface p-5 transition-all hover:border-forest/20 hover:shadow-md"
               style={{ boxShadow: "var(--shadow-sm)" }}
             >
               <div className="flex items-center gap-3">

@@ -63,13 +63,13 @@ export function NotesSection({
           onChange={(e) => setNewContent(e.target.value)}
           placeholder="Add a private note about this employee..."
           rows={3}
-          className="w-full resize-none rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-800 placeholder:text-stone-400 focus:border-forest/40 focus:outline-none focus:ring-2 focus:ring-forest/10"
+          className="w-full resize-none rounded-xl border border-stone-200 bg-surface px-4 py-3 text-sm text-stone-800 placeholder:text-stone-400 focus:border-forest/40 focus:outline-none focus:ring-2 focus:ring-forest/10"
         />
         <div className="mt-2 flex justify-end">
           <button
             onClick={handleAdd}
             disabled={isPending || !newContent.trim()}
-            className="rounded-xl bg-forest px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50"
+            className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50"
           >
             {isPending ? "Saving..." : "Add Note"}
           </button>
@@ -86,7 +86,7 @@ export function NotesSection({
           {notes.map((note) => (
             <div
               key={note.id}
-              className="rounded-xl border border-stone-200/60 bg-white p-4"
+              className="rounded-xl border border-stone-200/60 bg-surface p-4"
               style={{ boxShadow: "var(--shadow-sm)" }}
             >
               {editingId === note.id ? (
@@ -107,7 +107,7 @@ export function NotesSection({
                     <button
                       onClick={() => handleEdit(note.id)}
                       disabled={isPending || !editContent.trim()}
-                      className="rounded-lg bg-forest px-3 py-1.5 text-xs font-medium text-white hover:bg-forest/90 disabled:opacity-50"
+                      className="rounded-lg bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-3 py-1.5 text-xs font-medium text-white hover:bg-forest/90 disabled:opacity-50"
                     >
                       {isPending ? "Saving..." : "Save"}
                     </button>

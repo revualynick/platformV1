@@ -67,7 +67,7 @@ export default function OrgChartPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",

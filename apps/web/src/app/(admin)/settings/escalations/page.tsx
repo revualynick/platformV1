@@ -49,7 +49,7 @@ export default function EscalationsPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -78,7 +78,7 @@ export default function EscalationsPage() {
           return (
             <div
               key={esc.id}
-              className={`card-enter rounded-2xl border bg-white transition-all ${
+              className={`card-enter rounded-2xl border bg-surface transition-all ${
                 isResolved
                   ? "border-stone-100 opacity-75"
                   : "border-stone-200/60"
@@ -212,13 +212,13 @@ export default function EscalationsPage() {
               {/* Actions */}
               {!isResolved && (
                 <div className="flex items-center gap-3 border-t border-stone-100 px-6 py-4">
-                  <button className="rounded-xl bg-forest px-4 py-2 text-xs font-medium text-white hover:bg-forest-light">
+                  <button className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light">
                     Begin Investigation
                   </button>
-                  <button className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
+                  <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
                     Assign to HR
                   </button>
-                  <button className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
+                  <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
                     Mark Resolved
                   </button>
                 </div>

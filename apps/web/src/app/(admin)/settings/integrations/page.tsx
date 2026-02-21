@@ -61,7 +61,7 @@ export default function IntegrationsPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -88,7 +88,7 @@ export default function IntegrationsPage() {
           return (
             <div
               key={integration.id}
-              className={`card-enter rounded-2xl border bg-white p-6 transition-all ${
+              className={`card-enter rounded-2xl border bg-surface p-6 transition-all ${
                 isConnected
                   ? "border-stone-200/60 hover:border-stone-300/60 hover:shadow-md"
                   : "border-dashed border-stone-200"
@@ -132,7 +132,7 @@ export default function IntegrationsPage() {
                   <button
                     className={`rounded-xl px-5 py-2.5 text-xs font-medium transition-colors ${
                       isConnected
-                        ? "border border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+                        ? "border border-stone-200 bg-surface text-stone-600 hover:bg-stone-50"
                         : "bg-forest text-white hover:bg-forest-light"
                     }`}
                   >

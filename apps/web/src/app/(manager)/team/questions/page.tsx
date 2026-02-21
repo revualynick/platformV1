@@ -83,7 +83,7 @@ export default async function QuestionsPage() {
             {teamQuestions.map((q, i) => (
               <div
                 key={q.id}
-                className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+                className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
                 style={{ animationDelay: `${i * 80}ms`, boxShadow: "var(--shadow-sm)" }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -135,7 +135,7 @@ export default async function QuestionsPage() {
           {orgQuestions.map((q, i) => (
             <div
               key={q.id}
-              className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+              className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
               style={{ animationDelay: `${(teamQuestions.length + i) * 80}ms`, boxShadow: "var(--shadow-sm)" }}
             >
               <div className="flex items-start justify-between gap-3">

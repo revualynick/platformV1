@@ -76,15 +76,12 @@ export function Sidebar({ role, items, userName = "Sarah Chen" }: SidebarProps) 
                   href={item.href}
                   className={`flex items-center gap-3 rounded-xl px-4 py-2.5 text-[13.5px] font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-forest/[0.07] text-forest"
+                      ? "bg-forest text-white shadow-[0_10px_22px_rgba(81,34,74,0.28)]"
                       : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"
                   }`}
                 >
-                  <span className="text-base">{item.icon}</span>
+                  <span className={`text-base ${isActive ? "text-forest-light" : ""}`}>{item.icon}</span>
                   {item.label}
-                  {isActive && (
-                    <div className="ml-auto h-1.5 w-1.5 rounded-full bg-forest" />
-                  )}
                 </Link>
               </li>
             );

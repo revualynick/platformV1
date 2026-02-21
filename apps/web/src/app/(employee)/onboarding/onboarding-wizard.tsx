@@ -248,7 +248,7 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
           type="button"
           onClick={handleNext}
           disabled={isPending || (step === 0 && !name.trim())}
-          className="rounded-xl bg-forest px-6 py-2.5 text-sm font-semibold text-white hover:bg-forest-light transition-colors disabled:opacity-50"
+          className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-6 py-2.5 text-sm font-semibold text-white hover:bg-forest-light transition-colors disabled:opacity-50"
         >
           {isPending
             ? "Saving..."

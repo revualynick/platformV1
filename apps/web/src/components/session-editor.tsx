@@ -244,7 +244,7 @@ export function SessionEditor({
             <button
               onClick={handleStart}
               disabled={isPending}
-              className="rounded-lg bg-forest px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50"
+              className="rounded-lg bg-forest px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50 shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
             >
               Start Session
             </button>

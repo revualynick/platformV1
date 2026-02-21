@@ -10,6 +10,7 @@
   --color-terracotta-light: #E2A53D;
   --color-amber: #E1BC83;
   --color-amber-light: #FFF3DE;
+  --color-surface: #FFF9EE;
   --color-stone-50: #FFFDF8;
   --color-stone-100: #F7EBDC;
   --color-stone-200: #E8D2B4;
@@ -71,6 +72,18 @@ html {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-stone-400);
+}
+
+/* B2 focus ring — saffron glow */
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-forest);
+  box-shadow: 0 0 0 3px rgba(201, 134, 31, 0.15);
+  outline: none;
+}
+
+/* Primary button lift */
+.btn-primary {
+  box-shadow: 0 8px 20px rgba(61, 24, 55, 0.25);
 }
 
 /* Dot grid pattern utility */

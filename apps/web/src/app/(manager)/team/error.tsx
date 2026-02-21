@@ -15,7 +15,7 @@ export default function TeamError({
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="rounded-2xl border border-stone-200/60 bg-white p-10" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div className="rounded-2xl border border-stone-200/60 bg-surface p-10" style={{ boxShadow: "var(--shadow-sm)" }}>
         <h2 className="font-display text-xl font-semibold text-stone-900">Something went wrong</h2>
         <p className="mt-2 text-sm text-stone-500">An unexpected error occurred while loading team data.</p>
         <button

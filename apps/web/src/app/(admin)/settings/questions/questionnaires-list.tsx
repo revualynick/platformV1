@@ -87,11 +87,11 @@ export function QuestionnairesList({ questionnaires }: QuestionnairesListProps) 
       >
         <button
           onClick={() => setModalState({ mode: "add" })}
-          className="rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light"
+          className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light"
         >
           + New Questionnaire
         </button>
-        <button className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
+        <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
           <span className="mr-1.5">↑</span>
           Import Plain Text
         </button>
@@ -105,7 +105,7 @@ export function QuestionnairesList({ questionnaires }: QuestionnairesListProps) 
           return (
             <div
               key={q.id}
-              className={`card-enter rounded-2xl border bg-white transition-all ${
+              className={`card-enter rounded-2xl border bg-surface transition-all ${
                 q.active
                   ? "border-stone-200/60 hover:border-stone-300/60 hover:shadow-md"
                   : "border-dashed border-stone-200 opacity-60"
@@ -152,7 +152,7 @@ export function QuestionnairesList({ questionnaires }: QuestionnairesListProps) 
                       }
                     >
                       <span
-                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                        className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow-sm transition-transform ${
                           q.verbatim ? "translate-x-4" : "translate-x-0.5"
                         }`}
                       />
@@ -336,7 +336,7 @@ export function QuestionnairesList({ questionnaires }: QuestionnairesListProps) 
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-xl bg-forest px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
               >
                 {isPending ? "Saving..." : modalState.mode === "add" ? "Create" : "Save Changes"}
               </button>

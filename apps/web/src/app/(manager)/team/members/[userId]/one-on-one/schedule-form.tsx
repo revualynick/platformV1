@@ -34,7 +34,7 @@ export function ScheduleSessionForm({ employeeId, createAction }: ScheduleSessio
     return (
       <button
         onClick={() => setShowForm(true)}
-        className="w-full rounded-2xl border-2 border-dashed border-stone-200 bg-white/50 py-4 text-sm font-medium text-stone-400 transition-all hover:border-forest/30 hover:text-forest"
+        className="w-full rounded-2xl border-2 border-dashed border-stone-200 bg-surface/50 py-4 text-sm font-medium text-stone-400 transition-all hover:border-forest/30 hover:text-forest"
       >
         + Schedule New Session
       </button>
@@ -43,7 +43,7 @@ export function ScheduleSessionForm({ employeeId, createAction }: ScheduleSessio
 
   return (
     <div
-      className="rounded-2xl border border-stone-200/60 bg-white p-5"
+      className="rounded-2xl border border-stone-200/60 bg-surface p-5"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <h3 className="mb-3 text-sm font-medium text-stone-700">Schedule a new 1:1</h3>
@@ -60,7 +60,7 @@ export function ScheduleSessionForm({ employeeId, createAction }: ScheduleSessio
         <button
           onClick={handleSubmit}
           disabled={!scheduledAt || isPending}
-          className="rounded-lg bg-forest px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50"
+          className="rounded-lg bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-forest/90 disabled:opacity-50"
         >
           Schedule
         </button>

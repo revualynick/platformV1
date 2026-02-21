@@ -127,7 +127,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
             onClick={() => setActiveTab(tab.value)}
             className={`flex-1 rounded-lg px-4 py-2 text-xs font-medium transition-colors ${
               activeTab === tab.value
-                ? "bg-white text-stone-800 shadow-sm"
+                ? "bg-surface text-stone-800 shadow-sm"
                 : "text-stone-400 hover:text-stone-600"
             }`}
           >
@@ -144,7 +144,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
         >
           {/* Info grid */}
           <div
-            className="rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
             <h3 className="mb-4 font-display text-sm font-semibold text-stone-800">
@@ -212,7 +212,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
           {/* Lifecycle advancement */}
           {nextStatus && (
             <div
-              className="rounded-2xl border border-stone-200/60 bg-white p-6"
+              className="rounded-2xl border border-stone-200/60 bg-surface p-6"
               style={{ boxShadow: "var(--shadow-sm)" }}
             >
               <h3 className="mb-3 font-display text-sm font-semibold text-stone-800">
@@ -225,7 +225,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
                 <button
                   onClick={handleAdvance}
                   disabled={isPending}
-                  className="rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                  className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
                 >
                   {isPending ? "Advancing..." : `Advance to ${nextStatusStyle?.label}`}
                 </button>
@@ -287,7 +287,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
               {themes.map((theme, i) => (
                 <div
                   key={theme.id}
-                  className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+                  className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
                   style={{
                     animationDelay: `${300 + i * 80}ms`,
                     boxShadow: "var(--shadow-sm)",
@@ -344,7 +344,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
           style={{ animationDelay: "240ms" }}
         >
           <div
-            className="flex h-[500px] flex-col rounded-2xl border border-stone-200/60 bg-white"
+            className="flex h-[500px] flex-col rounded-2xl border border-stone-200/60 bg-surface"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
             {/* Chat messages */}
@@ -396,7 +396,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
                           {msg.suggestions.map((s, si) => (
                             <span
                               key={si}
-                              className="rounded-full border border-stone-200 bg-white px-3 py-1 text-[10px] font-medium text-stone-500"
+                              className="rounded-full border border-stone-200 bg-surface px-3 py-1 text-[10px] font-medium text-stone-500"
                             >
                               {s}
                             </span>
@@ -447,7 +447,7 @@ export function CampaignDetail({ campaign }: CampaignDetailProps) {
                 <button
                   onClick={handleSendMessage}
                   disabled={isSending || !chatInput.trim()}
-                  className="rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                  className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
                 >
                   Send
                 </button>

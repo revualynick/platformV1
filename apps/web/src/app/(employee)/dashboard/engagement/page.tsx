@@ -98,7 +98,7 @@ export default async function EngagementPage() {
       <div className="mb-8 grid gap-6 lg:grid-cols-12">
         {/* Ring + delta */}
         <div
-          className="card-enter flex flex-col items-center justify-center rounded-2xl border border-stone-200/60 bg-white p-8 lg:col-span-4"
+          className="card-enter flex flex-col items-center justify-center rounded-2xl border border-stone-200/60 bg-surface p-8 lg:col-span-4"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
           <EngagementRing score={current.score} />
@@ -156,34 +156,38 @@ export default async function EngagementPage() {
               sub: "Cited in feedback",
               color: "text-forest",
             },
-          ].map((stat, i) => (
-            <div
-              key={stat.label}
-              className="card-enter flex flex-col rounded-2xl border border-stone-200/60 bg-white p-5"
-              style={{
-                animationDelay: `${i * 80 + 100}ms`,
-                boxShadow: "var(--shadow-sm)",
-              }}
-            >
-              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                {stat.label}
-              </span>
-              <span
-                className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}
+          ].map((stat, i) => {
+            const railColors = ["bg-forest", "bg-forest-light", "bg-terracotta", "bg-forest-muted"];
+            return (
+              <div
+                key={stat.label}
+                className="card-enter relative flex flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-surface pb-5 pl-7 pr-5 pt-5"
+                style={{
+                  animationDelay: `${i * 80 + 100}ms`,
+                  boxShadow: "var(--shadow-sm)",
+                }}
               >
-                {stat.value}
-              </span>
-              <span className="mt-auto pt-2 text-xs text-stone-400">
-                {stat.sub}
-              </span>
-            </div>
-          ))}
+                <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
+                <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  {stat.label}
+                </span>
+                <span
+                  className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}
+                >
+                  {stat.value}
+                </span>
+                <span className="mt-auto pt-2 text-xs text-stone-400">
+                  {stat.sub}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Chart */}
       <div
-        className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-white p-6"
+        className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-surface p-6"
         style={{ animationDelay: "400ms", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -201,7 +205,7 @@ export default async function EngagementPage() {
 
       {/* Weekly history table */}
       <div
-        className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+        className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
         style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
       >
         <h3 className="mb-4 font-display text-base font-semibold text-stone-800">

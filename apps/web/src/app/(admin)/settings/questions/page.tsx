@@ -122,7 +122,7 @@ export default async function QuestionsPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -177,7 +177,7 @@ export default async function QuestionsPage() {
                     ? "border-stone-100 bg-stone-50/50 opacity-50"
                     : theme.status === "suggested"
                       ? "border-violet-200/60 bg-gradient-to-r from-violet-50/40 to-transparent"
-                      : "border-stone-200/60 bg-white"
+                      : "border-stone-200/60 bg-surface"
                 }`}
                 style={{
                   animationDelay: `${800 + i * 80}ms`,
@@ -210,7 +210,7 @@ export default async function QuestionsPage() {
                       {theme.examplePhrasings.map((p, pi) => (
                         <span
                           key={pi}
-                          className="rounded-lg bg-white/80 px-3 py-1.5 text-xs italic text-stone-500 shadow-sm"
+                          className="rounded-lg bg-surface/80 px-3 py-1.5 text-xs italic text-stone-500 shadow-sm"
                         >
                           &ldquo;{p}&rdquo;
                         </span>
@@ -251,10 +251,10 @@ export default async function QuestionsPage() {
                   {/* Actions */}
                   {theme.status === "suggested" && (
                     <div className="flex shrink-0 flex-col gap-2">
-                      <button className="rounded-xl bg-forest px-4 py-2 text-xs font-medium text-white hover:bg-forest-light">
+                      <button className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light">
                         Accept
                       </button>
-                      <button className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-xs font-medium text-stone-500 hover:bg-stone-50">
+                      <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-500 hover:bg-stone-50">
                         Dismiss
                       </button>
                     </div>

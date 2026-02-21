@@ -284,7 +284,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
       <div className="card-enter mb-4 flex flex-wrap items-center gap-3" style={{ animationDelay: "250ms" }}>
         <button
           onClick={() => setPositions(initialPositions)}
-          className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50"
+          className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50"
         >
           Reset Layout
         </button>
@@ -297,7 +297,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
           className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${
             showThreads
               ? "border-forest/20 bg-forest/[0.06] text-forest hover:bg-forest/10"
-              : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+              : "border-stone-200 bg-surface text-stone-500 hover:bg-stone-50"
           }`}
         >
           {showThreads ? "Threads On" : "Threads Off"}
@@ -309,7 +309,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
               setSelectedPerson(null);
               setEditingThread(null);
             }}
-            className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-500 hover:bg-stone-50"
+            className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-500 hover:bg-stone-50"
           >
             Clear selection
           </button>
@@ -326,7 +326,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
           return (
             <span
               key={tag}
-              className="flex items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-medium text-stone-600"
+              className="flex items-center gap-1.5 rounded-full bg-surface/80 px-2.5 py-1 text-[10px] font-medium text-stone-600"
             >
               <span
                 className="inline-block h-px w-4"
@@ -344,7 +344,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
 
       {/* Canvas */}
       <div
-        className="card-enter relative rounded-2xl border border-stone-200/60 bg-white"
+        className="card-enter relative rounded-2xl border border-stone-200/60 bg-surface"
         style={{ animationDelay: "350ms", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="overflow-x-auto">
@@ -714,7 +714,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
                   ...(openAbove ? { marginTop: -8 } : { marginTop: 8 }),
                 }}
               >
-                <div className="w-52 rounded-xl border border-stone-200 bg-white p-3.5 shadow-xl">
+                <div className="w-52 rounded-xl border border-stone-200 bg-surface p-3.5 shadow-xl">
                   <div className="mb-2 flex items-center gap-2.5">
                     <div
                       className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-semibold text-white"
@@ -804,7 +804,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
                 }}
               >
                 <div
-                  className="w-56 rounded-xl border bg-white p-3.5 shadow-xl"
+                  className="w-56 rounded-xl border bg-surface p-3.5 shadow-xl"
                   style={{ borderColor: color + "40" }}
                 >
                   <div className="mb-2 flex items-center justify-between">
@@ -862,7 +862,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
 
       {/* Thread list below canvas */}
       {showThreads && <div
-        className="card-enter mt-6 rounded-2xl border border-stone-200/60 bg-white p-6"
+        className="card-enter mt-6 rounded-2xl border border-stone-200/60 bg-surface p-6"
         style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="mb-4 flex items-center justify-between">

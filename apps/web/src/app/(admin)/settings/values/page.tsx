@@ -60,7 +60,7 @@ export default async function ValuesPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -83,7 +83,7 @@ export default async function ValuesPage() {
         {/* Values list */}
         <div className="lg:col-span-7">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "200ms", boxShadow: "var(--shadow-sm)" }}
           >
             <ValuesList values={coreValues} scores={valuesScores} />
@@ -93,7 +93,7 @@ export default async function ValuesPage() {
         {/* Score breakdown sidebar */}
         <div className="lg:col-span-5">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "300ms", boxShadow: "var(--shadow-sm)" }}
           >
             <h3 className="mb-4 font-display text-base font-semibold text-stone-800">

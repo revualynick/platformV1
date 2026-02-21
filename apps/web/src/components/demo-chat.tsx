@@ -146,7 +146,7 @@ export function DemoChat() {
               <div className="flex flex-1 items-center justify-center">
                 <button
                   onClick={handleStart}
-                  className="rounded-xl bg-forest px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-forest-dark"
+                  className="rounded-xl bg-forest px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-forest-dark shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
                 >
                   Start Conversation
                 </button>

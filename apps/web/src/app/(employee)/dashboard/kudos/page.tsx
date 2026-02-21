@@ -129,33 +129,37 @@ export default async function KudosPage() {
             sub: "Most recognized for",
             color: "text-stone-900",
           },
-        ].map((stat, i) => (
-          <div
-            key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
-            style={{
-              animationDelay: `${i * 80}ms`,
-              boxShadow: "var(--shadow-sm)",
-            }}
-          >
-            <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
-              {stat.label}
-            </span>
-            <p
-              className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}
+        ].map((stat, i) => {
+          const railColors = ["bg-forest", "bg-forest-light", "bg-terracotta", "bg-forest-muted"];
+          return (
+            <div
+              key={stat.label}
+              className="card-enter relative overflow-hidden rounded-2xl border border-stone-200/60 bg-surface pb-5 pl-7 pr-5 pt-5"
+              style={{
+                animationDelay: `${i * 80}ms`,
+                boxShadow: "var(--shadow-sm)",
+              }}
             >
-              {stat.value}
-            </p>
-            <p className="mt-1 text-xs text-stone-400">{stat.sub}</p>
-          </div>
-        ))}
+              <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                {stat.label}
+              </span>
+              <p
+                className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}
+              >
+                {stat.value}
+              </p>
+              <p className="mt-1 text-xs text-stone-400">{stat.sub}</p>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Received */}
         <div className="lg:col-span-7">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "200ms", boxShadow: "var(--shadow-sm)" }}
           >
             <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
@@ -207,7 +211,7 @@ export default async function KudosPage() {
         {/* Given */}
         <div className="lg:col-span-5">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "300ms", boxShadow: "var(--shadow-sm)" }}
           >
             <h3 className="mb-4 font-display text-base font-semibold text-stone-800">

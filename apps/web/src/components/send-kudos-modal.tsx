@@ -48,7 +48,7 @@ export function SendKudosModal({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="mt-3 rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light"
+        className="mt-3 rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
       >
         Send Kudos
       </button>
@@ -64,7 +64,7 @@ export function SendKudosModal({
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md rounded-2xl border border-stone-200/60 bg-white p-6 shadow-xl">
+      <div className="relative w-full max-w-md rounded-2xl border border-stone-200/60 bg-surface p-6 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="font-display text-lg font-semibold text-stone-900">
             Send Kudos
@@ -94,7 +94,7 @@ export function SendKudosModal({
               <select
                 name="receiverId"
                 required
-                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
+                className="w-full rounded-xl border border-stone-200 bg-surface px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
               >
                 <option value="">Select a colleague...</option>
                 {users.map((u) => (
@@ -115,7 +115,7 @@ export function SendKudosModal({
                 required
                 rows={3}
                 placeholder="What did they do that was great?"
-                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
+                className="w-full rounded-xl border border-stone-200 bg-surface px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
               />
             </div>
 
@@ -126,7 +126,7 @@ export function SendKudosModal({
               </label>
               <select
                 name="coreValueId"
-                className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
+                className="w-full rounded-xl border border-stone-200 bg-surface px-3 py-2.5 text-sm text-stone-800 outline-none focus:border-forest focus:ring-1 focus:ring-forest"
               >
                 <option value="">None</option>
                 {values.map((v) => (
@@ -153,7 +153,7 @@ export function SendKudosModal({
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                className="rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light disabled:opacity-50 shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
               >
                 {isPending ? "Sending..." : "Send"}
               </button>

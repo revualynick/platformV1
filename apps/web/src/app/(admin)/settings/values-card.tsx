@@ -134,7 +134,7 @@ export function ValuesCard({ values }: ValuesCardProps) {
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-xl bg-forest px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
+                className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light disabled:opacity-50"
               >
                 {isPending ? "Saving..." : modalState.mode === "add" ? "Add Value" : "Save Changes"}
               </button>

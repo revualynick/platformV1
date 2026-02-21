@@ -214,7 +214,7 @@ export function DemoChatPublic() {
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="w-full rounded-xl bg-forest px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-forest-light disabled:opacity-50"
+              className="w-full rounded-xl bg-forest px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-forest-light disabled:opacity-50 shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
             >
               {loading ? "Loading..." : "Start Demo"}
             </button>
@@ -264,7 +264,7 @@ export function DemoChatPublic() {
               <div className="flex flex-1 items-center justify-center">
                 <button
                   onClick={handleStart}
-                  className="rounded-xl bg-forest px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-forest-dark"
+                  className="rounded-xl bg-forest px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-forest-dark shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
                 >
                   Start Conversation
                 </button>
@@ -323,7 +323,7 @@ export function DemoChatPublic() {
             {closed ? (
               <button
                 onClick={handleStart}
-                className="w-full rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-forest-dark"
+                className="w-full rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-forest-dark shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
               >
                 Start New Conversation
               </button>

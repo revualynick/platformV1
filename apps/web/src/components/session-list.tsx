@@ -40,7 +40,7 @@ export function SessionList({ sessions, linkPrefix, partnerName }: SessionListPr
   if (sorted.length === 0) {
     return (
       <div
-        className="rounded-2xl border border-stone-200/60 bg-white p-8 text-center"
+        className="rounded-2xl border border-stone-200/60 bg-surface p-8 text-center"
         style={{ boxShadow: "var(--shadow-sm)" }}
       >
         <p className="text-sm text-stone-400">
@@ -63,7 +63,7 @@ export function SessionList({ sessions, linkPrefix, partnerName }: SessionListPr
           <Link
             key={session.id}
             href={href}
-            className="block rounded-2xl border border-stone-200/60 bg-white p-5 transition-all hover:border-stone-300/60 hover:shadow-md"
+            className="block rounded-2xl border border-stone-200/60 bg-surface p-5 transition-all hover:border-stone-300/60 hover:shadow-md"
             style={{ boxShadow: "var(--shadow-sm)" }}
           >
             <div className="flex items-start justify-between gap-4">

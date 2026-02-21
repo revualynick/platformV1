@@ -153,7 +153,7 @@ export default async function ReflectionsPage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -172,7 +172,7 @@ export default async function ReflectionsPage() {
 
       {/* Mood timeline */}
       <div
-        className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-white p-6"
+        className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-surface p-6"
         style={{ animationDelay: "250ms", boxShadow: "var(--shadow-sm)" }}
       >
         <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
@@ -209,7 +209,7 @@ export default async function ReflectionsPage() {
           return (
             <div
               key={reflection.id}
-              className="card-enter rounded-2xl border border-stone-200/60 bg-white transition-all hover:border-stone-300/60 hover:shadow-md"
+              className="card-enter rounded-2xl border border-stone-200/60 bg-surface transition-all hover:border-stone-300/60 hover:shadow-md"
               style={{
                 animationDelay: `${350 + i * 80}ms`,
                 boxShadow: "var(--shadow-sm)",

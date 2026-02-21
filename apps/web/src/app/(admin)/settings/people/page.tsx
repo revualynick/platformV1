@@ -314,7 +314,7 @@ export default function PeoplePage() {
         ].map((stat, i) => (
           <div
             key={stat.label}
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-5"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-5"
             style={{
               animationDelay: `${i * 80}ms`,
               boxShadow: "var(--shadow-sm)",
@@ -333,19 +333,19 @@ export default function PeoplePage() {
 
       {/* Actions */}
       <div className="card-enter mb-4 flex flex-wrap items-center gap-3" style={{ animationDelay: "250ms" }}>
-        <button className="rounded-xl bg-forest px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light">
+        <button className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2.5 text-xs font-medium text-white hover:bg-forest-light">
           + Add Person
         </button>
-        <button className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
+        <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
           + Draw Thread
         </button>
-        <button className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
+        <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50">
           <span className="mr-1.5">↑</span>
           Import CSV
         </button>
         <button
           onClick={() => setPositions(computePositions)}
-          className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50"
+          className="rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50"
         >
           Reset Layout
         </button>
@@ -358,7 +358,7 @@ export default function PeoplePage() {
           className={`rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors ${
             showThreads
               ? "border-forest/20 bg-forest/[0.06] text-forest hover:bg-forest/10"
-              : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+              : "border-stone-200 bg-surface text-stone-500 hover:bg-stone-50"
           }`}
         >
           {showThreads ? "Threads On" : "Threads Off"}
@@ -366,7 +366,7 @@ export default function PeoplePage() {
         {(hoveredPerson || selectedPerson) && (
           <button
             onClick={() => { setHoveredPerson(null); setSelectedPerson(null); setEditingThread(null); }}
-            className="ml-auto rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-medium text-stone-500 hover:bg-stone-50"
+            className="ml-auto rounded-xl border border-stone-200 bg-surface px-4 py-2.5 text-xs font-medium text-stone-500 hover:bg-stone-50"
           >
             Clear selection
           </button>
@@ -383,7 +383,7 @@ export default function PeoplePage() {
           return (
             <span
               key={tag}
-              className="flex items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-medium text-stone-600"
+              className="flex items-center gap-1.5 rounded-full bg-surface/80 px-2.5 py-1 text-[10px] font-medium text-stone-600"
             >
               <span
                 className="inline-block h-px w-4"
@@ -401,7 +401,7 @@ export default function PeoplePage() {
 
       {/* Canvas */}
       <div
-        className="card-enter relative rounded-2xl border border-stone-200/60 bg-white"
+        className="card-enter relative rounded-2xl border border-stone-200/60 bg-surface"
         style={{ animationDelay: "350ms", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="overflow-x-auto">
@@ -745,7 +745,7 @@ export default function PeoplePage() {
                 ...(openAbove ? { marginTop: -8 } : { marginTop: 8 }),
               }}
             >
-              <div className="w-52 rounded-xl border border-stone-200 bg-white p-3.5 shadow-xl">
+              <div className="w-52 rounded-xl border border-stone-200 bg-surface p-3.5 shadow-xl">
                 <div className="mb-2 flex items-center gap-2.5">
                   <div
                     className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-semibold text-white"
@@ -803,7 +803,7 @@ export default function PeoplePage() {
                 ...(openAbove ? { marginTop: -12 } : { marginTop: 12 }),
               }}
             >
-              <div className="w-56 rounded-xl border bg-white p-3.5 shadow-xl" style={{ borderColor: color + "40" }}>
+              <div className="w-56 rounded-xl border bg-surface p-3.5 shadow-xl" style={{ borderColor: color + "40" }}>
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
                     Edit Thread
@@ -863,7 +863,7 @@ export default function PeoplePage() {
         {/* Thread list */}
         <div className="lg:col-span-7">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
           >
             <div className="mb-4 flex items-center justify-between">
@@ -949,7 +949,7 @@ export default function PeoplePage() {
         {/* Teams summary */}
         <div className="lg:col-span-5">
           <div
-            className="card-enter rounded-2xl border border-stone-200/60 bg-white p-6"
+            className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "600ms", boxShadow: "var(--shadow-sm)" }}
           >
             <h3 className="mb-4 font-display text-base font-semibold text-stone-800">

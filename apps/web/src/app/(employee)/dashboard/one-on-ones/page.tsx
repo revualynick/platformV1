@@ -59,7 +59,7 @@ export default async function OneOnOnesPage() {
           </p>
         </div>
         <div
-          className="rounded-2xl border border-stone-200/60 bg-white p-8 text-center"
+          className="rounded-2xl border border-stone-200/60 bg-surface p-8 text-center"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
           <p className="text-sm text-stone-400">
