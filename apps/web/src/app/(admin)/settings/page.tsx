@@ -50,8 +50,10 @@ export default async function AdminSettings() {
   const demoEscalations = isDemo ? escalations : [];
   const demoTeamMembers = isDemo ? mockTeamMembers : [];
 
-  const coreValues = await loadValues(isDemo);
-  const orgSettings = await loadOrgSettings(isDemo);
+  const [coreValues, orgSettings] = await Promise.all([
+    loadValues(isDemo),
+    loadOrgSettings(isDemo),
+  ]);
   const activeCampaigns = demoCampaigns.filter((c) => c.status === "collecting").length;
   const participationRate = demoTeamMembers.length > 0
     ? Math.round(

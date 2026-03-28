@@ -10,6 +10,9 @@ const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@revualy/shared"],
+  experimental: {
+    optimizePackageImports: ["recharts", "drizzle-orm"],
+  },
   async headers() {
     const securityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getUsers, getEngagementScores } from "@/lib/api";
+import { getUsers, getBulkEngagementScores } from "@/lib/api";
 import {
   leaderboard as mockLeaderboard,
   leaderboardHistory as mockHistory,
@@ -44,14 +44,12 @@ async function loadLeaderboardData(userId: string, isDemo: boolean) {
     }
 
     const teamUsers = usersResult.data;
-    const engResults = await Promise.allSettled(
-      teamUsers.map((u) => getEngagementScores(u.id)),
-    );
+    const bulkEng = await getBulkEngagementScores(teamUsers.map((u) => u.id)).catch(() => ({ data: {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>> }));
 
-    const entries: LeaderboardEntry[] = teamUsers.map((u, idx) => {
-      const eng = engResults[idx];
-      if (eng.status === "fulfilled" && eng.value.data.length > 0) {
-        const latest = eng.value.data[eng.value.data.length - 1];
+    const entries: LeaderboardEntry[] = teamUsers.map((u) => {
+      const scores = bulkEng.data[u.id] ?? [];
+      if (scores.length > 0) {
+        const latest = scores[0];
         return {
           rank: 0,
           name: u.name,

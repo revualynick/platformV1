@@ -267,8 +267,13 @@ export const { handlers, signIn, signOut } = nextAuth;
  * Session getter — wraps NextAuth's auth() to return a synthetic demo session
  * when DEMO_MODE=true and no real authenticated session exists.
  * This lets all pages render with mock data instead of redirecting to /login.
+ *
+ * Wrapped with React cache() so that multiple calls within a single server
+ * render (layout + page + apiFetch calls) only hit the DB once.
  */
-export async function auth() {
+import { cache } from "react";
+
+export const auth = cache(async function auth() {
   const session = await nextAuth.auth();
   if (session) return session;
 
@@ -289,4 +294,4 @@ export async function auth() {
   }
 
   return null;
-}
+});

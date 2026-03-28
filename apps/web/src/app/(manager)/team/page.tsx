@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getUsers, getEngagementScores, getFlaggedItems } from "@/lib/api";
+import { getUsers, getBulkEngagementScores, getFlaggedItems } from "@/lib/api";
 import { TeamTrendChart } from "@/components/charts/team-trend-chart";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import {
@@ -52,40 +52,28 @@ async function loadTeamData(userId: string, isDemo: boolean) {
     if (usersResult.status === "fulfilled" && usersResult.value.data.length > 0) {
       const members = usersResult.value.data;
 
-      // Fetch engagement scores for each team member
-      const engResults = await Promise.allSettled(
-        members.map((m) => getEngagementScores(m.id)),
-      );
+      // Fetch engagement scores for all team members in one request
+      const bulkEng = await getBulkEngagementScores(members.map((m) => m.id)).catch(() => ({ data: {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>> }));
 
-      teamMembers = members.map((m, idx) => {
-        const eng = engResults[idx];
-        let score = 0;
-        let interactions = 0;
-        let target = 3;
-        let streak = 0;
-        if (eng.status === "fulfilled" && eng.value.data.length > 0) {
-          const latest = eng.value.data[eng.value.data.length - 1];
-          score = latest.averageQualityScore;
-          interactions = latest.interactionsCompleted;
-          target = latest.interactionsTarget;
-          streak = latest.streak;
-          const prev = eng.value.data.length > 1 ? eng.value.data[eng.value.data.length - 2] : null;
-          const delta = prev ? latest.averageQualityScore - prev.averageQualityScore : 0;
+      teamMembers = members.map((m) => {
+        const scores = bulkEng.data[m.id] ?? [];
+        if (scores.length > 0) {
+          const latest = scores[0];
           return {
             id: m.id,
             name: m.name,
-            engagementScore: score,
-            interactionsThisWeek: interactions,
-            target,
-            trend: delta > 2 ? "up" : delta < -2 ? "down" : "stable",
+            engagementScore: latest.averageQualityScore,
+            interactionsThisWeek: latest.interactionsCompleted,
+            target: latest.interactionsTarget,
+            trend: "stable" as string,
           };
         }
         return {
           id: m.id,
           name: m.name,
-          engagementScore: score,
-          interactionsThisWeek: interactions,
-          target,
+          engagementScore: 0,
+          interactionsThisWeek: 0,
+          target: 3,
           trend: "stable",
         };
       });

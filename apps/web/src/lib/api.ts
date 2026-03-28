@@ -341,6 +341,12 @@ export async function getEngagementScores(userId: string) {
   );
 }
 
+export async function getBulkEngagementScores(userIds: string[]) {
+  return apiFetch<{ data: Record<string, EngagementScoreRow[]> }>(
+    `/api/v1/engagement/bulk?userIds=${userIds.join(",")}`,
+  );
+}
+
 // ── Feedback ───────────────────────────────────────────
 
 export interface FeedbackEntryRow {
