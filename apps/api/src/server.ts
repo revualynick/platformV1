@@ -29,6 +29,7 @@ import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
+import { runMigrations } from "@revualy/db";
 import { AdapterRegistry } from "@revualy/chat-core";
 import { SlackAdapter } from "@revualy/chat-adapter-slack";
 import { GoogleChatAdapter } from "@revualy/chat-adapter-gchat";
@@ -132,6 +133,25 @@ async function buildApp() {
 }
 
 async function start() {
+  const isProduction = process.env.NODE_ENV === "production";
+  const required = ["DATABASE_URL"];
+  if (isProduction) {
+    required.push("ORG_ID", "INTERNAL_API_SECRET", "NEXTAUTH_SECRET", "NEXTAUTH_URL");
+  }
+  const missing = required.filter((v) => !process.env[v]);
+  if (missing.length > 0) {
+    console.error(`Fatal: missing required env vars: ${missing.join(", ")}`);
+    process.exit(1);
+  }
+
+  try {
+    await runMigrations(process.env.DATABASE_URL!);
+    console.log("Database migrations applied successfully");
+  } catch (err) {
+    console.error("Fatal: database migration failed", err);
+    process.exit(1);
+  }
+
   const app = await buildApp();
 
   // ── Redis + BullMQ initialization ────────────────────────

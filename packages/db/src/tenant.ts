@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import * as tenantSchema from "./schema/tenant.js";
 
@@ -32,5 +33,17 @@ export async function closeAllTenantDbs(): Promise<void> {
   if (cachedClient) {
     await cachedClient.sql.end({ timeout: 5 });
     cachedClient = null;
+  }
+}
+
+export async function runMigrations(connectionString: string): Promise<void> {
+  const sql = postgres(connectionString, { max: 1 });
+  const db = drizzle(sql);
+  try {
+    await migrate(db, {
+      migrationsFolder: new URL("./migrations", import.meta.url).pathname,
+    });
+  } finally {
+    await sql.end({ timeout: 5 });
   }
 }
