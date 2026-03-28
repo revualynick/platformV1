@@ -381,13 +381,16 @@ async function decideNextAction(
       {
         role: "system",
         content: `You are analyzing a conversation reply to decide the next action.
-The user replied: "${lastReply}"
 
-Evaluate:
+Evaluate the user's reply:
 1. Did they give a substantive, specific answer? (more than a few words, includes details/examples)
 2. Is there a clear opportunity for a meaningful follow-up?
 
 Respond with exactly ONE word: "follow_up" if the answer is vague and needs elaboration, "next_theme" if the answer is complete and specific, or "close" if the conversation feels natural to end.`,
+      },
+      {
+        role: "user",
+        content: lastReply.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "").slice(0, 2000),
       },
     ],
     tier: "fast",
@@ -396,8 +399,9 @@ Respond with exactly ONE word: "follow_up" if the answer is vague and needs elab
   });
 
   const decision = response.content.trim().toLowerCase();
-  if (decision.includes("follow_up")) return "follow_up";
-  if (decision.includes("close")) return "close";
+  if (decision === "follow_up") return "follow_up";
+  if (decision === "close") return "close";
+  if (decision === "next_theme") return "next_theme";
   return "next_theme";
 }
 

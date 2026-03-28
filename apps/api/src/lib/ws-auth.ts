@@ -1,6 +1,14 @@
 import crypto from "node:crypto";
 
-const WS_SECRET = process.env.INTERNAL_API_SECRET;
+const WS_SECRET = process.env.WS_TOKEN_SECRET ?? (() => {
+  if (process.env.INTERNAL_API_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+      console.warn("WS_TOKEN_SECRET not set — falling back to INTERNAL_API_SECRET. Set a dedicated WS_TOKEN_SECRET for production.");
+    }
+    return process.env.INTERNAL_API_SECRET;
+  }
+  return undefined;
+})();
 const TOKEN_TTL_MS = 60_000; // 60 seconds — token is only for initial WS handshake
 
 interface WsTokenPayload {

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { Redis } from "ioredis";
 import { getTenantDb } from "@revualy/db";
-import { oneOnOneSessions } from "@revualy/db";
+import { oneOnOneSessions, oneOnOneAgendaItems, oneOnOneActionItems } from "@revualy/db";
 import { verifyWsToken } from "../../lib/ws-auth.js";
 
 function getTenantDbUrl(): string {
@@ -220,6 +220,14 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
 
       const room = ensureRoom(sessionId, session.managerId, session.employeeId, orgId);
 
+      // Validate room identity matches session — close stale room if mismatch
+      if (room.managerId !== session.managerId || room.employeeId !== session.employeeId) {
+        await forceCleanupRoom(sessionId);
+        sendJson(socket, { type: "error", message: "Session participants changed — please reconnect" });
+        socket.close();
+        return;
+      }
+
       // Restore content from Redis if room is fresh
       if (!room.lastContent && wsRedis) {
         const cached = await wsRedis.get(`${REDIS_KEY_PREFIX}${sessionId}`);
@@ -306,8 +314,15 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
           case "agenda_toggle": {
             if (typeof msg.itemId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.itemId)) break;
             if (typeof msg.covered !== "boolean") break;
-            const target = isManager ? room.employeeSocket : room.managerSocket;
-            sendJson(target, {
+            // Persist to DB
+            const agendaDb = getTenantDb(room.orgId, getTenantDbUrl());
+            agendaDb
+              .update(oneOnOneAgendaItems)
+              .set({ covered: msg.covered as boolean })
+              .where(and(eq(oneOnOneAgendaItems.id, msg.itemId as string), eq(oneOnOneAgendaItems.sessionId, sessionId)))
+              .catch((err) => console.warn("[WS] agenda_toggle persist failed:", err));
+            const agendaTarget = isManager ? room.employeeSocket : room.managerSocket;
+            sendJson(agendaTarget, {
               type: "agenda_updated",
               itemId: msg.itemId,
               covered: msg.covered,
@@ -318,8 +333,18 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
           case "action_toggle": {
             if (typeof msg.itemId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(msg.itemId)) break;
             if (typeof msg.completed !== "boolean") break;
-            const target = isManager ? room.employeeSocket : room.managerSocket;
-            sendJson(target, {
+            // Persist to DB
+            const actionDb = getTenantDb(room.orgId, getTenantDbUrl());
+            actionDb
+              .update(oneOnOneActionItems)
+              .set({
+                completed: msg.completed as boolean,
+                completedAt: (msg.completed as boolean) ? new Date() : null,
+              })
+              .where(and(eq(oneOnOneActionItems.id, msg.itemId as string), eq(oneOnOneActionItems.sessionId, sessionId)))
+              .catch((err) => console.warn("[WS] action_toggle persist failed:", err));
+            const actionTarget = isManager ? room.employeeSocket : room.managerSocket;
+            sendJson(actionTarget, {
               type: "action_updated",
               itemId: msg.itemId,
               completed: msg.completed,
@@ -336,9 +361,10 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
 
       // Handle disconnect
       socket.on("close", () => {
-        if (isManager) {
+        // Guard: only null out if THIS socket is still the current one (prevents clobbering on reconnect race)
+        if (isManager && room.managerSocket === socket) {
           room.managerSocket = null;
-        } else {
+        } else if (!isManager && room.employeeSocket === socket) {
           room.employeeSocket = null;
         }
         broadcastPresence(room);

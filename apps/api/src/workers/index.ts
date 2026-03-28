@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { getTenantDb } from "@revualy/db";
 import {
   users,
+  conversations,
   feedbackEntries,
   kudos,
   engagementScores,
@@ -32,6 +34,35 @@ import {
   type FlagAlertData,
   type NudgeData,
 } from "../lib/email-templates.js";
+
+const initiateJobSchema = z.object({
+  type: z.literal("initiate"),
+  orgId: z.string(),
+  reviewerId: z.string(),
+  subjectId: z.string(),
+  interactionType: z.string(),
+  platform: z.string(),
+  channelId: z.string().optional(),
+  questionnaireId: z.string(),
+});
+
+const replyJobSchema = z.object({
+  type: z.literal("reply"),
+  conversationId: z.string(),
+  orgId: z.string(),
+  userMessage: z.string(),
+});
+
+const closeJobSchema = z.object({
+  type: z.literal("close"),
+  conversationId: z.string(),
+  orgId: z.string().optional(),
+});
+
+const analysisJobSchema = z.object({
+  conversationId: z.string(),
+  orgId: z.string(),
+});
 
 export interface WorkerConfig {
   redisUrl: string;
@@ -86,8 +117,8 @@ export function getStateRedis(redisUrl?: string): Redis {
   if (!stateRedis) {
     const url = redisUrl ?? process.env.REDIS_URL ?? "redis://localhost:6379";
     stateRedis = new Redis(url, { maxRetriesPerRequest: null, lazyConnect: true });
-    stateRedis.connect().catch(() => {
-      // Connection errors are logged by ioredis; callers handle missing state gracefully
+    stateRedis.connect().catch((err) => {
+      console.error("[StateRedis] Connection failed:", err);
     });
   }
   return stateRedis;
@@ -195,15 +226,7 @@ export function createWorkers(config: WorkerConfig) {
 
       switch (type) {
         case "initiate": {
-          const data = job.data as {
-            orgId: string;
-            reviewerId: string;
-            subjectId: string;
-            interactionType: InteractionType;
-            platform: ChatPlatform;
-            channelId?: string;
-            questionnaireId: string;
-          };
+          const data = initiateJobSchema.parse(job.data);
 
           const db = getTenantDb(
             data.orgId,
@@ -214,8 +237,8 @@ export function createWorkers(config: WorkerConfig) {
             orgId: data.orgId,
             reviewerId: data.reviewerId,
             subjectId: data.subjectId,
-            interactionType: data.interactionType,
-            platform: data.platform,
+            interactionType: data.interactionType as InteractionType,
+            platform: data.platform as ChatPlatform,
             channelId: data.channelId ?? "",
             questionnaireId: data.questionnaireId,
           });
@@ -226,17 +249,12 @@ export function createWorkers(config: WorkerConfig) {
         }
 
         case "reply": {
-          const data = job.data as {
-            conversationId: string;
-            orgId: string;
-            userMessage: string;
-          };
+          const data = replyJobSchema.parse(job.data);
 
           // Acquire lock to prevent concurrent state mutations from duplicate webhooks
           const releaseLock = await acquireConversationLock(data.conversationId);
           if (!releaseLock) {
-            job.log(`Lock held for conversation ${data.conversationId} — skipping duplicate`);
-            return;
+            throw new Error(`Lock held for conversation ${data.conversationId} — will retry`);
           }
 
           try {
@@ -270,7 +288,21 @@ export function createWorkers(config: WorkerConfig) {
         }
 
         case "close": {
-          const data = job.data as { conversationId: string };
+          const data = closeJobSchema.parse(job.data);
+
+          if (data.orgId) {
+            const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+            await db
+              .update(conversations)
+              .set({ status: "closed", closedAt: new Date() })
+              .where(eq(conversations.id, data.conversationId));
+
+            await queues.analysisQueue.add("analyze", {
+              conversationId: data.conversationId,
+              orgId: data.orgId,
+            });
+          }
+
           await deleteConversationState(data.conversationId);
           break;
         }
@@ -279,17 +311,14 @@ export function createWorkers(config: WorkerConfig) {
           throw new Error(`Unknown conversation job type: ${type}`);
       }
     },
-    { connection },
+    { connection, lockDuration: 90_000, lockRenewTime: 30_000 },
   );
 
   // Analysis worker — runs AI pipeline on closed conversations
   const analysisWorker = new Worker(
     "analysis",
     async (job) => {
-      const { conversationId, orgId } = job.data as {
-        conversationId: string;
-        orgId: string;
-      };
+      const { conversationId, orgId } = analysisJobSchema.parse(job.data);
 
       const db = getTenantDb(
         orgId,
@@ -298,7 +327,7 @@ export function createWorkers(config: WorkerConfig) {
 
       await runAnalysisPipeline(db, llm, conversationId, console, orgId);
     },
-    { connection, concurrency: 3 },
+    { connection, concurrency: 3, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
 
   // Scheduler worker — daily cron for interaction scheduling
@@ -324,7 +353,7 @@ export function createWorkers(config: WorkerConfig) {
 
       job.log(`Scheduled ${result.scheduled}, skipped ${result.skipped}`);
     },
-    { connection },
+    { connection, lockDuration: 60_000, lockRenewTime: 20_000 },
   );
 
   // Notification worker — sends digests, alerts, nudges
@@ -344,14 +373,20 @@ export function createWorkers(config: WorkerConfig) {
             .from(users)
             .where(and(eq(users.isActive, true), eq(users.onboardingCompleted, true)));
 
-          for (const user of activeUsers) {
-            await queues.notificationQueue.add("weekly_digest", {
-              type: "weekly_digest",
-              orgId,
-              userId: user.id,
-              email: user.email,
-            });
-          }
+          const weekKey = new Date().toISOString().slice(0, 10);
+
+          await queues.notificationQueue.addBulk(
+            activeUsers.map((user) => ({
+              name: "weekly_digest",
+              data: {
+                type: "weekly_digest",
+                orgId,
+                userId: user.id,
+                email: user.email,
+              },
+              opts: { jobId: `weekly-digest:${orgId}:${user.id}:${weekKey}` },
+            })),
+          );
           job.log(`Dispatched ${activeUsers.length} weekly digest jobs`);
           break;
         }
@@ -516,7 +551,7 @@ export function createWorkers(config: WorkerConfig) {
           throw new Error(`Unknown notification job type: ${type}`);
       }
     },
-    { connection },
+    { connection, lockDuration: 60_000, lockRenewTime: 20_000 },
   );
 
   // Calendar sync worker — syncs events for users with connected calendars
@@ -529,7 +564,8 @@ export function createWorkers(config: WorkerConfig) {
       // Get all users with calendar tokens
       const tokens = await db
         .select({ userId: calendarTokens.userId })
-        .from(calendarTokens);
+        .from(calendarTokens)
+        .limit(500);
 
       let synced = 0;
       const BATCH_SIZE = 5;
@@ -549,8 +585,16 @@ export function createWorkers(config: WorkerConfig) {
       }
       job.log(`Synced ${synced} events for ${tokens.length} users`);
     },
-    { connection },
+    { connection, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
+
+  // Attach error listeners to prevent unhandled rejections
+  const logWorkerError = (name: string) => (err: Error) => console.error(`[Worker:${name}] Error:`, err);
+  conversationWorker.on("error", logWorkerError("conversation"));
+  analysisWorker.on("error", logWorkerError("analysis"));
+  schedulerWorker.on("error", logWorkerError("scheduler"));
+  notificationWorker.on("error", logWorkerError("notification"));
+  calendarSyncWorker.on("error", logWorkerError("calendar-sync"));
 
   return {
     conversationWorker,

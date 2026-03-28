@@ -198,6 +198,11 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(403).send({ error: "Only the manager can change session status" });
     }
 
+    // Only manager can update notes/summary via REST
+    if ((body.notes !== undefined || body.summary !== undefined) && session.managerId !== userId) {
+      return reply.code(403).send({ error: "Only the manager can update notes and summary" });
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
     if (body.notes !== undefined) updates.notes = body.notes;

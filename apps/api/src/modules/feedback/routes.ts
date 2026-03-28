@@ -118,7 +118,8 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
           .from(escalations)
           .innerJoin(feedbackEntries, eq(escalations.feedbackEntryId, feedbackEntries.id))
           .where(inArray(feedbackEntries.subjectId, reportIds))
-          .orderBy(desc(escalations.createdAt));
+          .orderBy(desc(escalations.createdAt))
+          .limit(200);
 
         return reply.send({ data: flagged });
       }
@@ -175,7 +176,8 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       .select()
       .from(feedbackEntries)
       .where(eq(feedbackEntries.subjectId, id))
-      .orderBy(desc(feedbackEntries.createdAt));
+      .orderBy(desc(feedbackEntries.createdAt))
+      .limit(1000);
 
     // CSV-like export structure
     return reply.send({

@@ -98,6 +98,11 @@ export class SlackAdapter implements ChatAdapter {
       return null; // Ignore non-message events, message edits/deletes, and bot messages
     }
 
+    // Validate required fields
+    if (typeof event.ts !== "string" || typeof event.channel !== "string" || typeof event.user !== "string") {
+      return null;
+    }
+
     return {
       id: crypto.randomUUID(),
       platform: "slack",

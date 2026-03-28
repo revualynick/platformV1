@@ -26,8 +26,13 @@ async function handleWebhook(
   if (verification.challenge) return { status: 200, body: { challenge: verification.challenge } };
 
   const message = await adapter.normalizeInbound(parsedBody);
+  if (message && message.text.length > 2000) {
+    message.text = message.text.slice(0, 2000);
+  }
+  if (message && !conversationQueue) {
+    return { status: 503, body: { error: "Message queue not initialized" } };
+  }
   if (message && conversationQueue) {
-    // Enqueue as a conversation reply job
     await conversationQueue.add("reply", {
       type: "reply",
       orgId,
@@ -38,8 +43,6 @@ async function handleWebhook(
       platformChannelId: message.platformChannelId,
     });
     app.log.info({ messageId: message.id, platform }, "Inbound message enqueued");
-  } else if (message) {
-    app.log.info({ messageId: message.id, platform }, "Inbound message received (no queue)");
   }
 
   return { status: 200, body: undefined };
@@ -68,7 +71,10 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     const orgId = request.tenant?.orgId ?? "unknown";
     const body = request.body as Record<string, unknown>;
     // Pass raw body string to the adapter for HMAC verification
-    const rawBody = (body.__rawBody as string) ?? JSON.stringify(body);
+    const rawBody = body.__rawBody as string | undefined;
+    if (!rawBody) {
+      return reply.code(400).send({ error: "Missing raw body for signature verification" });
+    }
     const result = await handleWebhook(
       app,
       "slack",

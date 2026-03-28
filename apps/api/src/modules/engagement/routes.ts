@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { engagementScores, users } from "@revualy/db";
 import { requireAuth } from "../../lib/rbac.js";
+import { z } from "zod";
 
 export const engagementRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -9,9 +10,9 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
   // GET /leaderboard — Weekly leaderboard
   app.get("/leaderboard", async (request, reply) => {
     const { db } = request.tenant;
-    const { week } = request.query as { week?: string };
+    const querySchema = z.object({ week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+    const { week } = querySchema.parse(request.query);
 
-    // Determine ISO week boundaries
     let weekStart: string;
     if (week) {
       weekStart = week;
@@ -29,12 +30,12 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       .select({
         userId: engagementScores.userId,
         name: users.name,
-        score: sql<number>`(
+        score: sql<number>`COALESCE(
           ${engagementScores.averageQualityScore} * 0.4 +
           ${engagementScores.responseRate} * 100 * 0.3 +
-          LEAST(${engagementScores.interactionsCompleted}::float / NULLIF(${engagementScores.interactionsTarget}, 0) * 100, 100) * 0.2 +
+          LEAST(${engagementScores.interactionsCompleted}::float / GREATEST(${engagementScores.interactionsTarget}, 1) * 100, 100) * 0.2 +
           LEAST(${engagementScores.streak} * 5, 100) * 0.1
-        )`.as("score"),
+        , 0)`.as("score"),
         interactionsCompleted: engagementScores.interactionsCompleted,
         streak: engagementScores.streak,
       })

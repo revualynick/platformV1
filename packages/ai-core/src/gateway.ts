@@ -56,12 +56,23 @@ export class LLMGateway {
     if (request.maxTokens != null && request.maxTokens <= 0) {
       throw new Error("maxTokens must be a positive number");
     }
+    // Cap maxTokens to prevent runaway costs
+    const MAX_TOKENS_CAP = 4096;
+    if (request.maxTokens && request.maxTokens > MAX_TOKENS_CAP) {
+      request = { ...request, maxTokens: MAX_TOKENS_CAP };
+    }
     const target = provider ?? this.defaultProvider;
     const adapter = this.providers.get(target);
     if (!adapter) {
       throw new Error(`No LLM provider registered: ${target}`);
     }
-    return adapter.complete(request);
+    const result = await Promise.race([
+      adapter.complete(request),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("LLM completion timed out after 30s")), 30_000),
+      ),
+    ]);
+    return result;
   }
 
   async embed(

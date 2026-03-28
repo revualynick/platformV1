@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, inArray } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import {
   campaigns,
   questionnaires,
@@ -211,11 +211,16 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     const next = allowed[0];
 
+    // Atomic: only update if status hasn't changed since we read it
     const [updated] = await db
       .update(campaigns)
       .set({ status: next, updatedAt: new Date() })
-      .where(eq(campaigns.id, id))
+      .where(and(eq(campaigns.id, id), eq(campaigns.status, current)))
       .returning();
+
+    if (!updated) {
+      return reply.code(409).send({ error: "Campaign was modified concurrently, please retry" });
+    }
 
     return reply.send(updated);
   });
@@ -253,6 +258,9 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
       ? (JSON.parse(raw) as Array<{ role: "user" | "assistant"; content: string }>)
       : [];
 
+    // Cap history to prevent unbounded LLM context growth
+    const cappedHistory = history.slice(-20);
+
     const themeSummary =
       themes.length > 0
         ? themes.map((t) => `- ${t.intent}`).join("\n")
@@ -276,7 +284,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
 
     const messages = [
       { role: "system" as const, content: systemPrompt },
-      ...history,
+      ...cappedHistory,
       { role: "user" as const, content: body.message },
     ];
 

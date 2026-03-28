@@ -47,7 +47,6 @@ export class TeamsAdapter implements ChatAdapter {
   private conversationRefs = new Map<string, ConversationReference>();
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
-  private jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
   constructor(config: TeamsAdapterConfig) {
     this.appId = config.appId;
@@ -260,8 +259,6 @@ export class TeamsAdapter implements ChatAdapter {
   }
 
   private async getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {
-    if (this.jwks) return this.jwks;
-
     const metadataRes = await fetch(BOT_FRAMEWORK_OPENID_METADATA);
     if (!metadataRes.ok) {
       throw new Error(
@@ -273,8 +270,7 @@ export class TeamsAdapter implements ChatAdapter {
       throw new Error("Bot Framework OpenID metadata missing jwks_uri");
     }
 
-    this.jwks = createRemoteJWKSet(new URL(metadata.jwks_uri));
-    return this.jwks;
+    return createRemoteJWKSet(new URL(metadata.jwks_uri));
   }
 
   private async verifyBotFrameworkJwt(token: string): Promise<boolean> {

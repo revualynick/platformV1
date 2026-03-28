@@ -151,7 +151,7 @@ export async function runSchedulingPass(
         questionnaireId: questionnaire.id,
         scheduleEntryId: entry.id,
       },
-      { delay },
+      { delay, jobId: `initiate:${entry.id}` },
     );
 
     scheduled++;

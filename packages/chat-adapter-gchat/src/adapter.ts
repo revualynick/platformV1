@@ -55,35 +55,48 @@ export class GoogleChatAdapter implements ChatAdapter {
     headers: Record<string, string>,
     body: unknown,
   ): Promise<WebhookVerification> {
-    // Google Chat sends a verification token in the request body or as a bearer token.
-    // We verify using a shared verification token (configured in Google Chat API console)
-    // rather than JWT to avoid credential-lifting risks.
     const payload = body as Record<string, unknown>;
 
     // Check bearer token in Authorization header
     const authHeader = headers["authorization"] ?? headers["Authorization"];
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.slice(7); // "Bearer ".length === 7
-      if (token.length > 0) {
-        const expected = crypto.createHmac("sha256", this.verificationToken).update("gchat").digest();
-        const actual = crypto.createHmac("sha256", token).update("gchat").digest();
-        if (crypto.timingSafeEqual(expected, actual)) {
+      const token = authHeader.slice(7);
+      if (token.length > 0 && this.timingSafeTokenCompare(token, this.verificationToken)) {
+        if (this.isEventTimestampValid(payload)) {
           return { isValid: true };
         }
+        return { isValid: false };
       }
     }
 
     // Also check token field in body (some Google Chat configurations)
     if (payload.token) {
       const bodyToken = String(payload.token);
-      const expected = crypto.createHmac("sha256", this.verificationToken).update("gchat").digest();
-      const actual = crypto.createHmac("sha256", bodyToken).update("gchat").digest();
-      if (crypto.timingSafeEqual(expected, actual)) {
-        return { isValid: true };
+      if (this.timingSafeTokenCompare(bodyToken, this.verificationToken)) {
+        if (this.isEventTimestampValid(payload)) {
+          return { isValid: true };
+        }
+        return { isValid: false };
       }
     }
 
     return { isValid: false };
+  }
+
+  private timingSafeTokenCompare(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.byteLength !== bufB.byteLength) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
+
+  private isEventTimestampValid(payload: Record<string, unknown>): boolean {
+    const eventTime = payload.eventTime as string | undefined;
+    if (!eventTime) return true;
+    const eventMs = new Date(eventTime).getTime();
+    if (isNaN(eventMs)) return true;
+    const now = Date.now();
+    return Math.abs(now - eventMs) <= 5 * 60 * 1000;
   }
 
   async normalizeInbound(rawPayload: unknown): Promise<InboundMessage | null> {
@@ -98,6 +111,12 @@ export class GoogleChatAdapter implements ChatAdapter {
     if (!message) return null;
 
     const sender = message.sender as Record<string, unknown>;
+    const space = payload.space as Record<string, unknown>;
+
+    // Validate required fields
+    if (!sender?.name || !space?.name || typeof message.name !== "string") {
+      return null;
+    }
 
     return {
       id: crypto.randomUUID(),

@@ -64,7 +64,7 @@ export async function buildApp() {
     credentials: true,
   });
   await app.register(cookie);
-  await app.register(websocket);
+  await app.register(websocket, { options: { maxPayload: 1_000_000 } });
   await app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute",
@@ -248,6 +248,14 @@ async function start() {
   // Per-tenant deployment: single org per instance.
   const cronOrgId = process.env.ORG_ID ?? "dev-org";
 
+  // Clean up stale repeatable jobs before re-adding
+  for (const queue of [queues.notificationQueue, queues.calendarSyncQueue]) {
+    const repeatableJobs = await queue.getRepeatableJobs();
+    for (const job of repeatableJobs) {
+      await queue.removeRepeatableByKey(job.key);
+    }
+  }
+
   // Weekly digest: Monday 9:00 AM UTC
   await queues.notificationQueue.add(
     "schedule_weekly_digests",
@@ -265,19 +273,23 @@ async function start() {
   // ── Graceful shutdown ────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`${signal} received — shutting down`);
-    await Promise.allSettled([
-      workers.conversationWorker.close(),
-      workers.analysisWorker.close(),
-      workers.schedulerWorker.close(),
-      workers.notificationWorker.close(),
-      workers.calendarSyncWorker.close(),
-      queues.conversationQueue.close(),
-      queues.analysisQueue.close(),
-      queues.schedulerQueue.close(),
-      queues.notificationQueue.close(),
-      queues.calendarSyncQueue.close(),
-      closeStateRedis(),
-      closeWsRedis(),
+    const SHUTDOWN_TIMEOUT = 10_000;
+    await Promise.race([
+      Promise.allSettled([
+        workers.conversationWorker.close(),
+        workers.analysisWorker.close(),
+        workers.schedulerWorker.close(),
+        workers.notificationWorker.close(),
+        workers.calendarSyncWorker.close(),
+        queues.conversationQueue.close(),
+        queues.analysisQueue.close(),
+        queues.schedulerQueue.close(),
+        queues.notificationQueue.close(),
+        queues.calendarSyncQueue.close(),
+        closeStateRedis(),
+        closeWsRedis(),
+      ]),
+      new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT)),
     ]);
     await app.close();
     process.exit(0);

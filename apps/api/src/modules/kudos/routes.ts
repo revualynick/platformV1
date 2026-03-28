@@ -65,10 +65,15 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
     const { db } = request.tenant;
     const body = parseBody(createKudosSchema, request.body);
 
+    const callerId = getAuthenticatedUserId(request);
+    if (body.receiverId === callerId) {
+      return reply.code(400).send({ error: "Cannot give kudos to yourself" });
+    }
+
     const [created] = await db
       .insert(kudos)
       .values({
-        giverId: getAuthenticatedUserId(request),
+        giverId: callerId,
         receiverId: body.receiverId,
         message: body.message,
         coreValueId: body.coreValueId,

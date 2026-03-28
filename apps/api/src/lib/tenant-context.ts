@@ -72,18 +72,16 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
     ? ENV_ORG_ID
     : (request.headers["x-org-id"] as string | undefined) ?? ENV_ORG_ID;
 
-  // Require a valid internal secret to trust headers
-  if (INTERNAL_SECRET) {
-    const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
-    const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
-    if (!secret || !crypto.timingSafeEqual(expected, actual)) {
-      const err = new Error("Invalid internal API secret");
-      (err as Error & { statusCode: number }).statusCode = 401;
-      throw err;
-    }
-  } else if (IS_PRODUCTION) {
-    // In production, INTERNAL_SECRET must be set — reject all requests
-    throw new Error("INTERNAL_API_SECRET is required in production");
+  // Always require a valid internal secret to trust headers
+  if (!INTERNAL_SECRET) {
+    throw new Error("INTERNAL_API_SECRET env var is required");
+  }
+  const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
+  const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
+  if (!secret || !crypto.timingSafeEqual(expected, actual)) {
+    const err = new Error("Invalid internal API secret");
+    (err as Error & { statusCode: number }).statusCode = 401;
+    throw err;
   }
 
   const rawUserId = userId ?? null;
@@ -98,6 +96,16 @@ export const tenantPlugin = fp(async function tenantPlugin(app: FastifyInstance)
   app.decorateRequest("tenant");
 
   app.addHook("preHandler", async (request) => {
+    // Health check and WS routes bypass internal secret validation
+    const url = request.url.split("?")[0];
+    if (url === "/health" || url.startsWith("/ws/")) {
+      request.tenant = {
+        orgId: process.env.ORG_ID ?? "dev-org",
+        db: getTenantDb(process.env.ORG_ID ?? "dev-org", DATABASE_URL),
+        userId: null,
+      };
+      return;
+    }
     request.tenant = resolveTenant(request);
   });
 });
