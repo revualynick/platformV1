@@ -1,7 +1,10 @@
-import { integrations } from "@/lib/mock-data";
+import { integrations as mockIntegrations } from "@/lib/mock-data";
 import { integrationStatusStyles as statusStyles, platformIcons } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { getIntegrations } from "@/lib/api";
+import type { IntegrationRow } from "@/lib/api";
+import { ConnectDialog, ConfigureButton, DisconnectButton } from "./integration-actions";
 
 const platformDescriptions: Record<string, string> = {
   slack:
@@ -16,7 +19,31 @@ const platformDescriptions: Record<string, string> = {
 
 export default async function IntegrationsPage() {
   const session = await auth();
-  const items = isDemoSession(session) ? integrations : [];
+  const isDemo = isDemoSession(session);
+
+  let items: IntegrationRow[];
+  if (isDemo) {
+    items = mockIntegrations.map((m) => ({
+      id: m.id,
+      platform: m.platform,
+      name: m.name,
+      status: m.status,
+      hasConfig: m.status === "connected",
+      workspace: m.workspace,
+      connectedAt: null,
+      connectedByUserId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+  } else {
+    try {
+      const result = await getIntegrations();
+      items = result.data;
+    } catch {
+      items = [];
+    }
+  }
+
   const connected = items.filter((i) => i.status === "connected").length;
 
   return (
@@ -87,7 +114,7 @@ export default async function IntegrationsPage() {
       {/* Integration cards */}
       <div className="space-y-4">
         {items.map((integration, i) => {
-          const status = statusStyles[integration.status];
+          const status = statusStyles[integration.status] ?? statusStyles.disconnected;
           const isConnected = integration.status === "connected";
           return (
             <div
@@ -131,21 +158,32 @@ export default async function IntegrationsPage() {
                       </span>
                     </p>
                   )}
+                  {isConnected && integration.connectedAt && (
+                    <p className="mt-1 text-xs text-stone-400">
+                      Connected{" "}
+                      {new Date(integration.connectedAt).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button
-                    className={`rounded-xl px-5 py-2.5 text-xs font-medium transition-colors ${
-                      isConnected
-                        ? "border border-stone-200 bg-surface text-stone-600 hover:bg-stone-50"
-                        : "bg-forest text-white hover:bg-forest-light"
-                    }`}
-                  >
-                    {isConnected ? "Configure" : "Connect"}
-                  </button>
-                  {isConnected && (
-                    <button className="text-[11px] text-stone-400 hover:text-danger">
-                      Disconnect
+                  {isDemo ? (
+                    <button
+                      disabled
+                      className={`rounded-xl px-5 py-2.5 text-xs font-medium opacity-50 cursor-not-allowed ${
+                        isConnected
+                          ? "border border-stone-200 bg-surface text-stone-600"
+                          : "bg-forest text-white"
+                      }`}
+                    >
+                      {isConnected ? "Configure" : "Connect"}
                     </button>
+                  ) : isConnected ? (
+                    <>
+                      <ConfigureButton integration={integration} />
+                      <DisconnectButton integration={integration} />
+                    </>
+                  ) : (
+                    <ConnectDialog integration={integration} />
                   )}
                 </div>
               </div>

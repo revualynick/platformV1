@@ -6,11 +6,12 @@ import { isDemoSession } from "@/lib/session-utils";
 import { CampaignsList } from "./campaigns-list";
 
 async function loadCampaigns(isDemo: boolean): Promise<CampaignRow[]> {
+  if (isDemo) return mockCampaigns;
   try {
     const { data } = await getCampaigns();
     return data;
   } catch {
-    return isDemo ? mockCampaigns : [];
+    return [];
   }
 }
 

@@ -12,6 +12,10 @@ export const createCoreValueSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
+export const bulkCreateCoreValuesSchema = z.object({
+  values: z.array(createCoreValueSchema).min(1).max(100),
+});
+
 export const updateCoreValueSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional(),
@@ -61,6 +65,25 @@ export const updateThemeSchema = z.object({
 
 // ── Users ──────────────────────────────────────────────
 
+export const createUserSchema = z.object({
+  email: z.string().email().max(255),
+  name: z.string().min(1).max(255),
+  role: z.enum(["employee", "manager", "admin", "super_admin"]).optional(),
+  teamId: uuid.optional(),
+  managerId: uuid.optional(),
+  timezone: z.string().max(100).optional(),
+});
+
+export const bulkCreateUsersSchema = z.object({
+  users: z.array(createUserSchema).min(1).max(500),
+});
+
+export const updateOrgSettingsSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  timezone: z.string().max(100).optional(),
+  allowedDomains: z.array(z.string().max(255)).optional(),
+});
+
 export const listUsersQuerySchema = z.object({
   teamId: z.string().uuid().optional(),
   managerId: z.string().uuid().optional(),
@@ -69,7 +92,7 @@ export const listUsersQuerySchema = z.object({
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  role: z.enum(["employee", "manager", "admin"]).optional(),
+  role: z.enum(["employee", "manager", "admin", "super_admin"]).optional(),
   teamId: uuid.nullable().optional(),
   timezone: z.string().max(100).optional(),
   preferences: z
@@ -316,6 +339,47 @@ export const updateCampaignSchema = z.object({
 
 export const campaignChatSchema = z.object({
   message: z.string().min(1).max(5000),
+});
+
+// ── Integrations ─────────────────────────────────────
+
+const slackConfigSchema = z.object({
+  bot_token: z.string().min(1),
+  signing_secret: z.string().min(1),
+}).strict();
+
+const gchatConfigSchema = z.object({
+  service_account_json: z.string().min(1),
+  project_id: z.string().min(1),
+}).strict();
+
+const teamsConfigSchema = z.object({
+  app_id: z.string().min(1),
+  app_password: z.string().min(1),
+  tenant_id: z.string().min(1),
+}).strict();
+
+const googleCalendarConfigSchema = z.object({
+  client_id: z.string().min(1),
+  client_secret: z.string().min(1),
+}).strict();
+
+export const platformConfigSchemas: Record<string, z.ZodSchema> = {
+  slack: slackConfigSchema,
+  google_chat: gchatConfigSchema,
+  teams: teamsConfigSchema,
+  google_calendar: googleCalendarConfigSchema,
+};
+
+export const connectIntegrationSchema = z.object({
+  config: z.record(z.string()).optional(),
+  workspace: z.string().max(255).optional(),
+});
+
+export const updateIntegrationSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  config: z.record(z.string()).optional(),
+  workspace: z.string().max(255).optional(),
 });
 
 // ── Lead Capture (Demo Mode) ─────────────────────────

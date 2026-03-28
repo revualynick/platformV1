@@ -24,7 +24,9 @@ export async function requireRole(...roles: string[]) {
   const result = await requireLiveSession();
   if (!result.ok) return result;
   const session = result.session as import("next-auth").Session & { role?: string };
-  if (!roles.includes(session.role ?? "")) {
+  const userRole = session.role ?? "";
+  // super_admin satisfies any role check
+  if (userRole !== "super_admin" && !roles.includes(userRole)) {
     return { ok: false as const, error: "Insufficient permissions" };
   }
   return result;

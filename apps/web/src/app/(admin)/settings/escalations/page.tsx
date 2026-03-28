@@ -2,10 +2,48 @@ import { escalationDetails } from "@/lib/mock-data";
 import { severityStyles, escalationStatusStyles as statusStyles } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { getEscalations } from "@/lib/api";
+
+type AuditEntry = { action: string; by: string; date: string; notes: string | null };
+type RelatedFeedback = { id: string; date: string; score: number; excerpt: string };
+type EscalationItem = {
+  id: string;
+  severity: string;
+  status: string;
+  subjectName: string;
+  reason: string;
+  createdAt: string;
+  feedbackCount: number;
+  auditTrail: AuditEntry[];
+  relatedFeedback: RelatedFeedback[];
+};
+
+async function loadEscalations(isDemo: boolean): Promise<EscalationItem[]> {
+  if (isDemo) return escalationDetails as EscalationItem[];
+  try {
+    const { data } = await getEscalations();
+    return data.map((r) => {
+      const e = r as Record<string, unknown>;
+      return {
+        id: String(e.id ?? ""),
+        severity: String(e.severity ?? "low"),
+        status: String(e.status ?? "open"),
+        subjectName: String(e.subjectId ?? "Unknown"),
+        reason: String(e.reason ?? ""),
+        createdAt: e.createdAt ? new Date(String(e.createdAt)).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+        feedbackCount: 0,
+        auditTrail: [],
+        relatedFeedback: [],
+      };
+    });
+  } catch {
+    return [];
+  }
+}
 
 export default async function EscalationsPage() {
   const session = await auth();
-  const items = isDemoSession(session) ? escalationDetails : [];
+  const items = await loadEscalations(isDemoSession(session));
   const openCount = items.filter(
     (e) => e.status === "open",
   ).length;
@@ -74,6 +112,14 @@ export default async function EscalationsPage() {
 
       {/* Escalation detail cards */}
       <div className="space-y-6">
+        {items.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-stone-200 px-6 py-12 text-center">
+            <p className="text-sm font-medium text-stone-500">No escalations found</p>
+            <p className="mt-1 text-xs text-stone-400">
+              Escalations are filed automatically when the AI detects concerning patterns, or manually by team members.
+            </p>
+          </div>
+        )}
         {items.map((esc, i) => {
           const severity = severityStyles[esc.severity];
           const status = statusStyles[esc.status];

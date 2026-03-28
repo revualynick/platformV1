@@ -10,6 +10,7 @@ const navItems = [
   { label: "Campaigns", href: "/settings/campaigns", icon: "◈" },
   { label: "Integrations", href: "/settings/integrations", icon: "⬡" },
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },
+  { label: "Access", href: "/settings/access", icon: "⛊" },
 ];
 
 export default async function AdminLayout({
@@ -21,8 +22,8 @@ export default async function AdminLayout({
   const isDemoMode = process.env.DEMO_MODE === "true";
   if (!session && !isDemoMode) redirect("/login");
 
-  // /settings/* requires admin (skip role check in demo mode)
-  if (session && session.role !== "admin") {
+  // /settings/* requires admin or super_admin (skip role check in demo mode)
+  if (session && !["admin", "super_admin"].includes(session.role ?? "")) {
     redirect("/dashboard");
   }
 

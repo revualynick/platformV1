@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { users, engagementScores } from "@revualy/db";
-import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema } from "../../lib/validation.js";
-import { requireAuth } from "../../lib/rbac.js";
+import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema, createUserSchema, bulkCreateUsersSchema } from "../../lib/validation.js";
+import { requireAuth, requireRole } from "../../lib/rbac.js";
 import { syncAuthUser } from "../../lib/auth-sync.js";
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
@@ -35,15 +35,115 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ data: result });
   });
 
-  // GET /users/:id — User profile
+  // POST /users — Create a single user (admin only)
+  app.post("/", { preHandler: requireRole("admin") }, async (request, reply) => {
+    const { db, userId } = request.tenant;
+    const body = parseBody(createUserSchema, request.body);
+
+    // Only super_admin can create admin or super_admin users
+    if (body.role === "admin" || body.role === "super_admin") {
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      if (!caller || caller.role !== "super_admin") {
+        return reply.code(403).send({ error: "Only super_admin can create admin or super_admin users" });
+      }
+    }
+
+    const [created] = await db
+      .insert(users)
+      .values({
+        email: body.email,
+        name: body.name,
+        role: body.role ?? "employee",
+        teamId: body.teamId ?? null,
+        managerId: body.managerId ?? null,
+        timezone: body.timezone ?? "UTC",
+      })
+      .returning();
+
+    return reply.code(201).send(created);
+  });
+
+  // POST /users/bulk — Bulk user import (admin only)
+  app.post("/bulk", { preHandler: requireRole("admin") }, async (request, reply) => {
+    const { db, userId } = request.tenant;
+    const body = parseBody(bulkCreateUsersSchema, request.body);
+
+    // Only super_admin can create admin or super_admin users in bulk
+    const hasElevatedRole = body.users.some((u) => u.role === "admin" || u.role === "super_admin");
+    if (hasElevatedRole) {
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      if (!caller || caller.role !== "super_admin") {
+        return reply.code(403).send({ error: "Only super_admin can create admin or super_admin users" });
+      }
+    }
+
+    const rows = body.users.map((u) => ({
+      email: u.email,
+      name: u.name,
+      role: u.role ?? "employee",
+      teamId: u.teamId ?? null,
+      managerId: u.managerId ?? null,
+      timezone: u.timezone ?? "UTC",
+    }));
+
+    const created = await db
+      .insert(users)
+      .values(rows)
+      .onConflictDoNothing({ target: users.email })
+      .returning();
+
+    return reply.code(201).send({
+      created: created.length,
+      skipped: body.users.length - created.length,
+      users: created,
+    });
+  });
+
+  // GET /users/:id — User profile (scoped by caller role)
   app.get("/:id", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db } = request.tenant;
+    const { db, userId } = request.tenant;
+
+    if (!userId) {
+      return reply.code(401).send({ error: "Authentication required" });
+    }
 
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (!user) return reply.code(404).send({ error: "User not found" });
 
-    return reply.send(user);
+    const isSelf = id === userId;
+
+    // Self always gets full profile
+    if (isSelf) return reply.send(user);
+
+    // Look up caller role for access control
+    const [caller] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!caller) return reply.code(401).send({ error: "User not found" });
+
+    // Admins and super_admins see full profile
+    if (caller.role === "admin" || caller.role === "super_admin") {
+      return reply.send(user);
+    }
+
+    // Managers see full profile for their direct reports
+    if (caller.role === "manager" && user.managerId === userId) {
+      return reply.send(user);
+    }
+
+    // Everyone else gets a scoped view (no preferences, no managerId details)
+    return reply.send({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      teamId: user.teamId,
+      timezone: user.timezone,
+      isActive: user.isActive,
+    });
   });
 
   // PATCH /users/:id — Update user profile/preferences
@@ -68,7 +168,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: "User not found" });
     }
 
-    const isAdmin = caller.role === "admin";
+    const isSuperAdmin = caller.role === "super_admin";
+    const isAdmin = caller.role === "admin" || isSuperAdmin;
     const isSelf = id === userId;
 
     // Non-admins can only edit their own profile
@@ -79,6 +180,19 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     // Only admins can change role or teamId
     if (!isAdmin && (body.role !== undefined || body.teamId !== undefined)) {
       return reply.code(403).send({ error: "Only admins can change role or team" });
+    }
+
+    // Only super_admin can assign or remove admin/super_admin roles
+    if (body.role !== undefined && (body.role === "admin" || body.role === "super_admin") && !isSuperAdmin) {
+      return reply.code(403).send({ error: "Only super_admin can assign admin or super_admin roles" });
+    }
+
+    // Only super_admin can demote an admin or super_admin
+    if (body.role !== undefined && isAdmin && !isSuperAdmin) {
+      const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
+      if (target && (target.role === "admin" || target.role === "super_admin")) {
+        return reply.code(403).send({ error: "Only super_admin can change the role of an admin or super_admin" });
+      }
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -131,6 +245,56 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     );
 
     return reply.send({ success: true });
+  });
+
+  // POST /users/:id/deactivate — Deactivate a user (admin only)
+  app.post("/:id/deactivate", { preHandler: requireRole("admin") }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+
+    // Only super_admin can deactivate admin/super_admin users
+    const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
+    if (!target) return reply.code(404).send({ error: "User not found" });
+
+    if (target.role === "admin" || target.role === "super_admin") {
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      if (!caller || caller.role !== "super_admin") {
+        return reply.code(403).send({ error: "Only super_admin can deactivate admin or super_admin users" });
+      }
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+
+    return reply.send(updated);
+  });
+
+  // POST /users/:id/reactivate — Reactivate a user (admin only)
+  app.post("/:id/reactivate", { preHandler: requireRole("admin") }, async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+
+    // Only super_admin can reactivate admin/super_admin users
+    const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
+    if (!target) return reply.code(404).send({ error: "User not found" });
+
+    if (target.role === "admin" || target.role === "super_admin") {
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      if (!caller || caller.role !== "super_admin") {
+        return reply.code(403).send({ error: "Only super_admin can reactivate admin or super_admin users" });
+      }
+    }
+
+    const [updated] = await db
+      .update(users)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+
+    return reply.send(updated);
   });
 
   // GET /users/:id/engagement — Engagement scores for user

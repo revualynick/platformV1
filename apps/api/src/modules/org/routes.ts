@@ -6,20 +6,28 @@ import {
   questionnaires,
   questionnaireThemes,
   userRelationships,
+  orgSettings,
+  integrations,
 } from "@revualy/db";
 import {
   parseBody,
   idParamSchema,
   qidParamSchema,
   createCoreValueSchema,
+  bulkCreateCoreValuesSchema,
   updateCoreValueSchema,
   createQuestionnaireSchema,
   updateQuestionnaireSchema,
   createThemeSchema,
   updateThemeSchema,
   createRelationshipSchema,
+  updateOrgSettingsSchema,
+  connectIntegrationSchema,
+  updateIntegrationSchema,
+  platformConfigSchemas,
 } from "../../lib/validation.js";
 import { requireRole } from "../../lib/rbac.js";
+import { encryptConfig } from "../../lib/encryption.js";
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // All admin routes require admin role
@@ -43,10 +51,34 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ coreValues: values, teams: allTeams });
   });
 
-  // PATCH /admin/org — Update org config (core values, etc.)
+  // GET /admin/org-settings — Org profile (name, timezone, allowedDomains)
+  app.get("/org-settings", async (request, reply) => {
+    const { db } = request.tenant;
+    const [settings] = await db.select().from(orgSettings).limit(1);
+    if (!settings) return reply.code(404).send({ error: "Org settings not found" });
+    return reply.send(settings);
+  });
+
+  // PATCH /admin/org — Update org settings (name, timezone, allowedDomains)
   app.patch("/org", async (request, reply) => {
-    // TODO Phase 2: org-level settings (name, timezone, etc.)
-    return reply.send({ updated: true });
+    const { db } = request.tenant;
+    const body = parseBody(updateOrgSettingsSchema, request.body);
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.timezone !== undefined) updates.timezone = body.timezone;
+    if (body.allowedDomains !== undefined) updates.allowedDomains = body.allowedDomains;
+
+    const [existing] = await db.select({ id: orgSettings.id }).from(orgSettings);
+    if (!existing) return reply.code(404).send({ error: "Org settings not found" });
+
+    const [updated] = await db
+      .update(orgSettings)
+      .set(updates)
+      .where(eq(orgSettings.id, existing.id))
+      .returning();
+
+    return reply.send(updated);
   });
 
   // ═══════════════════════════════════════════════════════
@@ -67,6 +99,29 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       .returning();
 
     return reply.code(201).send(created);
+  });
+
+  // POST /admin/values/bulk — Bulk import core values
+  app.post("/values/bulk", async (request, reply) => {
+    const { db } = request.tenant;
+    const body = parseBody(bulkCreateCoreValuesSchema, request.body);
+
+    const rows = body.values.map((v, i) => ({
+      name: v.name,
+      description: v.description ?? "",
+      sortOrder: v.sortOrder ?? i,
+    }));
+
+    const created = await db
+      .insert(coreValues)
+      .values(rows)
+      .returning();
+
+    return reply.code(201).send({
+      created: created.length,
+      skipped: 0,
+      values: created,
+    });
   });
 
   app.patch("/values/:id", async (request, reply) => {
@@ -295,13 +350,126 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   // Integrations
   // ═══════════════════════════════════════════════════════
 
+  const DEFAULT_PLATFORMS = [
+    { platform: "slack", name: "Slack" },
+    { platform: "google_chat", name: "Google Chat" },
+    { platform: "teams", name: "Microsoft Teams" },
+    { platform: "google_calendar", name: "Google Calendar" },
+  ];
+
+  // GET /admin/integrations — List all integrations (lazy-seeds defaults if empty)
   app.get("/integrations", async (request, reply) => {
-    // TODO Phase 3: List platform integrations
-    return reply.send({ data: [] });
+    const { db } = request.tenant;
+    let rows = await db.select().from(integrations);
+    if (rows.length === 0) {
+      await db
+        .insert(integrations)
+        .values(DEFAULT_PLATFORMS)
+        .onConflictDoNothing({ target: integrations.platform });
+      rows = await db.select().from(integrations);
+    }
+    const sanitized = rows.map((r) => ({
+      ...r,
+      config: undefined,
+      hasConfig: !!(r.config && (r.config as Record<string, unknown>)._encrypted),
+    }));
+    return reply.send({ data: sanitized });
   });
 
-  app.post("/integrations", async (request, reply) => {
-    // TODO Phase 3: Configure integration
-    return reply.code(201).send({ created: true });
+  // PATCH /admin/integrations/:id — Update config/status
+  app.patch("/integrations/:id", async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db } = request.tenant;
+    const body = parseBody(updateIntegrationSchema, request.body);
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.config !== undefined) updates.config = { _encrypted: encryptConfig(body.config) };
+    if (body.workspace !== undefined) updates.workspace = body.workspace;
+
+    const [updated] = await db
+      .update(integrations)
+      .set(updates)
+      .where(eq(integrations.id, id))
+      .returning();
+
+    if (!updated) return reply.code(404).send({ error: "Integration not found" });
+
+    return reply.send({
+      ...updated,
+      config: undefined,
+      hasConfig: !!(updated.config && (updated.config as Record<string, unknown>)._encrypted),
+    });
+  });
+
+  // POST /admin/integrations/:id/connect — Mark as connected
+  app.post("/integrations/:id/connect", async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db, userId } = request.tenant;
+    const body = parseBody(connectIntegrationSchema, request.body);
+
+    // Validate config against platform-specific schema
+    if (body.config !== undefined) {
+      const [existing] = await db
+        .select({ platform: integrations.platform })
+        .from(integrations)
+        .where(eq(integrations.id, id));
+      if (!existing) return reply.code(404).send({ error: "Integration not found" });
+
+      const platformSchema = platformConfigSchemas[existing.platform];
+      if (platformSchema) {
+        const configResult = platformSchema.safeParse(body.config);
+        if (!configResult.success) {
+          return reply.code(400).send({
+            error: `Invalid config for ${existing.platform}: ${configResult.error.issues[0].message}`,
+          });
+        }
+      }
+    }
+
+    const updates: Record<string, unknown> = {
+      status: "connected",
+      connectedAt: new Date(),
+      connectedByUserId: userId ?? null,
+      updatedAt: new Date(),
+    };
+    if (body.config !== undefined) updates.config = { _encrypted: encryptConfig(body.config) };
+    if (body.workspace !== undefined) updates.workspace = body.workspace;
+
+    const [updated] = await db
+      .update(integrations)
+      .set(updates)
+      .where(eq(integrations.id, id))
+      .returning();
+
+    if (!updated) return reply.code(404).send({ error: "Integration not found" });
+
+    return reply.send({
+      ...updated,
+      config: undefined,
+      hasConfig: !!(updated.config && (updated.config as Record<string, unknown>)._encrypted),
+    });
+  });
+
+  // POST /admin/integrations/:id/disconnect — Mark as disconnected
+  app.post("/integrations/:id/disconnect", async (request, reply) => {
+    const { id } = parseBody(idParamSchema, request.params);
+    const { db } = request.tenant;
+
+    const [updated] = await db
+      .update(integrations)
+      .set({
+        status: "disconnected",
+        workspace: null,
+        connectedAt: null,
+        connectedByUserId: null,
+        config: {},
+        updatedAt: new Date(),
+      })
+      .where(eq(integrations.id, id))
+      .returning();
+
+    if (!updated) return reply.code(404).send({ error: "Integration not found" });
+    return reply.send(updated);
   });
 };

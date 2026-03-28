@@ -120,7 +120,7 @@ async function seed() {
   // ── Users ───────────────────────────────────────────
   const SEED_DOMAIN = process.env.SEED_EMAIL_DOMAIN ?? "acmecorp.com";
   const peopleData = [
-    { name: "Dana Whitfield", email: `dana.whitfield@${SEED_DOMAIN}`, role: "admin", team: engineering.id, manager: null as string | null },
+    { name: "Dana Whitfield", email: `dana.whitfield@${SEED_DOMAIN}`, role: "super_admin", team: engineering.id, manager: null as string | null },
     { name: "Alex Thompson", email: `alex.thompson@${SEED_DOMAIN}`, role: "manager", team: engineering.id, manager: null as string | null },
     { name: "Jordan Wells", email: `jordan.wells@${SEED_DOMAIN}`, role: "manager", team: corePlatform.id, manager: null as string | null },
     { name: "Sarah Chen", email: `sarah.chen@${SEED_DOMAIN}`, role: "employee", team: corePlatform.id, manager: null as string | null },

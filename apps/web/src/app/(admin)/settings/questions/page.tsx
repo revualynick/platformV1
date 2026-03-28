@@ -29,6 +29,7 @@ type QData = {
 };
 
 async function loadQuestionnaires(isDemo: boolean): Promise<QData[]> {
+  if (isDemo) return mockQuestionnaires;
   try {
     const [{ data: rows }, { coreValues }] = await Promise.all([
       getQuestionnaires(),
@@ -54,7 +55,7 @@ async function loadQuestionnaires(isDemo: boolean): Promise<QData[]> {
       lastUsed: "-",
     }));
   } catch {
-    return isDemo ? mockQuestionnaires : [];
+    return [];
   }
 }
 
@@ -144,7 +145,16 @@ export default async function QuestionsPage() {
         ))}
       </div>
 
-      <QuestionnairesList questionnaires={questionnaires} />
+      {questionnaires.length === 0 ? (
+        <div className="mb-8 rounded-2xl border border-dashed border-stone-200 px-6 py-12 text-center">
+          <p className="text-sm font-medium text-stone-500">No questionnaires yet</p>
+          <p className="mt-1 text-xs text-stone-400">
+            Create a questionnaire to define the themes and directions for your feedback collection.
+          </p>
+        </div>
+      ) : (
+        <QuestionnairesList questionnaires={questionnaires} />
+      )}
 
       {/* AI Discovered Themes */}
       <div

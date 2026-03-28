@@ -101,6 +101,15 @@ export async function updateCoreValue(
   });
 }
 
+export async function bulkCreateCoreValues(
+  values: Array<{ name: string; description?: string; sortOrder?: number }>,
+) {
+  return apiFetch<{ created: number; skipped: number; values: CoreValueRow[] }>(
+    "/api/v1/admin/values/bulk",
+    { method: "POST", body: JSON.stringify({ values }) },
+  );
+}
+
 // ── Questionnaires ─────────────────────────────────────
 
 export interface ThemeRow {
@@ -206,6 +215,31 @@ export async function deleteTheme(id: string) {
   );
 }
 
+// ── Org Settings ───────────────────────────────────────
+
+export interface OrgSettingsRow {
+  id: string;
+  name: string;
+  subdomain: string;
+  timezone: string;
+  allowedDomains: string[];
+}
+
+export async function getOrgSettings() {
+  return apiFetch<OrgSettingsRow>("/api/v1/admin/org-settings");
+}
+
+export async function updateOrgSettings(data: {
+  name?: string;
+  timezone?: string;
+  allowedDomains?: string[];
+}) {
+  return apiFetch<OrgSettingsRow>("/api/v1/admin/org", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Users ──────────────────────────────────────────────
 
 export interface UserRow {
@@ -221,6 +255,29 @@ export interface UserRow {
   preferences: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export async function createUser(data: {
+  email: string;
+  name: string;
+  role?: string;
+  teamId?: string;
+  managerId?: string;
+  timezone?: string;
+}) {
+  return apiFetch<UserRow>("/api/v1/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function bulkCreateUsers(
+  users: Array<{ email: string; name: string; role?: string; teamId?: string; timezone?: string }>,
+) {
+  return apiFetch<{ created: number; skipped: number; users: UserRow[] }>(
+    "/api/v1/users/bulk",
+    { method: "POST", body: JSON.stringify({ users }) },
+  );
 }
 
 export async function getUser(id: string) {
@@ -245,6 +302,14 @@ export async function updateUser(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+export async function deactivateUser(id: string) {
+  return apiFetch<UserRow>(`/api/v1/users/${id}/deactivate`, { method: "POST" });
+}
+
+export async function reactivateUser(id: string) {
+  return apiFetch<UserRow>(`/api/v1/users/${id}/reactivate`, { method: "POST" });
 }
 
 export async function getUsers(filters?: { teamId?: string; managerId?: string }) {
@@ -909,6 +974,42 @@ export async function sendCampaignChatMessage(
   return apiFetch<{ reply: string; suggestions: string[] }>(
     `/api/v1/admin/campaigns/${id}/ai-chat`,
     { method: "POST", body: JSON.stringify({ message }) },
+  );
+}
+
+// ── Integrations ────────────────────────────────────
+
+export interface IntegrationRow {
+  id: string;
+  platform: string;
+  name: string;
+  status: string;
+  hasConfig: boolean;
+  workspace: string | null;
+  connectedAt: string | null;
+  connectedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getIntegrations() {
+  return apiFetch<{ data: IntegrationRow[] }>("/api/v1/admin/integrations");
+}
+
+export async function connectIntegration(
+  id: string,
+  data: { config?: Record<string, unknown>; workspace?: string },
+) {
+  return apiFetch<IntegrationRow>(`/api/v1/admin/integrations/${id}/connect`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function disconnectIntegration(id: string) {
+  return apiFetch<IntegrationRow>(
+    `/api/v1/admin/integrations/${id}/disconnect`,
+    { method: "POST" },
   );
 }
 

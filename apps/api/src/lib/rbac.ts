@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { eq } from "drizzle-orm";
 import { users } from "@revualy/db";
 
-type Role = "employee" | "manager" | "admin";
+type Role = "employee" | "manager" | "admin" | "super_admin";
 
 /**
  * Extract authenticated userId from request, throwing 401 if not present.
@@ -20,6 +20,7 @@ const ROLE_HIERARCHY: Record<Role, number> = {
   employee: 0,
   manager: 1,
   admin: 2,
+  super_admin: 3,
 };
 
 /**

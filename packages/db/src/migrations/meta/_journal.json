@@ -183,6 +183,13 @@
       "when": 1771167959765,
       "tag": "0025_allowed_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1771167960765,
+      "tag": "0026_integrations",
+      "breakpoints": true
     }
   ]
 }

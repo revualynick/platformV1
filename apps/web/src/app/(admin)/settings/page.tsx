@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getOrgConfig } from "@/lib/api";
+import { getOrgConfig, getOrgSettings } from "@/lib/api";
 import {
   coreValues as mockCoreValues,
   teamMembers as mockTeamMembers,
@@ -10,6 +10,7 @@ import {
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { ValuesCard } from "./values-card";
+import { OrgEditDialog } from "./org-edit-dialog";
 
 async function loadValues(isDemo: boolean) {
   try {
@@ -22,6 +23,17 @@ async function loadValues(isDemo: boolean) {
     }));
   } catch {
     return isDemo ? mockCoreValues : [];
+  }
+}
+
+async function loadOrgSettings(isDemo: boolean) {
+  if (isDemo) {
+    return { name: "Acme Corp", subdomain: "acmecorp", timezone: "America/New_York", allowedDomains: [] };
+  }
+  try {
+    return await getOrgSettings();
+  } catch {
+    return { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] };
   }
 }
 
@@ -39,6 +51,7 @@ export default async function AdminSettings() {
   const demoTeamMembers = isDemo ? mockTeamMembers : [];
 
   const coreValues = await loadValues(isDemo);
+  const orgSettings = await loadOrgSettings(isDemo);
   const activeCampaigns = demoCampaigns.filter((c) => c.status === "collecting").length;
   const participationRate = demoTeamMembers.length > 0
     ? Math.round(
@@ -100,7 +113,7 @@ export default async function AdminSettings() {
       <div className="mb-10">
         <p className="text-sm font-medium text-stone-400">Administration</p>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
-          Acme Corp
+          {orgSettings.name || "Organization"}
         </h1>
       </div>
 
@@ -112,22 +125,30 @@ export default async function AdminSettings() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-forest text-xl font-display font-semibold text-white">
-              A
+              {(orgSettings.name || "O").charAt(0).toUpperCase()}
             </div>
             <div>
-              <h2 className="font-display text-lg font-semibold text-stone-900">Acme Corp</h2>
+              <h2 className="font-display text-lg font-semibold text-stone-900">
+                {orgSettings.name || "—"}
+              </h2>
               <div className="mt-1 flex items-center gap-3 text-xs text-stone-400">
-                <span>acmecorp.revualy.com</span>
-                <span>&middot;</span>
-                <span>America/New_York</span>
+                {orgSettings.subdomain && (
+                  <>
+                    <span>{orgSettings.subdomain}.revualy.com</span>
+                    <span>&middot;</span>
+                  </>
+                )}
+                <span>{orgSettings.timezone}</span>
                 <span>&middot;</span>
                 <span>{demoTeamMembers.length > 0 ? `${demoTeamMembers.length} members` : "—"}</span>
               </div>
             </div>
           </div>
-          <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
-            Edit
-          </button>
+          <OrgEditDialog
+            initialName={orgSettings.name}
+            initialTimezone={orgSettings.timezone}
+            initialAllowedDomains={orgSettings.allowedDomains}
+          />
         </div>
       </div>
 

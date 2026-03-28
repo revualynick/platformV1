@@ -102,19 +102,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(403).send({ error: "Email domain not authorized for this organization" });
     }
 
-    // First user in the org gets admin role, subsequent users get employee
-    const [{ count: userCount }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users);
-    const role = userCount === 0 ? "admin" : "employee";
-
-    // Atomic upsert — if a concurrent request created the row, return it
+    // Atomic insert: role is determined at INSERT time via subquery to prevent
+    // TOCTOU race where two concurrent first-sign-ins both see count=0
     const [result] = await db
       .insert(users)
       .values({
         email,
         name: name || email.split("@")[0],
-        role,
+        role: sql`CASE WHEN (SELECT count(*) FROM ${users}) = 0 THEN 'super_admin' ELSE 'employee' END`,
         onboardingCompleted: false,
       })
       .onConflictDoUpdate({

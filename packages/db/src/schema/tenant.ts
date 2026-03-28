@@ -994,6 +994,28 @@ export const orgSettings = pgTable("org_settings", {
     .defaultNow(),
 });
 
+// ── Integrations ──────────────────────────────────────
+
+export const integrations = pgTable(
+  "integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platform: varchar("platform", { length: 50 }).notNull().unique(),
+    name: varchar("name", { length: 255 }).notNull(),
+    status: varchar("status", { length: 50 }).notNull().default("disconnected"),
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+    workspace: varchar("workspace", { length: 255 }),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    connectedByUserId: uuid("connected_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
 // ── Leads (demo/marketing site) ──────────────────────
 // Used when DEMO_MODE=true for lead capture before demo chat.
 
