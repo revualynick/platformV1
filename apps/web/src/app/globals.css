@@ -37,12 +37,12 @@
   --shadow-xl: 0 16px 48px rgba(81, 34, 74, 0.1), 0 4px 16px rgba(81, 34, 74, 0.05);
 }
 
-/* Grain texture overlay */
+/* Grain texture overlay — z-10 keeps it below modals (z-50) and nav (z-40) */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 10;
   pointer-events: none;
   opacity: 1;
   background-image: radial-gradient(rgba(81,34,74,0.04) 0.6px, transparent 0.6px);
