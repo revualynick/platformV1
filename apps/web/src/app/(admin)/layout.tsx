@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 
 const navItems = [
   { label: "Organization", href: "/settings", icon: "◉" },
+  { label: "Org Chart", href: "/settings/org-chart", icon: "◎" },
   { label: "People", href: "/settings/people", icon: "⊡" },
   { label: "Core Values", href: "/settings/values", icon: "◇" },
   { label: "Campaigns", href: "/settings/campaigns", icon: "◈" },

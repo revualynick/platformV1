@@ -6,6 +6,8 @@ import {
   mockCampaigns,
   integrations,
   escalations,
+  orgPeople,
+  orgThreads,
 } from "@/lib/mock-data";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -61,7 +63,18 @@ export default async function AdminSettings() {
       )
     : 0;
 
+  const demoOrgPeople = isDemo ? orgPeople : [];
+  const demoOrgThreads = isDemo ? orgThreads : [];
+  const orgTeams = [...new Set(demoOrgPeople.map((p) => p.team).filter(Boolean))];
+
   const quickLinks = [
+    {
+      label: "Org Chart",
+      href: "/settings/org-chart",
+      icon: "◎",
+      description: "Company structure, reporting lines, and relationship threads",
+      stat: `${demoOrgPeople.length} people`,
+    },
     {
       label: "People",
       href: "/settings/people",
@@ -153,6 +166,41 @@ export default async function AdminSettings() {
           />
         </div>
       </div>
+
+      {/* Org Chart Feature Card */}
+      {demoOrgPeople.length > 0 && (
+        <Link
+          href="/settings/org-chart"
+          className="card-enter group mb-8 block rounded-2xl border border-stone-200/60 bg-surface p-6 transition-all hover:border-forest/20 hover:shadow-md"
+          style={{ animationDelay: "100ms", boxShadow: "var(--shadow-sm)" }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest/[0.08] text-lg">
+                  ◎
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-semibold text-stone-900">
+                    Organization Chart
+                  </h2>
+                  <p className="text-sm text-stone-500">
+                    Interactive company structure with reporting lines and relationship threads
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-6 text-sm text-stone-500">
+                <span><span className="font-semibold text-forest">{demoOrgPeople.length}</span> people</span>
+                <span><span className="font-semibold text-stone-700">{orgTeams.length}</span> teams</span>
+                <span><span className="font-semibold text-terracotta">{demoOrgThreads.length}</span> relationship threads</span>
+              </div>
+            </div>
+            <span className="text-sm font-medium text-stone-400 transition-colors group-hover:text-forest">
+              View chart <span className="transition-transform group-hover:translate-x-0.5">&rarr;</span>
+            </span>
+          </div>
+        </Link>
+      )}
 
       {/* Top stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
