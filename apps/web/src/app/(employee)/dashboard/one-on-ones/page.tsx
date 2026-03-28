@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getOneOnOneSessions, getCurrentUser, getUser } from "@/lib/api";
 import type { OneOnOneSession } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionList } from "@/components/session-list";
 
-async function loadOneOnOneData() {
-  const session = await auth();
+async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
 
   if (!userId) {
@@ -37,15 +37,17 @@ async function loadOneOnOneData() {
     };
   } catch {
     return {
-      sessions: mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
-      managerName: "Jordan Wells",
-      hasManager: true,
+      sessions: isDemo ? mockSessions as OneOnOneSession[] : [],
+      managerName: isDemo ? "Jordan Wells" : null,
+      hasManager: isDemo,
     };
   }
 }
 
 export default async function OneOnOnesPage() {
-  const data = await loadOneOnOneData();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const data = await loadOneOnOneData(session, isDemo);
 
   if (!data.hasManager) {
     return (

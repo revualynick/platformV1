@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getUsers, getEngagementScores } from "@/lib/api";
 import {
   leaderboard as mockLeaderboard,
@@ -22,28 +23,24 @@ type LeaderboardEntry = {
   target: number;
 };
 
-async function loadLeaderboardData() {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    redirect("/login");
-  }
-
+async function loadLeaderboardData(userId: string, isDemo: boolean) {
   try {
     const usersResult = await getUsers({ managerId: userId });
 
     if (usersResult.data.length === 0) {
-      const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
-      return {
-        leaderboard: (mockLeaderboard as Array<{ rank: number; name: string; score: number; streak: number }>).map((e) => {
-          const member = members.find((m) => m.name === e.name);
-          return { ...e, interactionsThisWeek: member?.interactionsThisWeek ?? 0, target: member?.target ?? 3 };
-        }),
-        history: mockHistory,
-        teamSize: members.length,
-        activeCount: members.filter((m) => m.interactionsThisWeek > 0).length,
-      };
+      if (isDemo) {
+        const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
+        return {
+          leaderboard: (mockLeaderboard as Array<{ rank: number; name: string; score: number; streak: number }>).map((e) => {
+            const member = members.find((m) => m.name === e.name);
+            return { ...e, interactionsThisWeek: member?.interactionsThisWeek ?? 0, target: member?.target ?? 3 };
+          }),
+          history: mockHistory,
+          teamSize: members.length,
+          activeCount: members.filter((m) => m.interactionsThisWeek > 0).length,
+        };
+      }
+      return { leaderboard: [], history: [], teamSize: 0, activeCount: 0 };
     }
 
     const teamUsers = usersResult.data;
@@ -74,26 +71,37 @@ async function loadLeaderboardData() {
 
     return {
       leaderboard: entries,
-      history: mockHistory, // Historical data not available from API yet
+      history: isDemo ? mockHistory : [], // Historical data not available from API yet
       teamSize: teamUsers.length,
       activeCount,
     };
   } catch {
-    const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
-    return {
-      leaderboard: (mockLeaderboard as Array<{ rank: number; name: string; score: number; streak: number }>).map((e) => {
-        const member = members.find((m) => m.name === e.name);
-        return { ...e, interactionsThisWeek: member?.interactionsThisWeek ?? 0, target: member?.target ?? 3 };
-      }),
-      history: mockHistory,
-      teamSize: members.length,
-      activeCount: members.filter((m) => m.interactionsThisWeek > 0).length,
-    };
+    if (isDemo) {
+      const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
+      return {
+        leaderboard: (mockLeaderboard as Array<{ rank: number; name: string; score: number; streak: number }>).map((e) => {
+          const member = members.find((m) => m.name === e.name);
+          return { ...e, interactionsThisWeek: member?.interactionsThisWeek ?? 0, target: member?.target ?? 3 };
+        }),
+        history: mockHistory,
+        teamSize: members.length,
+        activeCount: members.filter((m) => m.interactionsThisWeek > 0).length,
+      };
+    }
+    return { leaderboard: [], history: [], teamSize: 0, activeCount: 0 };
   }
 }
 
 export default async function LeaderboardPage() {
-  const { leaderboard, history, teamSize, activeCount } = await loadLeaderboardData();
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    redirect("/login");
+  }
+
+  const isDemo = isDemoSession(session);
+  const { leaderboard, history, teamSize, activeCount } = await loadLeaderboardData(userId, isDemo);
 
   const avgScore = leaderboard.length > 0
     ? Math.round(leaderboard.reduce((sum, e) => sum + e.score, 0) / leaderboard.length)

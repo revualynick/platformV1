@@ -1,11 +1,15 @@
 import { escalationDetails } from "@/lib/mock-data";
 import { severityStyles, escalationStatusStyles as statusStyles } from "@/lib/style-constants";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 
-export default function EscalationsPage() {
-  const openCount = escalationDetails.filter(
+export default async function EscalationsPage() {
+  const session = await auth();
+  const items = isDemoSession(session) ? escalationDetails : [];
+  const openCount = items.filter(
     (e) => e.status === "open",
   ).length;
-  const resolvedCount = escalationDetails.filter(
+  const resolvedCount = items.filter(
     (e) => e.status === "resolved",
   ).length;
 
@@ -24,7 +28,7 @@ export default function EscalationsPage() {
         {[
           {
             label: "Total",
-            value: escalationDetails.length.toString(),
+            value: items.length.toString(),
             sub: "All time",
             color: "text-stone-900",
           },
@@ -70,7 +74,7 @@ export default function EscalationsPage() {
 
       {/* Escalation detail cards */}
       <div className="space-y-6">
-        {escalationDetails.map((esc, i) => {
+        {items.map((esc, i) => {
           const severity = severityStyles[esc.severity];
           const status = statusStyles[esc.status];
           const isResolved = esc.status === "resolved";

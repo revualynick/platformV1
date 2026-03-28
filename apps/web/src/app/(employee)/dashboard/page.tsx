@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getEngagementScores, getFeedback, getOrgConfig, getCurrentUser, getOneOnOneSessions } from "@/lib/api";
 import type { OneOnOneSession } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
@@ -18,10 +19,9 @@ import {
 import Link from "next/link";
 import { sentimentColorFlat, dashboardSessionStatusStyles } from "@/lib/style-constants";
 
-async function loadDashboardData() {
-  const session = await auth();
+async function loadDashboardData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
-  const userName = session?.user?.name ?? mockUser.name;
+  const userName = session?.user?.name ?? (isDemo ? mockUser.name : "User");
 
   if (!userId) {
     redirect("/login");
@@ -37,11 +37,11 @@ async function loadDashboardData() {
     ]);
 
     // Engagement data
-    let engagementHistory = mockHistory;
-    let currentScore = 87;
-    let scoreDelta = 5;
+    let engagementHistory = isDemo ? mockHistory : [];
+    let currentScore = isDemo ? 87 : 0;
+    let scoreDelta = isDemo ? 5 : 0;
     let streak = 0;
-    let interactionsThisWeek = 3;
+    let interactionsThisWeek = isDemo ? 3 : 0;
 
     if (engResult.status === "fulfilled" && engResult.value.data.length > 0) {
       const scores = engResult.value.data;
@@ -66,8 +66,8 @@ async function loadDashboardData() {
 
     // Feedback data
     type FeedbackItem = { id: string; fromName: string; date: string; summary: string; sentiment: string; engagementScore: number; values: string[] };
-    let recentFeedback: FeedbackItem[] = mockFeedback;
-    let valuesScores = mockValuesScores;
+    let recentFeedback: FeedbackItem[] = isDemo ? mockFeedback : [];
+    let valuesScores = isDemo ? mockValuesScores : [];
 
     if (fbResult.status === "fulfilled" && fbResult.value.data.length > 0) {
       const entries = fbResult.value.data.slice(0, 3);
@@ -100,7 +100,7 @@ async function loadDashboardData() {
     }
 
     // 1:1 sessions — use parallel result, filter based on manager
-    let oneOnOneSessions: OneOnOneSession[] = mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[];
+    let oneOnOneSessions: OneOnOneSession[] = isDemo ? mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[] : [];
     const managerId = meResult.status === "fulfilled" ? meResult.value.managerId : null;
     const hasManager = !!managerId;
     if (!hasManager) {
@@ -124,21 +124,23 @@ async function loadDashboardData() {
   } catch {
     return {
       userName,
-      engagementHistory: mockHistory,
-      currentScore: 87,
-      scoreDelta: 5,
-      streak: mockUser.streak,
-      interactionsThisWeek: 3,
-      recentFeedback: mockFeedback,
-      valuesScores: mockValuesScores,
-      oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
+      engagementHistory: isDemo ? mockHistory : [],
+      currentScore: isDemo ? 87 : 0,
+      scoreDelta: isDemo ? 5 : 0,
+      streak: isDemo ? mockUser.streak : 0,
+      interactionsThisWeek: isDemo ? 3 : 0,
+      recentFeedback: isDemo ? mockFeedback : [],
+      valuesScores: isDemo ? mockValuesScores : [],
+      oneOnOneSessions: isDemo ? mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[] : [],
       hasManager: false,
     };
   }
 }
 
 export default async function EmployeeDashboard() {
-  const data = await loadDashboardData();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const data = await loadDashboardData(session, isDemo);
 
   return (
     <div className="max-w-6xl">

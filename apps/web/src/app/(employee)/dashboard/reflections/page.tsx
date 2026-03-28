@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getReflections, getReflectionStats } from "@/lib/api";
 import type { SelfReflectionRow, ReflectionStatsRow } from "@/lib/api";
 import { selfReflections as mockReflections } from "@/lib/mock-data";
@@ -64,6 +66,9 @@ function mapMockToDisplay(
 }
 
 export default async function ReflectionsPage() {
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
   let reflections: ReflectionDisplay[];
   let completedCount: number;
   let avgScore: number | null;
@@ -81,7 +86,7 @@ export default async function ReflectionsPage() {
   ) {
     reflections = reflectionsResult.value.data.map(mapApiToDisplay);
   } else {
-    reflections = mockReflections.map(mapMockToDisplay);
+    reflections = isDemo ? mockReflections.map(mapMockToDisplay) : [];
   }
 
   if (statsResult.status === "fulfilled") {
@@ -90,7 +95,7 @@ export default async function ReflectionsPage() {
     avgScore = stats.avgEngagementScore;
     topMood = stats.topMood;
     currentStreak = stats.currentStreak;
-  } else {
+  } else if (isDemo) {
     completedCount = mockReflections.filter((r) => r.status === "complete").length;
     avgScore = Math.round(
       mockReflections.reduce((sum, r) => sum + r.engagementScore, 0) /
@@ -103,6 +108,11 @@ export default async function ReflectionsPage() {
     const topEntry = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0];
     topMood = topEntry ? topEntry[0] : null;
     currentStreak = completedCount;
+  } else {
+    completedCount = 0;
+    avgScore = null;
+    topMood = null;
+    currentStreak = 0;
   }
 
   const topMoodLabel = topMood

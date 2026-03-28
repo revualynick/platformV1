@@ -169,6 +169,20 @@
       "when": 1771167957765,
       "tag": "0023_campaigns_and_feedback_digests",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1771167958765,
+      "tag": "0024_org_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1771167959765,
+      "tag": "0025_allowed_domains",
+      "breakpoints": true
     }
   ]
 }

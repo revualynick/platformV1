@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getOneOnOneSession, getUser, getCurrentUser, getWsToken } from "@/lib/api";
 import type { OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionViewer } from "@/components/session-viewer";
 
-async function loadSession(sessionId: string) {
-  const session = await auth();
-  const userId = session?.user?.id;
+async function loadSession(sessionId: string, authSession: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
+  const userId = authSession?.user?.id;
 
   const mockSession = mockSessions.find((s) => s.id === sessionId) ?? mockSessions[0];
 
@@ -24,7 +24,7 @@ async function loadSession(sessionId: string) {
 
     const sessionData = sessionResult.status === "fulfilled"
       ? sessionResult.value
-      : mockSession as unknown as OneOnOneSessionDetail;
+      : isDemo ? (mockSession as unknown as OneOnOneSessionDetail) : null;
 
     let managerName = "Your Manager";
     if (meResult.status === "fulfilled" && meResult.value.managerId) {
@@ -39,7 +39,7 @@ async function loadSession(sessionId: string) {
     return { session: sessionData, managerName, currentUserId: userId };
   } catch {
     return {
-      session: mockSession as unknown as OneOnOneSessionDetail,
+      session: isDemo ? (mockSession as unknown as OneOnOneSessionDetail) : null,
       managerName: "Your Manager",
       currentUserId: userId ?? "p3",
     };
@@ -52,10 +52,12 @@ export default async function EmployeeSessionDetailPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = await params;
-  const data = await loadSession(sessionId);
+  const authSession = await auth();
+  const isDemo = isDemoSession(authSession);
+  const data = await loadSession(sessionId, authSession, isDemo);
 
-  // Verify employee owns this session (#6 — frontend auth gap)
-  if (!data.session.employeeId || data.session.employeeId !== data.currentUserId) {
+  // Redirect if session not found or employee doesn't own it (#6 — frontend auth gap)
+  if (!data.session || !data.session.employeeId || data.session.employeeId !== data.currentUserId) {
     redirect("/dashboard/one-on-ones");
   }
 

@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getNotificationPreferences } from "@/lib/api";
 import { notificationPreferences as mockPreferences } from "@/lib/mock-data";
 import { PreferenceToggles } from "./preference-toggles";
@@ -26,12 +28,15 @@ const PREF_LABELS: Record<string, { label: string; description: string }> = {
 };
 
 export default async function SettingsPage() {
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
   let preferences;
   try {
     const result = await getNotificationPreferences();
     preferences = result.data;
   } catch {
-    preferences = mockPreferences;
+    preferences = isDemo ? mockPreferences : [];
   }
 
   const items = preferences.map((pref) => ({

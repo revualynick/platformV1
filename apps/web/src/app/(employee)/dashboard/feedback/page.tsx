@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getFeedback, getOrgConfig } from "@/lib/api";
 import {
   allFeedback as mockFeedback,
@@ -19,8 +20,7 @@ type FeedbackItem = {
 
 type ValueScore = { value: string; score: number };
 
-async function loadFeedbackData() {
-  const session = await auth();
+async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
 
   if (!userId) {
@@ -38,8 +38,8 @@ async function loadFeedbackData() {
       orgResult.value.coreValues.forEach((v) => valuesMap.set(v.id, v.name));
     }
 
-    let feedback: FeedbackItem[] = mockFeedback;
-    let valuesScores: ValueScore[] = mockValuesScores;
+    let feedback: FeedbackItem[] = isDemo ? mockFeedback : [];
+    let valuesScores: ValueScore[] = isDemo ? mockValuesScores : [];
 
     if (fbResult.status === "fulfilled" && fbResult.value.data.length > 0) {
       feedback = fbResult.value.data.map((e) => ({
@@ -72,12 +72,17 @@ async function loadFeedbackData() {
 
     return { feedback, valuesScores };
   } catch {
-    return { feedback: mockFeedback as FeedbackItem[], valuesScores: mockValuesScores };
+    return {
+      feedback: isDemo ? (mockFeedback as FeedbackItem[]) : [],
+      valuesScores: isDemo ? mockValuesScores : [],
+    };
   }
 }
 
 export default async function FeedbackPage() {
-  const { feedback, valuesScores } = await loadFeedbackData();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const { feedback, valuesScores } = await loadFeedbackData(session, isDemo);
 
   const positive = feedback.filter((f) => f.sentiment === "positive").length;
   const neutral = feedback.filter((f) => f.sentiment === "neutral").length;

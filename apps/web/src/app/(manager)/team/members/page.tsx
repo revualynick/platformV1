@@ -6,6 +6,7 @@ import {
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
 import { trendIcons } from "@/lib/style-constants";
+import { isDemoSession } from "@/lib/session-utils";
 
 type TeamMember = {
   id: string;
@@ -16,19 +17,12 @@ type TeamMember = {
   trend: string;
 };
 
-async function loadMembers() {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    redirect("/login");
-  }
-
+async function loadMembers(userId: string, isDemo: boolean) {
   try {
     const usersResult = await getUsers({ managerId: userId });
 
     if (usersResult.data.length === 0) {
-      return mockTeamMembers as TeamMember[];
+      return isDemo ? (mockTeamMembers as TeamMember[]) : [];
     }
 
     const members = usersResult.data;
@@ -61,12 +55,16 @@ async function loadMembers() {
       };
     });
   } catch {
-    return mockTeamMembers as TeamMember[];
+    return isDemo ? (mockTeamMembers as TeamMember[]) : [];
   }
 }
 
 export default async function TeamMembersPage() {
-  const teamMembers = await loadMembers();
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
+  const isDemo = isDemoSession(session);
+  const teamMembers = await loadMembers(userId, isDemo);
 
   return (
     <div className="max-w-6xl">

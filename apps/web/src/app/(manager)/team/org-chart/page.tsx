@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import {
   orgPeople,
   orgThreads,
@@ -7,27 +9,34 @@ import { TeamOrgChart } from "./team-org-chart";
 // Manager = Jordan Wells (p2). Show manager + their direct reports.
 const MANAGER_ID = "p2";
 
-export default function OrgChartPage() {
+export default async function OrgChartPage() {
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
   const teamIds = new Set<string>();
-  teamIds.add(MANAGER_ID);
-  for (const p of orgPeople) {
-    if (p.reportsTo === MANAGER_ID) teamIds.add(p.id);
+  if (isDemo) {
+    teamIds.add(MANAGER_ID);
+    for (const p of orgPeople) {
+      if (p.reportsTo === MANAGER_ID) teamIds.add(p.id);
+    }
   }
 
-  const teamPeople = orgPeople
-    .filter((p) => teamIds.has(p.id))
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      role: p.role,
-      title: p.title,
-      team: p.team,
-      reportsTo: p.reportsTo,
-    }));
+  const teamPeople = isDemo
+    ? orgPeople
+        .filter((p) => teamIds.has(p.id))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          title: p.title,
+          team: p.team,
+          reportsTo: p.reportsTo,
+        }))
+    : [];
 
-  const teamThreads = orgThreads.filter(
-    (t) => teamIds.has(t.from) && teamIds.has(t.to),
-  );
+  const teamThreads = isDemo
+    ? orgThreads.filter((t) => teamIds.has(t.from) && teamIds.has(t.to))
+    : [];
 
   const reportingLines = teamPeople.filter((p) => p.reportsTo && teamIds.has(p.reportsTo)).length;
 

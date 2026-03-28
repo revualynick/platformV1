@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getFlaggedItems, getUsers } from "@/lib/api";
 import {
   flaggedItems as mockFlaggedItems,
@@ -25,21 +26,14 @@ type TeamMember = {
   trend: string;
 };
 
-async function loadFlaggedData() {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    redirect("/login");
-  }
-
+async function loadFlaggedData(userId: string, isDemo: boolean) {
   try {
     const [flaggedResult, usersResult] = await Promise.allSettled([
       getFlaggedItems(),
       getUsers({ managerId: userId }),
     ]);
 
-    let flaggedItems: FlaggedItem[] = mockFlaggedItems;
+    let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
     if (flaggedResult.status === "fulfilled" && flaggedResult.value.data.length > 0) {
       flaggedItems = flaggedResult.value.data.map((item) => ({
         id: item.escalation.id,
@@ -53,9 +47,11 @@ async function loadFlaggedData() {
 
     // For "at risk" sidebar, we'd need engagement scores per member
     // Fall back to mock data for now since engagement fetch per-user is heavy
-    let needsAttention: TeamMember[] = (mockTeamMembers as TeamMember[])
-      .filter((m) => m.engagementScore < 60 || m.trend === "down")
-      .sort((a, b) => a.engagementScore - b.engagementScore);
+    let needsAttention: TeamMember[] = isDemo
+      ? (mockTeamMembers as TeamMember[])
+          .filter((m) => m.engagementScore < 60 || m.trend === "down")
+          .sort((a, b) => a.engagementScore - b.engagementScore)
+      : [];
 
     if (usersResult.status === "fulfilled" && usersResult.value.data.length > 0) {
       // Basic at-risk: members exist but we don't have their scores without extra fetches
@@ -65,17 +61,28 @@ async function loadFlaggedData() {
 
     return { flaggedItems, needsAttention };
   } catch {
-    return {
-      flaggedItems: mockFlaggedItems as FlaggedItem[],
-      needsAttention: (mockTeamMembers as TeamMember[])
-        .filter((m) => m.engagementScore < 60 || m.trend === "down")
-        .sort((a, b) => a.engagementScore - b.engagementScore),
-    };
+    if (isDemo) {
+      return {
+        flaggedItems: mockFlaggedItems as FlaggedItem[],
+        needsAttention: (mockTeamMembers as TeamMember[])
+          .filter((m) => m.engagementScore < 60 || m.trend === "down")
+          .sort((a, b) => a.engagementScore - b.engagementScore),
+      };
+    }
+    return { flaggedItems: [], needsAttention: [] };
   }
 }
 
 export default async function FlaggedPage() {
-  const { flaggedItems, needsAttention } = await loadFlaggedData();
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    redirect("/login");
+  }
+
+  const isDemo = isDemoSession(session);
+  const { flaggedItems, needsAttention } = await loadFlaggedData(userId, isDemo);
 
   return (
     <div className="max-w-5xl">

@@ -1,6 +1,8 @@
+import { auth } from "@/lib/auth";
 import { getManagerQuestionnaires } from "@/lib/api";
 import { questionnaires as mockQuestionnaires } from "@/lib/mock-data";
 import { CreateQuestionnaireModal } from "@/components/create-questionnaire-modal";
+import { isDemoSession } from "@/lib/session-utils";
 
 const categoryLabels: Record<string, string> = {
   peer_review: "Peer Review",
@@ -16,7 +18,7 @@ const categoryColors: Record<string, string> = {
   pulse_check: "bg-amber-100 text-amber-700",
 };
 
-async function loadQuestionnaires() {
+async function loadQuestionnaires(isDemo: boolean) {
   try {
     const result = await getManagerQuestionnaires();
     if (result.data.length > 0) {
@@ -29,7 +31,11 @@ async function loadQuestionnaires() {
     // fall through
   }
 
-  // Mock fallback
+  if (!isDemo) {
+    return { teamQuestions: [], orgQuestions: [] };
+  }
+
+  // Demo fallback
   return {
     teamQuestions: [],
     orgQuestions: mockQuestionnaires.map((q) => ({
@@ -52,7 +58,9 @@ async function loadQuestionnaires() {
 }
 
 export default async function QuestionsPage() {
-  const { teamQuestions, orgQuestions } = await loadQuestionnaires();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const { teamQuestions, orgQuestions } = await loadQuestionnaires(isDemo);
 
   return (
     <div className="max-w-5xl">

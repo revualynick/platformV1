@@ -1,5 +1,7 @@
 import { integrations } from "@/lib/mock-data";
 import { integrationStatusStyles as statusStyles, platformIcons } from "@/lib/style-constants";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 
 const platformDescriptions: Record<string, string> = {
   slack:
@@ -12,8 +14,10 @@ const platformDescriptions: Record<string, string> = {
     "Sync calendar events to automatically build relationship graphs and find optimal interaction times.",
 };
 
-export default function IntegrationsPage() {
-  const connected = integrations.filter((i) => i.status === "connected").length;
+export default async function IntegrationsPage() {
+  const session = await auth();
+  const items = isDemoSession(session) ? integrations : [];
+  const connected = items.filter((i) => i.status === "connected").length;
 
   return (
     <div className="max-w-5xl">
@@ -31,12 +35,12 @@ export default function IntegrationsPage() {
           {
             label: "Connected",
             value: connected.toString(),
-            sub: `of ${integrations.length} available`,
+            sub: `of ${items.length} available`,
             color: "text-forest",
           },
           {
             label: "Chat Platforms",
-            value: integrations
+            value: items
               .filter(
                 (i) =>
                   i.platform !== "google_calendar" &&
@@ -48,7 +52,7 @@ export default function IntegrationsPage() {
           },
           {
             label: "Data Sources",
-            value: integrations
+            value: items
               .filter(
                 (i) =>
                   i.platform === "google_calendar" &&
@@ -82,7 +86,7 @@ export default function IntegrationsPage() {
 
       {/* Integration cards */}
       <div className="space-y-4">
-        {integrations.map((integration, i) => {
+        {items.map((integration, i) => {
           const status = statusStyles[integration.status];
           const isConnected = integration.status === "connected";
           return (

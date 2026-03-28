@@ -11,6 +11,7 @@ import {
   teamEngagementTrend as mockTrend,
 } from "@/lib/mock-data";
 import { trendIcons, severityStyles } from "@/lib/style-constants";
+import { isDemoSession } from "@/lib/session-utils";
 
 type TeamMember = {
   id: string;
@@ -37,13 +38,7 @@ type LeaderboardEntry = {
   streak: number;
 };
 
-async function loadTeamData() {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    redirect("/login");
-  }
+async function loadTeamData(userId: string, isDemo: boolean) {
 
   try {
     const [usersResult, flaggedResult] = await Promise.allSettled([
@@ -51,8 +46,8 @@ async function loadTeamData() {
       getFlaggedItems(),
     ]);
 
-    let teamMembers: TeamMember[] = mockTeamMembers;
-    let leaderboard: LeaderboardEntry[] = mockLeaderboard;
+    let teamMembers: TeamMember[] = isDemo ? mockTeamMembers : [];
+    let leaderboard: LeaderboardEntry[] = isDemo ? mockLeaderboard : [];
 
     if (usersResult.status === "fulfilled" && usersResult.value.data.length > 0) {
       const members = usersResult.value.data;
@@ -107,7 +102,7 @@ async function loadTeamData() {
     }
 
     // Flagged items
-    let flaggedItems: FlaggedItem[] = mockFlaggedItems;
+    let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
     if (flaggedResult.status === "fulfilled" && flaggedResult.value.data.length > 0) {
       flaggedItems = flaggedResult.value.data.map((item) => ({
         id: item.escalation.id,
@@ -124,21 +119,25 @@ async function loadTeamData() {
       teamMembers,
       flaggedItems,
       leaderboard,
-      trendData: mockTrend, // Trend chart needs historical aggregate — not available per API yet
+      trendData: isDemo ? mockTrend : [],
     };
   } catch {
     return {
-      teamName: "Engineering",
-      teamMembers: mockTeamMembers as TeamMember[],
-      flaggedItems: mockFlaggedItems as FlaggedItem[],
-      leaderboard: mockLeaderboard as LeaderboardEntry[],
-      trendData: mockTrend,
+      teamName: isDemo ? "Engineering" : "Your Team",
+      teamMembers: isDemo ? (mockTeamMembers as TeamMember[]) : [],
+      flaggedItems: isDemo ? (mockFlaggedItems as FlaggedItem[]) : [],
+      leaderboard: isDemo ? (mockLeaderboard as LeaderboardEntry[]) : [],
+      trendData: isDemo ? mockTrend : [],
     };
   }
 }
 
 export default async function TeamDashboard() {
-  const { teamName, teamMembers, flaggedItems, leaderboard, trendData } = await loadTeamData();
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
+  const isDemo = isDemoSession(session);
+  const { teamName, teamMembers, flaggedItems, leaderboard, trendData } = await loadTeamData(userId, isDemo);
 
   const avgEngagement = teamMembers.length > 0
     ? Math.round(teamMembers.reduce((sum, m) => sum + m.engagementScore, 0) / teamMembers.length)

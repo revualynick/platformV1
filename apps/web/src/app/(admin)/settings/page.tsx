@@ -2,14 +2,16 @@ import Link from "next/link";
 import { getOrgConfig } from "@/lib/api";
 import {
   coreValues as mockCoreValues,
-  teamMembers,
+  teamMembers as mockTeamMembers,
   mockCampaigns,
   integrations,
   escalations,
 } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { ValuesCard } from "./values-card";
 
-async function loadValues() {
+async function loadValues(isDemo: boolean) {
   try {
     const { coreValues } = await getOrgConfig();
     return coreValues.map((v) => ({
@@ -19,57 +21,9 @@ async function loadValues() {
       active: v.isActive,
     }));
   } catch {
-    return mockCoreValues;
+    return isDemo ? mockCoreValues : [];
   }
 }
-
-const quickLinks = [
-  {
-    label: "People",
-    href: "/settings/people",
-    icon: "⊡",
-    description: "Team members, roles, and reporting lines",
-    stat: `${teamMembers.length} members`,
-  },
-  {
-    label: "Campaigns",
-    href: "/settings/campaigns",
-    icon: "◈",
-    description: "Review cycles and feedback collection",
-    stat: `${mockCampaigns.filter((c) => c.status === "collecting").length} active`,
-  },
-  {
-    label: "Integrations",
-    href: "/settings/integrations",
-    icon: "⬡",
-    description: "Chat platforms, calendars, and data sources",
-    stat: `${integrations.filter((i) => i.status === "connected").length} connected`,
-  },
-  {
-    label: "Escalations",
-    href: "/settings/escalations",
-    icon: "⚑",
-    description: "Flagged items requiring HR review",
-    stat: `${escalations.filter((e) => e.status === "open").length} open`,
-  },
-];
-
-// Mock "needs attention" items — in production these come from API health checks
-const openEscCount = escalations.filter((e) => e.status === "open").length;
-const disconnectedCount = integrations.filter((i) => i.status !== "connected").length;
-const draftCount = mockCampaigns.filter((c) => c.status === "draft").length;
-
-const attentionItems = [
-  ...(openEscCount > 0
-    ? [{ icon: "⚑", text: `${openEscCount} escalation${openEscCount > 1 ? "s" : ""} awaiting review`, href: "/settings/escalations", severity: "warn" as const }]
-    : []),
-  ...(draftCount > 0
-    ? [{ icon: "◈", text: `${draftCount} draft campaign${draftCount > 1 ? "s" : ""} pending launch`, href: "/settings/campaigns", severity: "info" as const }]
-    : []),
-  ...(disconnectedCount > 0
-    ? [{ icon: "⬡", text: `${disconnectedCount} integration${disconnectedCount > 1 ? "s" : ""} not connected`, href: "/settings/integrations", severity: "info" as const }]
-    : []),
-];
 
 const attentionSeverityStyles = {
   warn: "bg-terracotta/[0.06] text-terracotta",
@@ -77,11 +31,68 @@ const attentionSeverityStyles = {
 };
 
 export default async function AdminSettings() {
-  const coreValues = await loadValues();
-  const activeCampaigns = mockCampaigns.filter((c) => c.status === "collecting").length;
-  const participationRate = Math.round(
-    (teamMembers.filter((m) => m.interactionsThisWeek > 0).length / teamMembers.length) * 100,
-  );
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const demoCampaigns = isDemo ? mockCampaigns : [];
+  const demoIntegrations = isDemo ? integrations : [];
+  const demoEscalations = isDemo ? escalations : [];
+  const demoTeamMembers = isDemo ? mockTeamMembers : [];
+
+  const coreValues = await loadValues(isDemo);
+  const activeCampaigns = demoCampaigns.filter((c) => c.status === "collecting").length;
+  const participationRate = demoTeamMembers.length > 0
+    ? Math.round(
+        (demoTeamMembers.filter((m) => m.interactionsThisWeek > 0).length / demoTeamMembers.length) * 100,
+      )
+    : 0;
+
+  const quickLinks = [
+    {
+      label: "People",
+      href: "/settings/people",
+      icon: "⊡",
+      description: "Team members, roles, and reporting lines",
+      stat: `${demoTeamMembers.length} members`,
+    },
+    {
+      label: "Campaigns",
+      href: "/settings/campaigns",
+      icon: "◈",
+      description: "Review cycles and feedback collection",
+      stat: `${demoCampaigns.filter((c) => c.status === "collecting").length} active`,
+    },
+    {
+      label: "Integrations",
+      href: "/settings/integrations",
+      icon: "⬡",
+      description: "Chat platforms, calendars, and data sources",
+      stat: `${demoIntegrations.filter((i) => i.status === "connected").length} connected`,
+    },
+    {
+      label: "Escalations",
+      href: "/settings/escalations",
+      icon: "⚑",
+      description: "Flagged items requiring HR review",
+      stat: `${demoEscalations.filter((e) => e.status === "open").length} open`,
+    },
+  ];
+
+  // Mock "needs attention" items — in production these come from API health checks
+  const openEscCount = demoEscalations.filter((e) => e.status === "open").length;
+  const disconnectedCount = demoIntegrations.filter((i) => i.status !== "connected").length;
+  const draftCount = demoCampaigns.filter((c) => c.status === "draft").length;
+
+  const attentionItems = [
+    ...(openEscCount > 0
+      ? [{ icon: "⚑", text: `${openEscCount} escalation${openEscCount > 1 ? "s" : ""} awaiting review`, href: "/settings/escalations", severity: "warn" as const }]
+      : []),
+    ...(draftCount > 0
+      ? [{ icon: "◈", text: `${draftCount} draft campaign${draftCount > 1 ? "s" : ""} pending launch`, href: "/settings/campaigns", severity: "info" as const }]
+      : []),
+    ...(disconnectedCount > 0
+      ? [{ icon: "⬡", text: `${disconnectedCount} integration${disconnectedCount > 1 ? "s" : ""} not connected`, href: "/settings/integrations", severity: "info" as const }]
+      : []),
+  ];
 
   return (
     <div className="max-w-5xl">
@@ -110,7 +121,7 @@ export default async function AdminSettings() {
                 <span>&middot;</span>
                 <span>America/New_York</span>
                 <span>&middot;</span>
-                <span>{teamMembers.length} members</span>
+                <span>{demoTeamMembers.length > 0 ? `${demoTeamMembers.length} members` : "—"}</span>
               </div>
             </div>
           </div>
@@ -125,7 +136,7 @@ export default async function AdminSettings() {
         {[
           {
             label: "Team Size",
-            value: teamMembers.length.toString(),
+            value: demoTeamMembers.length.toString(),
             sub: "Active members",
             color: "text-stone-900",
           },

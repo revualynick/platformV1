@@ -1,15 +1,17 @@
 import { getCampaign } from "@/lib/api";
 import type { CampaignRow } from "@/lib/api";
 import { mockCampaigns } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { campaignStatusStyles } from "@/lib/style-constants";
 import { PathNameProvider } from "@/lib/path-context";
 import { CampaignDetail } from "./campaign-detail";
 
-async function loadCampaign(id: string): Promise<CampaignRow | null> {
+async function loadCampaign(id: string, isDemo: boolean): Promise<CampaignRow | null> {
   try {
     return await getCampaign(id);
   } catch {
-    return mockCampaigns.find((c) => c.id === id) ?? null;
+    return isDemo ? (mockCampaigns.find((c) => c.id === id) ?? null) : null;
   }
 }
 
@@ -19,7 +21,8 @@ export default async function CampaignDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const campaign = await loadCampaign(id);
+  const session = await auth();
+  const campaign = await loadCampaign(id, isDemoSession(session));
 
   if (!campaign) {
     return (

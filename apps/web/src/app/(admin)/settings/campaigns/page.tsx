@@ -1,19 +1,22 @@
 import { getCampaigns } from "@/lib/api";
 import type { CampaignRow } from "@/lib/api";
 import { mockCampaigns } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { CampaignsList } from "./campaigns-list";
 
-async function loadCampaigns(): Promise<CampaignRow[]> {
+async function loadCampaigns(isDemo: boolean): Promise<CampaignRow[]> {
   try {
     const { data } = await getCampaigns();
     return data;
   } catch {
-    return mockCampaigns;
+    return isDemo ? mockCampaigns : [];
   }
 }
 
 export default async function CampaignsPage() {
-  const campaigns = await loadCampaigns();
+  const session = await auth();
+  const campaigns = await loadCampaigns(isDemoSession(session));
 
   const total = campaigns.length;
   const active = campaigns.filter(

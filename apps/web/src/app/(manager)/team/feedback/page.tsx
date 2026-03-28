@@ -1,17 +1,18 @@
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getTeamInsights } from "@/lib/api";
 import type { FeedbackDigestRow } from "@/lib/api";
 import { mockTeamInsights } from "@/lib/mock-data";
 import { trendIcons } from "@/lib/style-constants";
 import { ThemeFrequencyChart } from "@/components/charts/theme-frequency-chart";
 
-async function loadInsightsData(): Promise<FeedbackDigestRow[]> {
+async function loadInsightsData(isDemo: boolean): Promise<FeedbackDigestRow[]> {
   try {
     const result = await getTeamInsights();
     if (result.data.length > 0) return result.data;
-    return mockTeamInsights;
+    return isDemo ? mockTeamInsights : [];
   } catch {
-    return mockTeamInsights;
+    return isDemo ? mockTeamInsights : [];
   }
 }
 
@@ -22,7 +23,8 @@ function formatMonth(dateStr: string) {
 
 export default async function TeamInsightsPage() {
   const session = await auth();
-  const digests = await loadInsightsData();
+  const isDemo = isDemoSession(session);
+  const digests = await loadInsightsData(isDemo);
 
   // Use the latest digest
   const sorted = [...digests].sort(

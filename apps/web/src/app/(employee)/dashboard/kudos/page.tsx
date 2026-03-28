@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getKudos, getOrgConfig, getUsers } from "@/lib/api";
 import {
   kudosReceived as mockReceived,
@@ -24,8 +25,7 @@ type KudosItem = {
   value: string;
 };
 
-async function loadKudosData() {
-  const session = await auth();
+async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
 
   if (!userId) {
@@ -84,14 +84,26 @@ async function loadKudosData() {
       }
     }
 
-    return { received: mockReceived, given: mockGiven, users: usersList, values: valuesList };
+    return {
+      received: isDemo ? mockReceived : [],
+      given: isDemo ? mockGiven : [],
+      users: usersList,
+      values: valuesList,
+    };
   } catch {
-    return { received: mockReceived, given: mockGiven, users: [], values: [] };
+    return {
+      received: isDemo ? mockReceived : [],
+      given: isDemo ? mockGiven : [],
+      users: [],
+      values: [],
+    };
   }
 }
 
 export default async function KudosPage() {
-  const { received, given, users, values } = await loadKudosData();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const { received, given, users, values } = await loadKudosData(session, isDemo);
 
   // Determine top value from received kudos
   const valueCounts: Record<string, number> = {};

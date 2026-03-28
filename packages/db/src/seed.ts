@@ -26,6 +26,7 @@ import {
   oneOnOneActionItems,
   oneOnOneAgendaItems,
   managerNotes,
+  orgSettings,
 } from "./schema/tenant.js";
 
 function getDbUrl(): string {
@@ -336,6 +337,17 @@ async function seed() {
   }
 
   console.log(`  ✓ ${engData.length * weeks.length} engagement score records`);
+
+  // ── Org Settings ──────────────────────────────────
+  await db.delete(orgSettings);
+  const allowedDomains = [SEED_DOMAIN, ...(SEED_DOMAIN !== "revualy.com" ? ["revualy.com"] : [])];
+  await db.insert(orgSettings).values({
+    name: "Revualy",
+    subdomain: "",
+    timezone: "America/New_York",
+    allowedDomains,
+  });
+  console.log(`  ✓ org settings (allowed domains: ${allowedDomains.join(", ")})`);
 
   console.log("\nSeed complete!");
   await pgSql.end();

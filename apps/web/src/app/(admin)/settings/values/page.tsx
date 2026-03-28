@@ -3,9 +3,11 @@ import {
   coreValues as mockCoreValues,
   valuesScores,
 } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { ValuesList } from "./values-list";
 
-async function loadValues(): Promise<
+async function loadValues(isDemo: boolean): Promise<
   Array<{ id: string; name: string; description: string; active: boolean }>
 > {
   try {
@@ -17,12 +19,15 @@ async function loadValues(): Promise<
       active: v.isActive,
     }));
   } catch {
-    return mockCoreValues;
+    return isDemo ? mockCoreValues : [];
   }
 }
 
 export default async function ValuesPage() {
-  const coreValues = await loadValues();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const demoValuesScores = isDemo ? valuesScores : [];
+  const coreValues = await loadValues(isDemo);
   return (
     <div className="max-w-5xl">
       {/* Header */}
@@ -44,17 +49,19 @@ export default async function ValuesPage() {
           },
           {
             label: "Avg Alignment",
-            value: Math.round(
-              valuesScores.reduce((sum, v) => sum + v.score, 0) /
-                valuesScores.length,
-            ).toString(),
+            value: demoValuesScores.length > 0
+              ? Math.round(
+                  demoValuesScores.reduce((sum, v) => sum + v.score, 0) /
+                    demoValuesScores.length,
+                ).toString()
+              : "—",
             sub: "Across all feedback",
             color: "text-forest",
           },
           {
             label: "Top Value",
-            value: valuesScores.sort((a, b) => b.score - a.score)[0].value,
-            sub: `Score: ${valuesScores.sort((a, b) => b.score - a.score)[0].score}`,
+            value: demoValuesScores.length > 0 ? demoValuesScores.sort((a, b) => b.score - a.score)[0].value : "—",
+            sub: demoValuesScores.length > 0 ? `Score: ${demoValuesScores.sort((a, b) => b.score - a.score)[0].score}` : "",
             color: "text-stone-900",
           },
         ].map((stat, i) => (
@@ -86,7 +93,7 @@ export default async function ValuesPage() {
             className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "200ms", boxShadow: "var(--shadow-sm)" }}
           >
-            <ValuesList values={coreValues} scores={valuesScores} />
+            <ValuesList values={coreValues} scores={demoValuesScores} />
           </div>
         </div>
 
@@ -100,7 +107,7 @@ export default async function ValuesPage() {
               Alignment Scores
             </h3>
             <div className="space-y-4">
-              {valuesScores
+              {demoValuesScores
                 .sort((a, b) => b.score - a.score)
                 .map((v) => (
                   <div key={v.value}>

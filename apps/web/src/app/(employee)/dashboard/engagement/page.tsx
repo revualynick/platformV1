@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getEngagementScores } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
@@ -22,8 +23,7 @@ type WeekDetail = {
   status: string;
 };
 
-async function loadEngagementData() {
-  const session = await auth();
+async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
 
   if (!userId) {
@@ -34,9 +34,9 @@ async function loadEngagementData() {
     const result = await getEngagementScores(userId);
     if (result.data.length === 0) {
       return {
-        weeklyDetail: mockWeeklyDetail as WeekDetail[],
-        chartData: mockHistory,
-        streak: mockUser.streak,
+        weeklyDetail: isDemo ? (mockWeeklyDetail as WeekDetail[]) : [],
+        chartData: isDemo ? mockHistory : [],
+        streak: isDemo ? mockUser.streak : 0,
       };
     }
 
@@ -70,15 +70,17 @@ async function loadEngagementData() {
     };
   } catch {
     return {
-      weeklyDetail: mockWeeklyDetail as WeekDetail[],
-      chartData: mockHistory,
-      streak: mockUser.streak,
+      weeklyDetail: isDemo ? (mockWeeklyDetail as WeekDetail[]) : [],
+      chartData: isDemo ? mockHistory : [],
+      streak: isDemo ? mockUser.streak : 0,
     };
   }
 }
 
 export default async function EngagementPage() {
-  const { weeklyDetail, chartData, streak } = await loadEngagementData();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const { weeklyDetail, chartData, streak } = await loadEngagementData(session, isDemo);
 
   const current = weeklyDetail[0];
   const previous = weeklyDetail[1] ?? current;

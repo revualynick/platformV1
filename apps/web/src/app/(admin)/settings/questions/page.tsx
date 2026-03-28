@@ -3,6 +3,8 @@ import {
   questionnaires as mockQuestionnaires,
   aiDiscoveredThemes,
 } from "@/lib/mock-data";
+import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { QuestionnairesList } from "./questionnaires-list";
 
 type QTheme = {
@@ -26,7 +28,7 @@ type QData = {
   lastUsed: string;
 };
 
-async function loadQuestionnaires(): Promise<QData[]> {
+async function loadQuestionnaires(isDemo: boolean): Promise<QData[]> {
   try {
     const [{ data: rows }, { coreValues }] = await Promise.all([
       getQuestionnaires(),
@@ -52,7 +54,7 @@ async function loadQuestionnaires(): Promise<QData[]> {
       lastUsed: "-",
     }));
   } catch {
-    return mockQuestionnaires;
+    return isDemo ? mockQuestionnaires : [];
   }
 }
 
@@ -70,10 +72,13 @@ const aiStatusStyles: Record<string, { bg: string; text: string; label: string }
 };
 
 export default async function QuestionsPage() {
-  const questionnaires = await loadQuestionnaires();
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+  const questionnaires = await loadQuestionnaires(isDemo);
+  const demoAiDiscoveredThemes = isDemo ? aiDiscoveredThemes : [];
   const activeQuestionnaires = questionnaires.filter((q) => q.active);
   const totalThemes = questionnaires.reduce((sum, q) => sum + q.themes.length, 0);
-  const pendingAiThemes = aiDiscoveredThemes.filter((t) => t.status === "suggested");
+  const pendingAiThemes = demoAiDiscoveredThemes.filter((t) => t.status === "suggested");
 
   return (
     <div className="max-w-6xl">
@@ -107,7 +112,7 @@ export default async function QuestionsPage() {
           },
           {
             label: "AI Discoveries",
-            value: aiDiscoveredThemes.length.toString(),
+            value: demoAiDiscoveredThemes.length.toString(),
             sub: `${pendingAiThemes.length} pending review`,
             color: "text-violet-600",
           },
@@ -164,7 +169,7 @@ export default async function QuestionsPage() {
         </div>
 
         <div className="space-y-4">
-          {aiDiscoveredThemes.map((theme, i) => {
+          {demoAiDiscoveredThemes.map((theme, i) => {
             const status = aiStatusStyles[theme.status];
             const cat = categoryStyles[theme.suggestedFor];
             const isDismissed = theme.status === "dismissed";

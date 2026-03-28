@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import { getCurrentUser } from "@/lib/api";
 import { redirect } from "next/navigation";
 import { currentUser as mockUser } from "@/lib/mock-data";
@@ -6,6 +7,7 @@ import { OnboardingWizard } from "./onboarding-wizard";
 
 export default async function OnboardingPage() {
   const session = await auth();
+  const isDemo = isDemoSession(session);
   const userId = session?.user?.id;
 
   let user;
@@ -21,9 +23,9 @@ export default async function OnboardingPage() {
   }
 
   const initialData = {
-    name: user?.name ?? session?.user?.name ?? mockUser.name,
-    email: user?.email ?? session?.user?.email ?? mockUser.email,
-    role: user?.role ?? mockUser.role,
+    name: user?.name ?? session?.user?.name ?? (isDemo ? mockUser.name : ""),
+    email: user?.email ?? session?.user?.email ?? (isDemo ? mockUser.email : ""),
+    role: user?.role ?? (isDemo ? mockUser.role : "employee"),
     timezone: user?.timezone ?? "America/New_York",
   };
 

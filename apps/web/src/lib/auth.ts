@@ -75,6 +75,25 @@ async function lookupUserByEmail(email: string): Promise<RevualyUser | null> {
   }
 }
 
+/** Auto-provision a new Revualy user from their Google profile */
+async function provisionUser(email: string, name: string): Promise<RevualyUser | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/auth/provision`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-org-id": getOrgId(),
+        "x-internal-secret": getInternalSecret(),
+      },
+      body: JSON.stringify({ email, name }),
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Populate Revualy-specific columns on an authUsers row.
  * Called for both new and returning users to keep data fresh.
@@ -143,15 +162,17 @@ const nextAuth = NextAuth({
 
   callbacks: {
     async signIn({ user, account }) {
-      // Only allow Google OAuth sign-in for known Revualy users
       if (account?.provider !== "google" || !user.email) {
         return false;
       }
 
-      const revualyUser = await lookupUserByEmail(user.email);
+      // Look up existing user, or auto-provision a new one
+      let revualyUser = await lookupUserByEmail(user.email);
       if (!revualyUser) {
-        // User exists in Google but not in Revualy — deny sign-in
-        return false;
+        revualyUser = await provisionUser(user.email, user.name ?? user.email.split("@")[0]);
+        if (!revualyUser) {
+          return false; // provisioning failed
+        }
       }
 
       return true;

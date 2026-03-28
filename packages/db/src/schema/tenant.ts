@@ -977,6 +977,23 @@ export const authVerificationTokens = pgTable(
   ],
 );
 
+// ── Org Settings ────────────────────────────────────
+// Single-row table for per-tenant organization metadata.
+
+export const orgSettings = pgTable("org_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull().default("My Organization"),
+  subdomain: varchar("subdomain", { length: 100 }).notNull().default(""),
+  timezone: varchar("timezone", { length: 100 }).notNull().default("UTC"),
+  allowedDomains: jsonb("allowed_domains").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // ── Leads (demo/marketing site) ──────────────────────
 // Used when DEMO_MODE=true for lead capture before demo chat.
 
