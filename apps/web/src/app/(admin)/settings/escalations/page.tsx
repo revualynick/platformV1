@@ -28,7 +28,7 @@ async function loadEscalations(isDemo: boolean): Promise<EscalationItem[]> {
         id: String(e.id ?? ""),
         severity: String(e.severity ?? "low"),
         status: String(e.status ?? "open"),
-        subjectName: String(e.subjectId ?? "Unknown"),
+        subjectName: String(e.subjectName ?? "Employee"),
         reason: String(e.reason ?? ""),
         createdAt: e.createdAt ? new Date(String(e.createdAt)).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
         feedbackCount: 0,
@@ -84,7 +84,7 @@ export default async function EscalationsPage() {
           },
           {
             label: "Avg Resolution",
-            value: "2.1d",
+            value: resolvedCount > 0 ? "—" : "—",
             sub: "Average time to close",
             color: "text-forest",
           },

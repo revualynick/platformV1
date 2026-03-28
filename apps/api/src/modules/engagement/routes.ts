@@ -4,13 +4,15 @@ import { engagementScores, users } from "@revualy/db";
 import { requireAuth } from "../../lib/rbac.js";
 import { z } from "zod";
 
+const leaderboardQuerySchema = z.object({ week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+
 export const engagementRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
 
   // GET /leaderboard — Weekly leaderboard
   app.get("/leaderboard", async (request, reply) => {
     const { db } = request.tenant;
-    const querySchema = z.object({ week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
+    const querySchema = leaderboardQuerySchema;
     const { week } = querySchema.parse(request.query);
 
     let weekStart: string;

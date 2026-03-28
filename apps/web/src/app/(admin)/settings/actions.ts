@@ -234,6 +234,7 @@ export async function toggleVerbatim(formData: FormData): Promise<ActionResult> 
 export async function addPerson(formData: FormData): Promise<ActionResult> {
   const guard = await requireRole("admin");
   if (!guard.ok) return { ok: false, error: guard.error };
+  const { role: callerRole } = guard as { role: string };
 
   const parsed = addPersonSchema.safeParse({
     email: formData.get("email"),
@@ -243,6 +244,10 @@ export async function addPerson(formData: FormData): Promise<ActionResult> {
     timezone: formData.get("timezone") || undefined,
   });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+
+  if ((parsed.data.role === "admin" || parsed.data.role === "super_admin") && callerRole !== "super_admin") {
+    return { ok: false, error: "Only super_admin can assign admin or super_admin roles" };
+  }
 
   try {
     await createUser(parsed.data);
@@ -258,12 +263,18 @@ export async function importPeople(
 ): Promise<ActionResult & { created?: number; skipped?: number }> {
   const guard = await requireRole("admin");
   if (!guard.ok) return { ok: false, error: guard.error };
+  const { role: callerRole } = guard as { role: string };
 
   if (!data.length) return { ok: false, error: "No valid entries to import" };
   if (data.length > 500) return { ok: false, error: "Maximum 500 entries per import" };
 
   const parsed = z.array(importPersonSchema).safeParse(data);
   if (!parsed.success) return { ok: false, error: `Row validation failed: ${parsed.error.issues[0].message}` };
+
+  const hasElevatedRole = parsed.data.some((p) => p.role === "admin" || p.role === "super_admin");
+  if (hasElevatedRole && callerRole !== "super_admin") {
+    return { ok: false, error: "Only super_admin can assign admin or super_admin roles" };
+  }
 
   try {
     const result = await bulkCreateUsers(parsed.data);
@@ -385,12 +396,17 @@ export async function reactivateUserAction(formData: FormData): Promise<ActionRe
 export async function changeUserRole(formData: FormData): Promise<ActionResult> {
   const guard = await requireRole("admin");
   if (!guard.ok) return { ok: false, error: guard.error };
+  const { role: callerRole } = guard as { role: string };
 
   const parsed = changeRoleSchema.safeParse({
     userId: formData.get("userId"),
     role: formData.get("role"),
   });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+
+  if ((parsed.data.role === "admin" || parsed.data.role === "super_admin") && callerRole !== "super_admin") {
+    return { ok: false, error: "Only super_admin can assign admin or super_admin roles" };
+  }
 
   try {
     await updateUser(parsed.data.userId, { role: parsed.data.role });

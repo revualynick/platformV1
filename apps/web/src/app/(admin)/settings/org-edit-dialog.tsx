@@ -81,6 +81,7 @@ export function OrgEditDialog({ initialName, initialTimezone, initialAllowedDoma
                 <input
                   name="name"
                   type="text"
+                  required
                   defaultValue={initialName}
                   placeholder="Acme Corp"
                   className="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:border-forest focus:outline-none focus:ring-1 focus:ring-forest"

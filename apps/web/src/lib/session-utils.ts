@@ -29,5 +29,5 @@ export async function requireRole(...roles: string[]) {
   if (userRole !== "super_admin" && !roles.includes(userRole)) {
     return { ok: false as const, error: "Insufficient permissions" };
   }
-  return result;
+  return { ...result, role: userRole };
 }

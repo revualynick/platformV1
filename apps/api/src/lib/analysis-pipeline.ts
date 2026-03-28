@@ -85,7 +85,7 @@ export async function runAnalysisPipeline(
     .limit(20);
 
   // 3. Run analysis steps in parallel with graceful degradation
-  const safeContent = sanitizeForPrompt(rawContent);
+  const safeContent = rawContent;
 
   const results = await Promise.allSettled([
     analyzeSentiment(llm, safeContent),
@@ -107,7 +107,7 @@ export async function runAnalysisPipeline(
   const flagResult =
     results[3].status === "fulfilled"
       ? results[3].value
-      : { shouldFlag: false, severity: "low" as const, reason: "", flaggedContent: "" };
+      : { shouldFlag: false, severity: "coaching" as const, reason: "", flaggedContent: "" };
   const valuesResult =
     results[4].status === "fulfilled" ? results[4].value : [];
 

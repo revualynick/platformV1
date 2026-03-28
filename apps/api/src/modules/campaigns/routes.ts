@@ -34,7 +34,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (request, reply) => {
     const { db } = request.tenant;
 
-    const allCampaigns = await db.select().from(campaigns);
+    const allCampaigns = await db.select().from(campaigns).limit(100);
 
     if (allCampaigns.length === 0) {
       return reply.send({ data: [] });
@@ -297,7 +297,7 @@ export const campaignRoutes: FastifyPluginAsync = async (app) => {
     const assistantContent = response.content;
 
     const updatedHistory = [
-      ...history,
+      ...cappedHistory,
       { role: "user" as const, content: body.message },
       { role: "assistant" as const, content: assistantContent },
     ];

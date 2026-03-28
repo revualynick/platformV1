@@ -9,17 +9,9 @@ function getKey(): Buffer {
 
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("ENCRYPTION_KEY env var is required in production (64-char hex string)");
-    }
-    // Development only: derive from INTERNAL_API_SECRET (never use in production)
-    const secret = process.env.INTERNAL_API_SECRET;
-    if (!secret) {
-      throw new Error("ENCRYPTION_KEY or INTERNAL_API_SECRET is required for encryption");
-    }
-    console.warn("[encryption] WARNING: Using derived key from INTERNAL_API_SECRET — set ENCRYPTION_KEY for production");
-    _key = crypto.createHash("sha256").update(secret).digest();
-    return _key;
+    throw new Error(
+      "ENCRYPTION_KEY env var is required (64-char hex string). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    );
   }
 
   const buf = Buffer.from(key, "hex");
@@ -47,6 +39,8 @@ export function decrypt(encoded: string): string {
   const iv = Buffer.from(ivB64, "base64");
   const tag = Buffer.from(tagB64, "base64");
   const data = Buffer.from(dataB64, "base64");
+  if (iv.length !== 12) throw new Error("Invalid IV length (expected 12 bytes)");
+  if (tag.length !== 16) throw new Error("Invalid auth tag length (expected 16 bytes)");
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
   return decipher.update(data).toString("utf8") + decipher.final("utf8");

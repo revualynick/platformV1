@@ -470,6 +470,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
       .returning();
 
     if (!updated) return reply.code(404).send({ error: "Integration not found" });
-    return reply.send(updated);
+    const { config: _config, ...rest } = updated;
+    return reply.send(rest);
   });
 };

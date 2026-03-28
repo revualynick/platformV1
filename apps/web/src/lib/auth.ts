@@ -2,7 +2,7 @@ import "server-only";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { createTenantClient } from "@revualy/db";
 import {
   authUsers,
@@ -10,6 +10,7 @@ import {
   authSessions,
   authVerificationTokens,
 } from "@revualy/db/schema";
+import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared";
 
 /**
  * NextAuth.js v5 configuration.
@@ -125,6 +126,37 @@ const baseAdapter = DrizzleAdapter(tenantDb, {
   verificationTokensTable: authVerificationTokens,
 });
 
+// Encrypt/decrypt OAuth token fields on the account object
+const TOKEN_FIELDS = ["access_token", "refresh_token", "id_token"] as const;
+
+function encryptTokenFields<T extends Record<string, unknown>>(account: T): T {
+  if (!isEncryptionConfigured()) return account;
+  const copy = { ...account };
+  for (const field of TOKEN_FIELDS) {
+    const val = copy[field];
+    if (typeof val === "string" && val.length > 0) {
+      (copy as Record<string, unknown>)[field] = encrypt(val);
+    }
+  }
+  return copy;
+}
+
+function decryptTokenFields<T extends Record<string, unknown>>(account: T): T {
+  if (!isEncryptionConfigured()) return account;
+  const copy = { ...account };
+  for (const field of TOKEN_FIELDS) {
+    const val = copy[field];
+    if (typeof val === "string" && val.length > 0) {
+      try {
+        (copy as Record<string, unknown>)[field] = decrypt(val);
+      } catch {
+        // Token may not be encrypted (pre-migration data) — leave as-is
+      }
+    }
+  }
+  return copy;
+}
+
 const adapter = {
   ...baseAdapter,
   async createUser(
@@ -136,6 +168,19 @@ const adapter = {
       await syncRevualyFields(user.id, user.email);
     }
     return user;
+  },
+  async linkAccount(
+    ...args: Parameters<NonNullable<typeof baseAdapter.linkAccount>>
+  ): Promise<void> {
+    args[0] = encryptTokenFields(args[0]);
+    await baseAdapter.linkAccount!(...args);
+  },
+  async getAccount(
+    ...args: Parameters<NonNullable<typeof baseAdapter.getAccount>>
+  ) {
+    const account = await baseAdapter.getAccount!(...args);
+    if (!account) return account;
+    return decryptTokenFields(account);
   },
 };
 

@@ -27,6 +27,16 @@ import {
   oneOnOneAgendaItems,
   managerNotes,
   orgSettings,
+  campaigns,
+  feedbackDigests,
+  selfReflections,
+  discoveredThemes,
+  calibrationReports,
+  pulseCheckConfig,
+  threeSixtyResponses,
+  threeSixtyReviews,
+  integrations,
+  leads,
 } from "./schema/tenant.js";
 
 function getDbUrl(): string {
@@ -52,6 +62,7 @@ async function seed() {
   await db.delete(calendarTokens);
   await db.delete(notificationPreferences);
   await db.delete(pulseCheckTriggers);
+  await db.delete(pulseCheckConfig);
   await db.delete(interactionSchedule);
   await db.delete(oneOnOneAgendaItems);
   await db.delete(oneOnOneActionItems);
@@ -61,18 +72,27 @@ async function seed() {
   await db.delete(escalations);
   await db.delete(engagementScores);
   await db.delete(kudos);
+  await db.delete(threeSixtyResponses);
+  await db.delete(threeSixtyReviews);
+  await db.delete(selfReflections);
   await db.delete(feedbackValueScores);
   await db.delete(feedbackEntries);
   await db.delete(conversationMessages);
   await db.delete(conversations);
+  await db.delete(discoveredThemes);
   await db.delete(questions);
   await db.delete(questionnaireThemes);
+  await db.delete(campaigns);
   await db.delete(questionnaires);
   await db.delete(userRelationships);
   await db.delete(userPlatformIdentities);
   // Clear manager references before deleting users
   await db.execute(sql`UPDATE users SET manager_id = NULL`);
   await db.execute(sql`UPDATE teams SET manager_id = NULL`);
+  await db.delete(feedbackDigests);
+  await db.delete(integrations);
+  await db.delete(leads);
+  await db.delete(calibrationReports);
   await db.delete(users);
   await db.delete(coreValues);
   await db.delete(teams);

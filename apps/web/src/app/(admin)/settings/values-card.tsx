@@ -23,7 +23,15 @@ function parseValuesCSV(text: string): ParsedValue[] {
   const dataLines = hasHeader ? lines.slice(1) : lines;
   return dataLines
     .map((line) => {
-      const parts = line.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+      const parts: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (const char of line) {
+        if (char === '"') { inQuotes = !inQuotes; continue; }
+        if (char === ',' && !inQuotes) { parts.push(current.trim()); current = ""; continue; }
+        current += char;
+      }
+      parts.push(current.trim());
       return { name: parts[0] || "", description: parts[1] || "" };
     })
     .filter((v) => v.name);
@@ -38,7 +46,7 @@ function parseValuesTxtMd(text: string): ParsedValue[] {
         return { name: parts[0], description: parts[1] || "" };
       }
       // "Name - Description" or "Name: Description"
-      const sep = line.match(/\s*[-:]\s*/);
+      const sep = line.match(/\s+[-:]\s+/);
       if (sep && sep.index && sep.index > 0) {
         return { name: line.slice(0, sep.index).trim(), description: line.slice(sep.index + sep[0].length).trim() };
       }

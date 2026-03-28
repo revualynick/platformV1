@@ -12,6 +12,8 @@ import type {
 import { AnthropicAdapter } from "./providers/anthropic.js";
 import { OpenAICompatAdapter } from "./providers/openai-compat.js";
 
+const MAX_TOKENS_CAP = 4096;
+
 const ANTHROPIC_DEFAULTS: Record<ModelTier, string> = {
   fast: "claude-haiku-4-5-20251001",
   standard: "claude-sonnet-4-6",
@@ -57,7 +59,6 @@ export class LLMGateway {
       throw new Error("maxTokens must be a positive number");
     }
     // Cap maxTokens to prevent runaway costs
-    const MAX_TOKENS_CAP = 4096;
     if (request.maxTokens && request.maxTokens > MAX_TOKENS_CAP) {
       request = { ...request, maxTokens: MAX_TOKENS_CAP };
     }
@@ -66,12 +67,13 @@ export class LLMGateway {
     if (!adapter) {
       throw new Error(`No LLM provider registered: ${target}`);
     }
+    let timer: ReturnType<typeof setTimeout>;
     const result = await Promise.race([
       adapter.complete(request),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("LLM completion timed out after 30s")), 30_000),
-      ),
-    ]);
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("LLM completion timed out after 30s")), 30_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
     return result;
   }
 

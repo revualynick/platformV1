@@ -84,17 +84,16 @@ export class GoogleChatAdapter implements ChatAdapter {
   }
 
   private timingSafeTokenCompare(a: string, b: string): boolean {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.byteLength !== bufB.byteLength) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
+    const hashA = crypto.createHash("sha256").update(a).digest();
+    const hashB = crypto.createHash("sha256").update(b).digest();
+    return crypto.timingSafeEqual(hashA, hashB);
   }
 
   private isEventTimestampValid(payload: Record<string, unknown>): boolean {
     const eventTime = payload.eventTime as string | undefined;
-    if (!eventTime) return true;
+    if (!eventTime) return false;
     const eventMs = new Date(eventTime).getTime();
-    if (isNaN(eventMs)) return true;
+    if (isNaN(eventMs)) return false;
     const now = Date.now();
     return Math.abs(now - eventMs) <= 5 * 60 * 1000;
   }

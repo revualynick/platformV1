@@ -233,6 +233,7 @@ export async function handleReply(
     platform: state.platform,
     channelId: state.channelId,
     text: nextQuestion,
+    threadId: state.threadId,
   });
 
   return { state, closed: false };
@@ -259,6 +260,7 @@ async function closeConversation(
     platform: state.platform,
     channelId: state.channelId,
     text: closingMessage,
+    threadId: state.threadId,
   });
 
   // Update conversation status
@@ -344,7 +346,7 @@ Rules:
     ? [{ role: "system" as const, content: systemPrompt }]
     : [
         { role: "system" as const, content: systemPrompt },
-        ...params.priorMessages.map((m) => ({
+        ...params.priorMessages.slice(-10).map((m) => ({
           role: m.role as "system" | "user" | "assistant",
           content: m.content,
         })),

@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import websocket from "@fastify/websocket";
 import rateLimit from "@fastify/rate-limit";
+import helmet from "@fastify/helmet";
 import { authRoutes } from "./modules/auth/routes.js";
 import { chatRoutes, setConversationQueue } from "./modules/chat/routes.js";
 import { feedbackRoutes } from "./modules/feedback/routes.js";
@@ -62,6 +63,10 @@ export async function buildApp() {
   await app.register(cors, {
     origin: origins,
     credentials: true,
+  });
+  await app.register(helmet, {
+    contentSecurityPolicy: false, // CSP managed by Next.js frontend
+    hsts: false, // HSTS set on Next.js frontend — API is internal
   });
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 1_000_000 } });
@@ -136,7 +141,7 @@ async function start() {
   const isProduction = process.env.NODE_ENV === "production";
   const required = ["DATABASE_URL"];
   if (isProduction) {
-    required.push("ORG_ID", "INTERNAL_API_SECRET", "NEXTAUTH_SECRET", "NEXTAUTH_URL");
+    required.push("ORG_ID", "INTERNAL_API_SECRET", "NEXTAUTH_SECRET", "NEXTAUTH_URL", "WS_TOKEN_SECRET");
   }
   const missing = required.filter((v) => !process.env[v]);
   if (missing.length > 0) {

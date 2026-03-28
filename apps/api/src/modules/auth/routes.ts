@@ -2,30 +2,40 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import { users, orgSettings } from "@revualy/db";
 import crypto from "node:crypto";
+import { z } from "zod";
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 if (!INTERNAL_SECRET) {
   throw new Error("INTERNAL_API_SECRET env var is required");
 }
 
+function verifyInternalSecret(secret: string | undefined): boolean {
+  const expected = crypto.createHmac("sha256", INTERNAL_SECRET!).update("revualy").digest();
+  const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
+  return !!secret && crypto.timingSafeEqual(expected, actual);
+}
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  // Stricter rate limit for auth endpoints (10 req/min per IP)
+  const authRateLimit = {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute", keyGenerator: (request: import("fastify").FastifyRequest) => request.ip } },
+  };
+
   /**
    * GET /auth/lookup?email=...
    * Internal-only: called by NextAuth during sign-in to resolve a Revualy user.
    * Protected by a shared secret (not exposed to browsers).
    */
-  app.get("/lookup", async (request, reply) => {
-    const secret = request.headers["x-internal-secret"] as string | undefined;
-    const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
-    const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
-    if (!secret || !crypto.timingSafeEqual(expected, actual)) {
+  app.get("/lookup", authRateLimit, async (request, reply) => {
+    if (!verifyInternalSecret(request.headers["x-internal-secret"] as string | undefined)) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { email } = request.query as { email?: string };
-    if (!email) {
-      return reply.code(400).send({ error: "email query parameter required" });
+    const lookupQuery = z.object({ email: z.string().email() }).safeParse(request.query);
+    if (!lookupQuery.success) {
+      return reply.code(400).send({ error: "Valid email query parameter required" });
     }
+    const { email } = lookupQuery.data;
 
     const { db, orgId } = request.tenant;
     const [user] = await db
@@ -53,18 +63,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * Called by NextAuth signIn callback when the user doesn't exist yet.
    * Returns the newly created user (or existing user if race condition).
    */
-  app.post("/provision", async (request, reply) => {
-    const secret = request.headers["x-internal-secret"] as string | undefined;
-    const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
-    const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
-    if (!secret || !crypto.timingSafeEqual(expected, actual)) {
+  app.post("/provision", authRateLimit, async (request, reply) => {
+    if (!verifyInternalSecret(request.headers["x-internal-secret"] as string | undefined)) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const { email: rawEmail, name } = request.body as { email?: string; name?: string };
-    if (!rawEmail) {
-      return reply.code(400).send({ error: "email is required" });
+    const provisionBody = z.object({ email: z.string().email(), name: z.string().optional() }).safeParse(request.body);
+    if (!provisionBody.success) {
+      return reply.code(400).send({ error: "Valid email is required" });
     }
+    const { email: rawEmail, name } = provisionBody.data;
 
     const email = rawEmail.toLowerCase();
     const { db, orgId } = request.tenant;

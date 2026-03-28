@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { users, engagementScores } from "@revualy/db";
 import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema, createUserSchema, bulkCreateUsersSchema } from "../../lib/validation.js";
-import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import { syncAuthUser } from "../../lib/auth-sync.js";
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
@@ -42,7 +42,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
 
     // Only super_admin can create admin or super_admin users
     if (body.role === "admin" || body.role === "super_admin") {
-      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      const callerId = getAuthenticatedUserId(request);
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
       if (!caller || caller.role !== "super_admin") {
         return reply.code(403).send({ error: "Only super_admin can create admin or super_admin users" });
       }
@@ -71,7 +72,8 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
     // Only super_admin can create admin or super_admin users in bulk
     const hasElevatedRole = body.users.some((u) => u.role === "admin" || u.role === "super_admin");
     if (hasElevatedRole) {
-      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      const callerId = getAuthenticatedUserId(request);
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
       if (!caller || caller.role !== "super_admin") {
         return reply.code(403).send({ error: "Only super_admin can create admin or super_admin users" });
       }
@@ -250,14 +252,20 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   // POST /users/:id/deactivate — Deactivate a user (admin only)
   app.post("/:id/deactivate", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const callerId = getAuthenticatedUserId(request);
+
+    // Prevent self-deactivation
+    if (id === callerId) {
+      return reply.code(400).send({ error: "You cannot deactivate yourself" });
+    }
 
     // Only super_admin can deactivate admin/super_admin users
     const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
     if (!target) return reply.code(404).send({ error: "User not found" });
 
     if (target.role === "admin" || target.role === "super_admin") {
-      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
       if (!caller || caller.role !== "super_admin") {
         return reply.code(403).send({ error: "Only super_admin can deactivate admin or super_admin users" });
       }
@@ -275,14 +283,15 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
   // POST /users/:id/reactivate — Reactivate a user (admin only)
   app.post("/:id/reactivate", { preHandler: requireRole("admin") }, async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
+    const callerId = getAuthenticatedUserId(request);
 
     // Only super_admin can reactivate admin/super_admin users
     const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
     if (!target) return reply.code(404).send({ error: "User not found" });
 
     if (target.role === "admin" || target.role === "super_admin") {
-      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId!));
+      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
       if (!caller || caller.role !== "super_admin") {
         return reply.code(403).send({ error: "Only super_admin can reactivate admin or super_admin users" });
       }
@@ -334,7 +343,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       .select()
       .from(engagementScores)
       .where(eq(engagementScores.userId, id))
-      .orderBy(engagementScores.weekStarting)
+      .orderBy(desc(engagementScores.weekStarting))
       .limit(52); // Max 1 year of weekly scores
 
     return reply.send({ data: scores, userId: id });

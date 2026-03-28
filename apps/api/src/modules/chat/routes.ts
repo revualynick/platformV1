@@ -19,7 +19,7 @@ async function handleWebhook(
 ) {
   if (!app.adapters.has(platform)) return { status: 503, body: { error: `${platform} adapter not configured` } };
 
-  const adapter = app.adapters.get(platform);
+  const adapter = app.adapters.get(platform)!;
   const verification = await adapter.verifyWebhook(headers, verifyBody);
 
   if (!verification.isValid) return { status: 401, body: { error: "Invalid signature" } };

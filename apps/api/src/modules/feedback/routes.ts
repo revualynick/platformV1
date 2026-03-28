@@ -8,6 +8,9 @@ import {
 } from "@revualy/db";
 import { parseBody, idParamSchema } from "../../lib/validation.js";
 import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { z } from "zod";
+
+const feedbackLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
 
 export const feedbackRoutes: FastifyPluginAsync = async (app) => {
   // All feedback routes require authentication
@@ -47,13 +50,13 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       // Admins pass through
     }
 
-    const { limit = "50" } = request.query as { limit?: string };
+    const { limit } = feedbackLimitSchema.parse(request.query);
     const entries = await db
       .select()
       .from(feedbackEntries)
       .where(eq(feedbackEntries.subjectId, id))
       .orderBy(desc(feedbackEntries.createdAt))
-      .limit(Math.min(parseInt(limit, 10) || 50, 200));
+      .limit(limit);
 
     // Fetch value scores for the entries on this page
     const entryIds = entries.map((e) => e.id);

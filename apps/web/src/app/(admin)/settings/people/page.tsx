@@ -93,10 +93,8 @@ export default async function PeoplePage() {
               <tbody className="divide-y divide-stone-50">
                 {users.map((user) => {
                   const initials = user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join("");
+                    ? user.name.split(" ").map((n) => n[0] ?? "").filter(Boolean).slice(0, 2).join("") || user.email[0]?.toUpperCase() || "?"
+                    : "?";
                   return (
                     <tr
                       key={user.id}

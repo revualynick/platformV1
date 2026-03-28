@@ -149,7 +149,8 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       })
       .from(oneOnOneSessions)
       .where(and(...conditions))
-      .orderBy(desc(oneOnOneSessions.scheduledAt));
+      .orderBy(desc(oneOnOneSessions.scheduledAt))
+      .limit(100);
 
     return reply.send({ data: sessions });
   });
@@ -248,8 +249,10 @@ export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
       .where(statusGuard)
       .returning();
 
-    if (!updated && body.status) {
-      return reply.code(409).send({ error: "Session was modified concurrently, please retry" });
+    if (!updated) {
+      return reply.code(body.status ? 409 : 404).send({
+        error: body.status ? "Session was modified concurrently, please retry" : "Session not found",
+      });
     }
 
     // Return full session detail

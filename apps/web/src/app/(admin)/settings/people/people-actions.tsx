@@ -52,7 +52,15 @@ function parseCSV(text: string): ParsedPerson[] {
   const dataLines = hasHeader ? lines.slice(1) : lines;
   return dataLines
     .map((line) => {
-      const parts = line.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+      const parts: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (const char of line) {
+        if (char === '"') { inQuotes = !inQuotes; continue; }
+        if (char === ',' && !inQuotes) { parts.push(current.trim()); current = ""; continue; }
+        current += char;
+      }
+      parts.push(current.trim());
       return validatePerson({
         email: parts[0] || "",
         name: parts[1] || "",
@@ -81,7 +89,7 @@ function parseTxtMd(text: string): ParsedPerson[] {
       }
       const parts = line.split(/\s+/);
       const email = parts[0] || "";
-      const roleCandidates = ["employee", "manager", "admin"];
+      const roleCandidates = ["employee", "manager", "admin", "super_admin"];
       const lastPart = parts[parts.length - 1];
       const role = roleCandidates.includes(lastPart) ? lastPart : "employee";
       const nameParts =

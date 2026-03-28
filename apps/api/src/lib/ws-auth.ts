@@ -1,13 +1,9 @@
 import crypto from "node:crypto";
 
-const WS_SECRET = process.env.WS_TOKEN_SECRET ?? (() => {
-  if (process.env.INTERNAL_API_SECRET) {
-    if (process.env.NODE_ENV === "production") {
-      console.warn("WS_TOKEN_SECRET not set — falling back to INTERNAL_API_SECRET. Set a dedicated WS_TOKEN_SECRET for production.");
-    }
-    return process.env.INTERNAL_API_SECRET;
-  }
-  return undefined;
+const WS_SECRET: string = (() => {
+  const secret = process.env.WS_TOKEN_SECRET;
+  if (!secret) throw new Error("WS_TOKEN_SECRET env var is required");
+  return secret;
 })();
 const TOKEN_TTL_MS = 60_000; // 60 seconds — token is only for initial WS handshake
 
@@ -27,10 +23,6 @@ export function generateWsToken(
   orgId: string,
   sessionId: string,
 ): string {
-  if (!WS_SECRET) {
-    throw new Error("INTERNAL_API_SECRET is required for WS token generation");
-  }
-
   const payload: WsTokenPayload = {
     userId,
     orgId,
@@ -53,8 +45,6 @@ export function generateWsToken(
  * Returns the payload if valid, null otherwise.
  */
 export function verifyWsToken(token: string): WsTokenPayload | null {
-  if (!WS_SECRET) return null;
-
   const parts = token.split(".");
   if (parts.length !== 2) return null;
 

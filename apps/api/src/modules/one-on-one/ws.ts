@@ -128,7 +128,7 @@ function handleDisconnect(sessionId: string) {
   if (!room) return;
   if (!room.managerSocket && !room.employeeSocket) {
     // Both gone — clean up immediately
-    forceCleanupRoom(sessionId);
+    forceCleanupRoom(sessionId).catch((err) => console.error("[WS] Cleanup failed:", err));
   } else {
     // One side still connected — start staleness timer to force cleanup if the other side never reconnects
     if (room.stalenessTimer) clearTimeout(room.stalenessTimer);

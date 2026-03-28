@@ -40,8 +40,8 @@ const initiateJobSchema = z.object({
   orgId: z.string(),
   reviewerId: z.string(),
   subjectId: z.string(),
-  interactionType: z.string(),
-  platform: z.string(),
+  interactionType: z.enum(["peer_review", "self_reflection", "three_sixty", "pulse_check"]),
+  platform: z.enum(["slack", "google_chat", "teams", "internal"]),
   channelId: z.string().optional(),
   questionnaireId: z.string(),
 });
@@ -56,7 +56,7 @@ const replyJobSchema = z.object({
 const closeJobSchema = z.object({
   type: z.literal("close"),
   conversationId: z.string(),
-  orgId: z.string().optional(),
+  orgId: z.string(),
 });
 
 const analysisJobSchema = z.object({
@@ -290,18 +290,16 @@ export function createWorkers(config: WorkerConfig) {
         case "close": {
           const data = closeJobSchema.parse(job.data);
 
-          if (data.orgId) {
-            const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
-            await db
-              .update(conversations)
-              .set({ status: "closed", closedAt: new Date() })
-              .where(eq(conversations.id, data.conversationId));
+          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+          await db
+            .update(conversations)
+            .set({ status: "closed", closedAt: new Date() })
+            .where(eq(conversations.id, data.conversationId));
 
-            await queues.analysisQueue.add("analyze", {
-              conversationId: data.conversationId,
-              orgId: data.orgId,
-            });
-          }
+          await queues.analysisQueue.add("analyze", {
+            conversationId: data.conversationId,
+            orgId: data.orgId,
+          });
 
           await deleteConversationState(data.conversationId);
           break;
