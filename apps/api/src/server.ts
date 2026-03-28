@@ -29,7 +29,7 @@ import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
-import { runMigrations } from "@revualy/db";
+import { runMigrations } from "@revualy/db/migrate";
 import { AdapterRegistry } from "@revualy/chat-core";
 import { SlackAdapter } from "@revualy/chat-adapter-slack";
 import { GoogleChatAdapter } from "@revualy/chat-adapter-gchat";
