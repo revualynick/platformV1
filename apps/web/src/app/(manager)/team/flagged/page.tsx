@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getFlaggedItems, getUsers } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getFlaggedItemsForReports, listActiveUsers } from "@revualy/db/queries";
 import {
   flaggedItems as mockFlaggedItems,
   teamMembers as mockTeamMembers,
@@ -28,17 +29,17 @@ type TeamMember = {
 
 async function loadFlaggedData(userId: string, isDemo: boolean) {
   try {
-    const [flaggedResult, usersResult] = await Promise.allSettled([
-      getFlaggedItems(),
-      getUsers({ managerId: userId }),
-    ]);
+    const db = getDb();
+    const members = await listActiveUsers(db, { managerId: userId });
+    const memberIds = members.map((m) => m.id);
+    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch(() => []);
 
     let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
-    if (flaggedResult.status === "fulfilled" && flaggedResult.value.data.length > 0) {
-      flaggedItems = flaggedResult.value.data.map((item) => ({
+    if (flaggedResult.length > 0) {
+      flaggedItems = flaggedResult.map((item) => ({
         id: item.escalation.id,
         severity: item.escalation.severity,
-        subjectName: "Team Member",
+        subjectName: item.subjectName ?? "Team Member",
         reason: item.escalation.reason,
         excerpt: item.escalation.flaggedContent || null,
         date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
@@ -53,7 +54,7 @@ async function loadFlaggedData(userId: string, isDemo: boolean) {
           .sort((a, b) => a.engagementScore - b.engagementScore)
       : [];
 
-    if (usersResult.status === "fulfilled" && usersResult.value.data.length > 0) {
+    if (members.length > 0) {
       // Basic at-risk: members exist but we don't have their scores without extra fetches
       // Keep mock for now — team page already fetches full engagement data
       needsAttention = needsAttention;

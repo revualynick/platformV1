@@ -14,9 +14,18 @@ function getInternalSecret(): string {
   return secret;
 }
 
+// ── Cache tiers ───────────────────────────────────────
+type CacheTier = "none" | "short" | "medium" | "long";
+
+const REVALIDATE: Record<Exclude<CacheTier, "none">, number> = {
+  short: 60,    // 1 min — flagged items, feedback, dashboard stats
+  medium: 300,  // 5 min — team roster, engagement scores, leaderboard
+  long: 3600,   // 1 hr  — org config, core values, org settings
+};
+
 async function apiFetch<T>(
   path: string,
-  init?: RequestInit,
+  init?: RequestInit & { cacheTier?: CacheTier; tags?: string[] },
 ): Promise<T> {
   // Resolve auth session for tenant context
   const session = await auth();
@@ -30,6 +39,8 @@ async function apiFetch<T>(
     "x-internal-secret": getInternalSecret(),
   };
 
+  const cacheTier = init?.cacheTier ?? "none";
+
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     ...init,
@@ -38,8 +49,14 @@ async function apiFetch<T>(
       ...authHeaders,
       ...init?.headers,
     },
-    // Default to no-store for mutation-sensitive data; callers can override
-    cache: init?.cache ?? "no-store",
+    cache: cacheTier === "none" ? "no-store" : "force-cache",
+    next:
+      cacheTier === "none"
+        ? undefined
+        : {
+            revalidate: REVALIDATE[cacheTier],
+            tags: init?.tags,
+          },
   });
 
   if (!res.ok) {
@@ -77,6 +94,7 @@ export interface TeamRow {
 export async function getOrgConfig() {
   return apiFetch<{ coreValues: CoreValueRow[]; teams: TeamRow[] }>(
     "/api/v1/admin/org",
+    { cacheTier: "long", tags: ["org-config"] },
   );
 }
 
@@ -138,6 +156,7 @@ export interface QuestionnaireRow {
 export async function getQuestionnaires() {
   return apiFetch<{ data: QuestionnaireRow[] }>(
     "/api/v1/admin/questionnaires",
+    { cacheTier: "long", tags: ["questionnaires"] },
   );
 }
 
@@ -225,10 +244,6 @@ export interface OrgSettingsRow {
   allowedDomains: string[];
 }
 
-export async function getOrgSettings() {
-  return apiFetch<OrgSettingsRow>("/api/v1/admin/org-settings");
-}
-
 export async function updateOrgSettings(data: {
   name?: string;
   timezone?: string;
@@ -281,11 +296,11 @@ export async function bulkCreateUsers(
 }
 
 export async function getUser(id: string) {
-  return apiFetch<UserRow>(`/api/v1/users/${id}`);
+  return apiFetch<UserRow>(`/api/v1/users/${id}`, { cacheTier: "short", tags: ["users"] });
 }
 
 export async function getCurrentUser() {
-  return apiFetch<UserRow>("/api/v1/auth/me");
+  return apiFetch<UserRow>("/api/v1/auth/me", { cacheTier: "short", tags: ["current-user"] });
 }
 
 export async function updateUser(
@@ -317,7 +332,7 @@ export async function getUsers(filters?: { teamId?: string; managerId?: string }
   if (filters?.teamId) params.set("teamId", filters.teamId);
   if (filters?.managerId) params.set("managerId", filters.managerId);
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<{ data: UserRow[] }>(`/api/v1/users${qs}`);
+  return apiFetch<{ data: UserRow[] }>(`/api/v1/users${qs}`, { cacheTier: "medium", tags: ["users"] });
 }
 
 // ── Engagement ─────────────────────────────────────────
@@ -333,18 +348,6 @@ export interface EngagementScoreRow {
   streak: number;
   rank: number | null;
   createdAt: string;
-}
-
-export async function getEngagementScores(userId: string) {
-  return apiFetch<{ data: EngagementScoreRow[]; userId: string }>(
-    `/api/v1/users/${userId}/engagement`,
-  );
-}
-
-export async function getBulkEngagementScores(userIds: string[]) {
-  return apiFetch<{ data: Record<string, EngagementScoreRow[]> }>(
-    `/api/v1/engagement/bulk?userIds=${userIds.join(",")}`,
-  );
 }
 
 // ── Feedback ───────────────────────────────────────────
@@ -371,30 +374,6 @@ export interface FeedbackEntryRow {
   }>;
 }
 
-export async function getFeedback(userId: string) {
-  return apiFetch<{ data: FeedbackEntryRow[]; userId: string }>(
-    `/api/v1/users/${userId}/feedback`,
-  );
-}
-
-export async function getFlaggedItems() {
-  return apiFetch<{
-    data: Array<{
-      escalation: {
-        id: string;
-        feedbackEntryId: string;
-        severity: string;
-        reason: string;
-        flaggedContent: string;
-        resolvedAt: string | null;
-        resolvedById: string | null;
-        createdAt: string;
-      };
-      feedback: FeedbackEntryRow;
-    }>;
-  }>("/api/v1/feedback/flagged");
-}
-
 // ── Relationships ──────────────────────────────────────
 
 export interface GraphNode {
@@ -414,18 +393,6 @@ export interface GraphEdge {
   tags: string[];
   strength: number;
   source: string;
-}
-
-export async function getOrgGraph() {
-  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
-    "/api/v1/relationships",
-  );
-}
-
-export async function getUserRelationships(userId: string) {
-  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
-    `/api/v1/users/${userId}/relationships`,
-  );
 }
 
 export async function createRelationship(data: {
@@ -476,29 +443,6 @@ export async function updateManager(
   });
 }
 
-// ── Conversations ──────────────────────────────────────
-
-export async function getConversations(status?: string) {
-  const params = status ? `?status=${status}` : "";
-  return apiFetch<{ data: Array<Record<string, unknown>> }>(
-    `/api/v1/conversations${params}`,
-  );
-}
-
-export async function getConversation(id: string) {
-  return apiFetch<Record<string, unknown>>(
-    `/api/v1/conversations/${id}`,
-  );
-}
-
-// ── Escalations ────────────────────────────────────────
-
-export async function getEscalations() {
-  return apiFetch<{ data: Array<Record<string, unknown>> }>(
-    "/api/v1/escalations",
-  );
-}
-
 // ── Kudos ──────────────────────────────────────────────
 
 export interface KudosRow {
@@ -511,12 +455,6 @@ export interface KudosRow {
   coreValueId: string | null;
   source: string;
   createdAt: string;
-}
-
-export async function getKudos(userId: string) {
-  return apiFetch<{ data: KudosRow[]; userId: string }>(
-    `/api/v1/kudos?userId=${userId}`,
-  );
 }
 
 export async function createKudos(data: {
@@ -537,12 +475,6 @@ export interface ManagerQuestionnaireRow extends QuestionnaireRow {
   teamScope: string | null;
 }
 
-export async function getManagerQuestionnaires() {
-  return apiFetch<{ data: ManagerQuestionnaireRow[] }>(
-    "/api/v1/manager/questionnaires",
-  );
-}
-
 export async function createManagerQuestionnaire(data: {
   name: string;
   category: string;
@@ -559,12 +491,6 @@ export async function createManagerQuestionnaire(data: {
     method: "POST",
     body: JSON.stringify(data),
   });
-}
-
-export async function getManagerOrgChart() {
-  return apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
-    "/api/v1/manager/org-chart",
-  );
 }
 
 export async function createManagerRelationship(data: {
@@ -590,12 +516,6 @@ export interface ManagerNoteRow {
   content: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export async function getManagerNotes(subjectId: string) {
-  return apiFetch<{ data: ManagerNoteRow[] }>(
-    `/api/v1/manager/notes?subjectId=${subjectId}`,
-  );
 }
 
 export async function createManagerNote(data: {
@@ -678,12 +598,14 @@ export async function getOneOnOneSessions(opts?: {
   const qs = params.toString() ? `?${params}` : "";
   return apiFetch<{ data: OneOnOneSession[] }>(
     `/api/v1/one-on-one-sessions${qs}`,
+    { cacheTier: "short", tags: ["sessions"] },
   );
 }
 
 export async function getOneOnOneSession(id: string) {
   return apiFetch<OneOnOneSessionDetail>(
     `/api/v1/one-on-one-sessions/${id}`,
+    { cacheTier: "short", tags: ["sessions"] },
   );
 }
 
@@ -787,12 +709,6 @@ export interface NotificationPreference {
   updatedAt: string | null;
 }
 
-export async function getNotificationPreferences() {
-  return apiFetch<{ data: NotificationPreference[] }>(
-    "/api/v1/notifications/preferences",
-  );
-}
-
 export async function updateNotificationPreference(data: {
   type: string;
   enabled: boolean;
@@ -873,16 +789,6 @@ export interface ReflectionStatsRow {
   topMood: string | null;
 }
 
-export async function getReflections(limit = 12) {
-  return apiFetch<{ data: SelfReflectionRow[] }>(
-    `/api/v1/reflections?limit=${limit}`,
-  );
-}
-
-export async function getReflectionStats() {
-  return apiFetch<ReflectionStatsRow>("/api/v1/reflections/stats");
-}
-
 // ── Campaigns ───────────────────────────────────────────
 
 export type CampaignStatus =
@@ -919,12 +825,8 @@ export interface CampaignRow {
   } | null;
 }
 
-export async function getCampaigns() {
-  return apiFetch<{ data: CampaignRow[] }>("/api/v1/admin/campaigns");
-}
-
 export async function getCampaign(id: string) {
-  return apiFetch<CampaignRow>(`/api/v1/admin/campaigns/${id}`);
+  return apiFetch<CampaignRow>(`/api/v1/admin/campaigns/${id}`, { cacheTier: "medium", tags: ["campaigns"] });
 }
 
 export async function createCampaign(data: {
@@ -998,10 +900,6 @@ export interface IntegrationRow {
   updatedAt: string;
 }
 
-export async function getIntegrations() {
-  return apiFetch<{ data: IntegrationRow[] }>("/api/v1/admin/integrations");
-}
-
 export async function connectIntegration(
   id: string,
   data: { config?: Record<string, unknown>; workspace?: string },
@@ -1056,14 +954,3 @@ export interface FeedbackDigestRow {
   updatedAt: string;
 }
 
-export async function getTeamInsights() {
-  return apiFetch<{ data: FeedbackDigestRow[] }>(
-    "/api/v1/manager/team-insights",
-  );
-}
-
-export async function getTeamInsightMonth(month: string) {
-  return apiFetch<FeedbackDigestRow>(
-    `/api/v1/manager/team-insights/${month}`,
-  );
-}

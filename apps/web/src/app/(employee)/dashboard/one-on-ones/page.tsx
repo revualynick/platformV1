@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getOneOnOneSessions, getCurrentUser, getUser } from "@/lib/api";
-import type { OneOnOneSession } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getSessionsForPair, getUserWithManager, getUserById } from "@revualy/db/queries";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionList } from "@/components/session-list";
 
@@ -14,30 +14,30 @@ async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDem
   }
 
   try {
-    const user = await getCurrentUser();
-    const managerId = user.managerId;
+    const user = await getUserWithManager(getDb(), userId);
+    const managerId = user?.managerId ?? null;
 
     if (!managerId) {
       return {
-        sessions: [] as OneOnOneSession[],
+        sessions: [],
         managerName: null,
         hasManager: false,
       };
     }
 
     const [sessionsResult, managerResult] = await Promise.allSettled([
-      getOneOnOneSessions({ employeeId: userId }),
-      getUser(managerId),
+      getSessionsForPair(getDb(), userId),
+      getUserById(getDb(), managerId),
     ]);
 
     return {
-      sessions: sessionsResult.status === "fulfilled" ? sessionsResult.value.data : [],
-      managerName: managerResult.status === "fulfilled" ? managerResult.value.name : "Your Manager",
+      sessions: sessionsResult.status === "fulfilled" ? sessionsResult.value : [],
+      managerName: managerResult.status === "fulfilled" && managerResult.value ? managerResult.value.name : "Your Manager",
       hasManager: true,
     };
   } catch {
     return {
-      sessions: isDemo ? mockSessions as OneOnOneSession[] : [],
+      sessions: isDemo ? mockSessions : [],
       managerName: isDemo ? "Jordan Wells" : null,
       hasManager: isDemo,
     };
@@ -86,7 +86,10 @@ export default async function OneOnOnesPage() {
 
       <div className="card-enter">
         <SessionList
-          sessions={data.sessions}
+          /* DB rows have Date objects + wide string status; Next.js serializes
+             Dates to strings when passing to client components, matching the expected shape */
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          sessions={data.sessions as any}
           linkPrefix="/dashboard/one-on-ones"
           partnerName={data.managerName ?? "Your Manager"}
         />

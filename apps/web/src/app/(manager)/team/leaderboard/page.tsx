@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getUsers, getBulkEngagementScores } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { listActiveUsers, getBulkLatestEngagement } from "@revualy/db/queries";
 import {
   leaderboard as mockLeaderboard,
   leaderboardHistory as mockHistory,
@@ -25,9 +26,9 @@ type LeaderboardEntry = {
 
 async function loadLeaderboardData(userId: string, isDemo: boolean) {
   try {
-    const usersResult = await getUsers({ managerId: userId });
+    const teamUsers = await listActiveUsers(getDb(), { managerId: userId });
 
-    if (usersResult.data.length === 0) {
+    if (teamUsers.length === 0) {
       if (isDemo) {
         const members = mockTeamMembers as Array<{ name: string; interactionsThisWeek: number; target: number }>;
         return {
@@ -43,11 +44,10 @@ async function loadLeaderboardData(userId: string, isDemo: boolean) {
       return { leaderboard: [], history: [], teamSize: 0, activeCount: 0 };
     }
 
-    const teamUsers = usersResult.data;
-    const bulkEng = await getBulkEngagementScores(teamUsers.map((u) => u.id)).catch(() => ({ data: {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>> }));
+    const bulkEng = await getBulkLatestEngagement(getDb(), teamUsers.map((u) => u.id)).catch(() => ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>));
 
     const entries: LeaderboardEntry[] = teamUsers.map((u) => {
-      const scores = bulkEng.data[u.id] ?? [];
+      const scores = bulkEng[u.id] ?? [];
       if (scores.length > 0) {
         const latest = scores[0];
         return {

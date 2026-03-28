@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getKudos, getOrgConfig, getUsers } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getKudosForUser, getActiveCoreValues, listActiveUsers } from "@revualy/db/queries";
 import {
   kudosReceived as mockReceived,
   kudosGiven as mockGiven,
@@ -34,15 +35,15 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
 
   try {
     const [kudosResult, orgResult, usersResult] = await Promise.allSettled([
-      getKudos(userId),
-      getOrgConfig(),
-      getUsers(),
+      getKudosForUser(getDb(), userId),
+      getActiveCoreValues(getDb()),
+      listActiveUsers(getDb()),
     ]);
 
     const valuesMap = new Map<string, string>();
     const valuesList: Array<{ id: string; name: string }> = [];
     if (orgResult.status === "fulfilled") {
-      orgResult.value.coreValues.forEach((v) => {
+      orgResult.value.forEach((v) => {
         valuesMap.set(v.id, v.name);
         valuesList.push({ id: v.id, name: v.name });
       });
@@ -50,13 +51,13 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
 
     const usersList: Array<{ id: string; name: string }> = [];
     if (usersResult.status === "fulfilled") {
-      usersResult.value.data
+      usersResult.value
         .filter((u) => u.id !== userId && u.isActive)
         .forEach((u) => usersList.push({ id: u.id, name: u.name }));
     }
 
-    if (kudosResult.status === "fulfilled" && kudosResult.value.data.length > 0) {
-      const all = kudosResult.value.data;
+    if (kudosResult.status === "fulfilled" && kudosResult.value.length > 0) {
+      const all = kudosResult.value;
       const received: KudosItem[] = all
         .filter((k) => k.receiverId === userId)
         .map((k) => ({

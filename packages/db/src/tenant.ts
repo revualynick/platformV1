@@ -9,8 +9,11 @@ export type TenantDb = TenantClient["db"];
 let cachedClient: { db: TenantDb; sql: ReturnType<typeof postgres> } | null =
   null;
 
-export function createTenantClient(connectionString: string) {
-  const sql = postgres(connectionString, { max: 10 });
+export function createTenantClient(
+  connectionString: string,
+  opts?: { max?: number },
+) {
+  const sql = postgres(connectionString, { max: opts?.max ?? 10 });
   const db = drizzle(sql, { schema: tenantSchema });
   return { db, sql };
 }

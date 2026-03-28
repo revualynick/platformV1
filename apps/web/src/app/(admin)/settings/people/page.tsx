@@ -1,15 +1,16 @@
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getUsers } from "@/lib/api";
-import type { UserRow } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { listActiveUsers } from "@revualy/db/queries";
 import PeopleChart from "./people-chart";
 import { AddPersonDialog, ImportPeopleDialog, DeactivateButton } from "./people-actions";
+
+type UserRow = Awaited<ReturnType<typeof listActiveUsers>>[number];
 
 async function loadUsers(isDemo: boolean): Promise<UserRow[]> {
   if (isDemo) return [];
   try {
-    const { data } = await getUsers();
-    return data;
+    return await listActiveUsers(getDb());
   } catch {
     return [];
   }

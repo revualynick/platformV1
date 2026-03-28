@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getManagerQuestionnaires } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getManagerQuestionnaires, getUserWithManager } from "@revualy/db/queries";
 import { questionnaires as mockQuestionnaires } from "@/lib/mock-data";
 import { CreateQuestionnaireModal } from "@/components/create-questionnaire-modal";
 import { isDemoSession } from "@/lib/session-utils";
@@ -18,13 +20,15 @@ const categoryColors: Record<string, string> = {
   pulse_check: "bg-amber-100 text-amber-700",
 };
 
-async function loadQuestionnaires(isDemo: boolean) {
+async function loadQuestionnaires(userId: string, isDemo: boolean) {
   try {
-    const result = await getManagerQuestionnaires();
-    if (result.data.length > 0) {
+    const db = getDb();
+    const user = await getUserWithManager(db, userId);
+    const rows = await getManagerQuestionnaires(db, userId, user?.teamId ?? null);
+    if (rows.length > 0) {
       return {
-        teamQuestions: result.data.filter((q) => q.createdByUserId !== null),
-        orgQuestions: result.data.filter((q) => q.createdByUserId === null),
+        teamQuestions: rows.filter((q: { createdByUserId: string | null }) => q.createdByUserId !== null),
+        orgQuestions: rows.filter((q: { createdByUserId: string | null }) => q.createdByUserId === null),
       };
     }
   } catch {
@@ -59,8 +63,10 @@ async function loadQuestionnaires(isDemo: boolean) {
 
 export default async function QuestionsPage() {
   const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
   const isDemo = isDemoSession(session);
-  const { teamQuestions, orgQuestions } = await loadQuestionnaires(isDemo);
+  const { teamQuestions, orgQuestions } = await loadQuestionnaires(userId, isDemo);
 
   return (
     <div className="max-w-5xl">

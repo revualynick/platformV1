@@ -2,7 +2,8 @@ import { escalationDetails } from "@/lib/mock-data";
 import { severityStyles, escalationStatusStyles as statusStyles } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getEscalations } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getEscalations as getEscalationsQuery } from "@revualy/db/queries";
 
 type AuditEntry = { action: string; by: string; date: string; notes: string | null };
 type RelatedFeedback = { id: string; date: string; score: number; excerpt: string };
@@ -21,21 +22,18 @@ type EscalationItem = {
 async function loadEscalations(isDemo: boolean): Promise<EscalationItem[]> {
   if (isDemo) return escalationDetails as EscalationItem[];
   try {
-    const { data } = await getEscalations();
-    return data.map((r) => {
-      const e = r as Record<string, unknown>;
-      return {
-        id: String(e.id ?? ""),
-        severity: String(e.severity ?? "low"),
-        status: String(e.status ?? "open"),
-        subjectName: String(e.subjectName ?? "Employee"),
-        reason: String(e.reason ?? ""),
-        createdAt: e.createdAt ? new Date(String(e.createdAt)).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
-        feedbackCount: 0,
-        auditTrail: [],
-        relatedFeedback: [],
-      };
-    });
+    const rows = await getEscalationsQuery(getDb());
+    return rows.map((e) => ({
+      id: e.id,
+      severity: e.severity,
+      status: e.status,
+      subjectName: e.subjectName ?? "Employee",
+      reason: e.reason,
+      createdAt: e.createdAt ? new Date(e.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "",
+      feedbackCount: 0,
+      auditTrail: [],
+      relatedFeedback: [],
+    }));
   } catch {
     return [];
   }

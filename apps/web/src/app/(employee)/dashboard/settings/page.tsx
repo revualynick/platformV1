@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getNotificationPreferences } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getNotificationPreferences as queryNotifPrefs } from "@revualy/db/queries";
 import { notificationPreferences as mockPreferences } from "@/lib/mock-data";
 import { PreferenceToggles } from "./preference-toggles";
 
@@ -31,10 +33,12 @@ export default async function SettingsPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
 
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
+
   let preferences;
   try {
-    const result = await getNotificationPreferences();
-    preferences = result.data;
+    preferences = await queryNotifPrefs(getDb(), userId);
   } catch {
     preferences = isDemo ? mockPreferences : [];
   }

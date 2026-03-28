@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { getDb } from "@/lib/db";
+import { getOrgChartForManager } from "@revualy/db/queries";
 import {
   orgPeople,
   orgThreads,
@@ -11,34 +14,65 @@ const MANAGER_ID = "p2";
 
 export default async function OrgChartPage() {
   const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
   const isDemo = isDemoSession(session);
 
-  const teamIds = new Set<string>();
+  let teamPeople: Array<{ id: string; name: string; role: string; title: string; team: string; reportsTo: string | null }> = [];
+  let teamThreads: Array<{ id: string; from: string; to: string; tags: string[]; strength: number; label: string }> = [];
+
   if (isDemo) {
+    const teamIds = new Set<string>();
     teamIds.add(MANAGER_ID);
     for (const p of orgPeople) {
       if (p.reportsTo === MANAGER_ID) teamIds.add(p.id);
     }
+    teamPeople = orgPeople
+      .filter((p) => teamIds.has(p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        title: p.title ?? "",
+        team: p.team ?? "",
+        reportsTo: p.reportsTo,
+      }));
+    teamThreads = orgThreads
+      .filter((t) => teamIds.has(t.from) && teamIds.has(t.to))
+      .map((t) => ({
+        id: t.id,
+        from: t.from,
+        to: t.to,
+        tags: t.tags,
+        strength: t.strength,
+        label: t.label,
+      }));
+  } else {
+    try {
+      const { nodes, edges } = await getOrgChartForManager(getDb(), userId);
+      teamPeople = nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        role: n.role,
+        title: "",
+        team: n.team ?? "",
+        reportsTo: n.managerId,
+      }));
+      teamThreads = edges.map((e) => ({
+        id: e.id,
+        from: e.from,
+        to: e.to,
+        tags: e.tags,
+        strength: e.strength,
+        label: e.label,
+      }));
+    } catch {
+      // leave empty on error
+    }
   }
 
-  const teamPeople = isDemo
-    ? orgPeople
-        .filter((p) => teamIds.has(p.id))
-        .map((p) => ({
-          id: p.id,
-          name: p.name,
-          role: p.role,
-          title: p.title,
-          team: p.team,
-          reportsTo: p.reportsTo,
-        }))
-    : [];
-
-  const teamThreads = isDemo
-    ? orgThreads.filter((t) => teamIds.has(t.from) && teamIds.has(t.to))
-    : [];
-
-  const reportingLines = teamPeople.filter((p) => p.reportsTo && teamIds.has(p.reportsTo)).length;
+  const teamIdSet = new Set(teamPeople.map((p) => p.id));
+  const reportingLines = teamPeople.filter((p) => p.reportsTo && teamIdSet.has(p.reportsTo)).length;
 
   return (
     <div className="max-w-[1200px]">
@@ -95,9 +129,9 @@ export default async function OrgChartPage() {
       </div>
 
       <TeamOrgChart
-        people={teamPeople}
+        people={teamPeople as React.ComponentProps<typeof TeamOrgChart>["people"]}
         threads={teamThreads}
-        managerId={MANAGER_ID}
+        managerId={isDemo ? MANAGER_ID : userId}
       />
     </div>
   );

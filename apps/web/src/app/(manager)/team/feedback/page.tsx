@@ -1,15 +1,16 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getTeamInsights } from "@/lib/api";
-import type { FeedbackDigestRow } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getTeamInsightDigests } from "@revualy/db/queries";
 import { mockTeamInsights } from "@/lib/mock-data";
 import { trendIcons } from "@/lib/style-constants";
 import { ThemeFrequencyChart } from "@/components/charts/theme-frequency-chart";
 
-async function loadInsightsData(isDemo: boolean): Promise<FeedbackDigestRow[]> {
+async function loadInsightsData(userId: string, isDemo: boolean) {
   try {
-    const result = await getTeamInsights();
-    if (result.data.length > 0) return result.data;
+    const rows = await getTeamInsightDigests(getDb(), userId);
+    if (rows.length > 0) return rows;
     return isDemo ? mockTeamInsights : [];
   } catch {
     return isDemo ? mockTeamInsights : [];
@@ -23,8 +24,10 @@ function formatMonth(dateStr: string) {
 
 export default async function TeamInsightsPage() {
   const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
   const isDemo = isDemoSession(session);
-  const digests = await loadInsightsData(isDemo);
+  const digests = await loadInsightsData(userId, isDemo);
 
   // Use the latest digest
   const sorted = [...digests].sort(

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { RelationshipGraph } from "@/components/relationship-graph";
+import dynamic from "next/dynamic";
+const RelationshipGraph = dynamic(
+  () => import("@/components/relationship-graph").then((m) => m.RelationshipGraph),
+  { ssr: false, loading: () => <div className="h-[520px] animate-pulse rounded-xl bg-stone-50/50" /> },
+);
 
 interface GraphNode {
   id: string;

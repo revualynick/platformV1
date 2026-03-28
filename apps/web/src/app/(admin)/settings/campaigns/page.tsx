@@ -1,15 +1,16 @@
-import { getCampaigns } from "@/lib/api";
-import type { CampaignRow } from "@/lib/api";
 import { mockCampaigns } from "@/lib/mock-data";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { getDb } from "@/lib/db";
+import { getCampaigns } from "@revualy/db/queries";
+import type { CampaignRow } from "@/lib/api";
 import { CampaignsList } from "./campaigns-list";
 
 async function loadCampaigns(isDemo: boolean): Promise<CampaignRow[]> {
   if (isDemo) return mockCampaigns;
   try {
-    const { data } = await getCampaigns();
-    return data;
+    const rows = await getCampaigns(getDb());
+    return rows as unknown as CampaignRow[];
   } catch {
     return [];
   }

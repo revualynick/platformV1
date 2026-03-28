@@ -3,7 +3,6 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq, and } from "drizzle-orm";
-import { createTenantClient } from "@revualy/db";
 import {
   authUsers,
   authAccounts,
@@ -11,6 +10,7 @@ import {
   authVerificationTokens,
 } from "@revualy/db/schema";
 import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared";
+import { getDb } from "./db";
 
 /**
  * NextAuth.js v5 configuration.
@@ -27,13 +27,8 @@ import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared";
 
 const API_URL = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
-// Tenant DB for session CRUD. The fallback URL is only used during
-// `next build` static analysis — postgres.js connects lazily on first query,
-// so no actual connection is attempted at build time.
-const { db: tenantDb } = createTenantClient(
-  process.env.DATABASE_URL ||
-    "postgresql://build:build@localhost:5432/build_placeholder",
-);
+// Shared DB client — single pool per web process
+const tenantDb = getDb();
 
 function getInternalSecret(): string {
   const secret = process.env.INTERNAL_API_SECRET;

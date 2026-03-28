@@ -2,7 +2,8 @@ import { integrations as mockIntegrations } from "@/lib/mock-data";
 import { integrationStatusStyles as statusStyles, platformIcons } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getIntegrations } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getIntegrations } from "@revualy/db/queries";
 import type { IntegrationRow } from "@/lib/api";
 import { ConnectDialog, ConfigureButton, DisconnectButton } from "./integration-actions";
 
@@ -37,8 +38,8 @@ export default async function IntegrationsPage() {
     }));
   } else {
     try {
-      const result = await getIntegrations();
-      items = result.data;
+      const rows = await getIntegrations(getDb());
+      items = rows as unknown as IntegrationRow[];
     } catch {
       items = [];
     }

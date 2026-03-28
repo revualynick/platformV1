@@ -1,7 +1,8 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getReflections, getReflectionStats } from "@/lib/api";
-import type { SelfReflectionRow, ReflectionStatsRow } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getReflections as queryReflections, getReflectionStats as queryReflectionStats } from "@revualy/db/queries";
 import { selfReflections as mockReflections } from "@/lib/mock-data";
 
 const moodStyles: Record<string, { emoji: string; bg: string; text: string }> = {
@@ -34,6 +35,18 @@ function formatWeekDate(isoDate: string): string {
     timeZone: "UTC",
   });
 }
+
+type SelfReflectionRow = {
+  id: string;
+  weekStarting: string;
+  status: string;
+  promptTheme: string | null;
+  highlights: string | null;
+  challenges: string | null;
+  goalForNextWeek: string | null;
+  mood: string | null;
+  engagementScore: number | null;
+};
 
 function mapApiToDisplay(row: SelfReflectionRow): ReflectionDisplay {
   return {
@@ -75,22 +88,25 @@ export default async function ReflectionsPage() {
   let topMood: string | null;
   let currentStreak: number;
 
+  const userId = session?.user?.id;
+  if (!userId) redirect("/login");
+
   const [reflectionsResult, statsResult] = await Promise.allSettled([
-    getReflections(12),
-    getReflectionStats(),
+    queryReflections(getDb(), userId, 12),
+    queryReflectionStats(getDb(), userId),
   ]);
 
   if (
     reflectionsResult.status === "fulfilled" &&
-    reflectionsResult.value.data.length > 0
+    reflectionsResult.value.length > 0
   ) {
-    reflections = reflectionsResult.value.data.map(mapApiToDisplay);
+    reflections = reflectionsResult.value.map(mapApiToDisplay);
   } else {
     reflections = isDemo ? mockReflections.map(mapMockToDisplay) : [];
   }
 
   if (statsResult.status === "fulfilled") {
-    const stats: ReflectionStatsRow = statsResult.value;
+    const stats = statsResult.value;
     completedCount = stats.totalCompleted;
     avgScore = stats.avgEngagementScore;
     topMood = stats.topMood;

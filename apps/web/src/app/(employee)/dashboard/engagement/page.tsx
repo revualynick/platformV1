@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getEngagementScores } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getEngagementScoresForUser } from "@revualy/db/queries";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
@@ -31,8 +32,8 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
   }
 
   try {
-    const result = await getEngagementScores(userId);
-    if (result.data.length === 0) {
+    const result = await getEngagementScoresForUser(getDb(), userId);
+    if (result.length === 0) {
       return {
         weeklyDetail: isDemo ? (mockWeeklyDetail as WeekDetail[]) : [],
         chartData: isDemo ? mockHistory : [],
@@ -40,17 +41,18 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
       };
     }
 
-    const scores = result.data;
+    const scores = result;
 
-    // Build chart data (last 6 weeks)
-    const chartData = scores.slice(-6).map((s) => ({
+    // Build chart data (last 6 weeks) — scores are DESC, so take first 6 and reverse for chronological order
+    const recent6 = scores.slice(0, 6).reverse();
+    const chartData = recent6.map((s) => ({
       week: new Date(s.weekStarting).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       score: s.averageQualityScore,
       interactions: s.interactionsCompleted,
     }));
 
-    // Build weekly detail
-    const weeklyDetail: WeekDetail[] = scores.slice(-6).reverse().map((s) => ({
+    // Build weekly detail (most recent first for the table)
+    const weeklyDetail: WeekDetail[] = scores.slice(0, 6).map((s) => ({
       week: new Date(s.weekStarting).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       score: s.averageQualityScore,
       interactions: s.interactionsCompleted,
@@ -61,7 +63,7 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
       status: s.interactionsCompleted >= s.interactionsTarget ? "complete" : "partial",
     }));
 
-    const latest = scores[scores.length - 1];
+    const latest = scores[0];
 
     return {
       weeklyDetail,

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
-import { getFeedback, getOrgConfig } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getFeedbackForSubject, getActiveCoreValues } from "@revualy/db/queries";
 import {
   allFeedback as mockFeedback,
   valuesScores as mockValuesScores,
@@ -29,20 +30,20 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
 
   try {
     const [fbResult, orgResult] = await Promise.allSettled([
-      getFeedback(userId),
-      getOrgConfig(),
+      getFeedbackForSubject(getDb(), userId),
+      getActiveCoreValues(getDb()),
     ]);
 
     const valuesMap = new Map<string, string>();
     if (orgResult.status === "fulfilled") {
-      orgResult.value.coreValues.forEach((v) => valuesMap.set(v.id, v.name));
+      orgResult.value.forEach((v) => valuesMap.set(v.id, v.name));
     }
 
     let feedback: FeedbackItem[] = isDemo ? mockFeedback : [];
     let valuesScores: ValueScore[] = isDemo ? mockValuesScores : [];
 
-    if (fbResult.status === "fulfilled" && fbResult.value.data.length > 0) {
-      feedback = fbResult.value.data.map((e) => ({
+    if (fbResult.status === "fulfilled" && fbResult.value.length > 0) {
+      feedback = fbResult.value.map((e) => ({
         id: e.id,
         fromName: "Peer",
         date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
@@ -54,7 +55,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
 
       // Aggregate value scores
       const scoresByValue = new Map<string, number[]>();
-      fbResult.value.data.forEach((e) => {
+      fbResult.value.forEach((e) => {
         e.valueScores.forEach((vs) => {
           const name = valuesMap.get(vs.coreValueId) ?? "Unknown";
           const list = scoresByValue.get(name) ?? [];

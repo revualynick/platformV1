@@ -1,55 +1,64 @@
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { orgPeople, orgThreads } from "@/lib/mock-data";
+import { getDb } from "@/lib/db";
+import { getFullOrgGraph } from "@revualy/db/queries";
 import { OrgChartWrapper } from "./org-chart-wrapper";
 
 export default async function AdminOrgChartPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
 
-  // In demo mode, use mock data; in production, this would come from the API
-  const people = isDemo ? orgPeople : [];
-  const threads = isDemo ? orgThreads : [];
+  let nodes: { id: string; name: string; role: string; team: string | null; managerId: string | null }[];
+  let edges: { id: string; from: string; to: string; type: "reports_to" | "thread"; label: string; tags: string[]; strength: number; source: string }[];
 
-  const nodes = people.map((p) => ({
-    id: p.id,
-    name: p.name,
-    role: p.role,
-    team: p.team,
-    managerId: p.reportsTo,
-  }));
-
-  const edges = [
-    // Reporting lines
-    ...people
-      .filter((p) => p.reportsTo)
-      .map((p) => ({
-        id: `reporting-${p.id}`,
-        from: p.reportsTo!,
-        to: p.id,
-        type: "reports_to" as const,
-        label: "Reports to",
-        tags: [] as string[],
-        strength: 1,
-        source: "org",
+  if (isDemo) {
+    nodes = orgPeople.map((p) => ({
+      id: p.id,
+      name: p.name,
+      role: p.role,
+      team: p.team,
+      managerId: p.reportsTo,
+    }));
+    edges = [
+      ...orgPeople
+        .filter((p) => p.reportsTo)
+        .map((p) => ({
+          id: `reporting-${p.id}`,
+          from: p.reportsTo!,
+          to: p.id,
+          type: "reports_to" as const,
+          label: "Reports to",
+          tags: [] as string[],
+          strength: 1,
+          source: "org",
+        })),
+      ...orgThreads.map((t) => ({
+        id: t.id,
+        from: t.from,
+        to: t.to,
+        type: "thread" as const,
+        label: t.label,
+        tags: t.tags,
+        strength: t.strength,
+        source: "thread",
       })),
-    // Relationship threads
-    ...threads.map((t) => ({
-      id: t.id,
-      from: t.from,
-      to: t.to,
-      type: "thread" as const,
-      label: t.label,
-      tags: t.tags,
-      strength: t.strength,
-      source: "thread",
-    })),
-  ];
+    ];
+  } else {
+    try {
+      const graph = await getFullOrgGraph(getDb());
+      nodes = graph.nodes;
+      edges = graph.edges;
+    } catch {
+      nodes = [];
+      edges = [];
+    }
+  }
 
-  const teamSet = new Set(people.map((p) => p.team).filter(Boolean));
-  const teams = [...teamSet].sort();
-  const reportingLines = people.filter((p) => p.reportsTo).length;
-  const threadCount = threads.length;
+  const teamSet = new Set(nodes.map((n) => n.team).filter(Boolean));
+  const teams = [...teamSet].sort() as string[];
+  const reportingLines = edges.filter((e) => e.type === "reports_to").length;
+  const threadCount = edges.filter((e) => e.type === "thread").length;
 
   return (
     <div className="max-w-[1200px]">
@@ -68,7 +77,7 @@ export default async function AdminOrgChartPage() {
       {/* Stats */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "People", value: people.length.toString(), color: "text-forest" },
+          { label: "People", value: nodes.length.toString(), color: "text-forest" },
           { label: "Teams", value: teams.length.toString(), color: "text-stone-900" },
           { label: "Reporting Lines", value: reportingLines.toString(), color: "text-stone-900" },
           { label: "Relationship Threads", value: threadCount.toString(), color: "text-terracotta" },

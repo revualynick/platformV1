@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { getOrgConfig, getOrgSettings } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { getActiveCoreValues, getOrgSettings as queryOrgSettings } from "@revualy/db/queries";
 import {
   coreValues as mockCoreValues,
   teamMembers as mockTeamMembers,
@@ -16,7 +18,7 @@ import { OrgEditDialog } from "./org-edit-dialog";
 
 async function loadValues(isDemo: boolean) {
   try {
-    const { coreValues } = await getOrgConfig();
+    const coreValues = await getActiveCoreValues(getDb());
     return coreValues.map((v) => ({
       id: v.id,
       name: v.name,
@@ -33,9 +35,10 @@ async function loadOrgSettings(isDemo: boolean) {
     return { name: "Acme Corp", subdomain: "acmecorp", timezone: "America/New_York", allowedDomains: [] };
   }
   try {
-    return await getOrgSettings();
+    const settings = await queryOrgSettings(getDb());
+    return settings ?? { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] as string[] };
   } catch {
-    return { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] };
+    return { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] as string[] };
   }
 }
 
@@ -44,27 +47,46 @@ const attentionSeverityStyles = {
   info: "bg-forest/[0.06] text-forest",
 };
 
-export default async function AdminSettings() {
-  const session = await auth();
-  const isDemo = isDemoSession(session);
+// ── Skeleton fallbacks ─────────────────────────────────
+
+function StatsSkeleton() {
+  return (
+    <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-24 animate-pulse rounded-2xl bg-stone-100" />
+      ))}
+    </div>
+  );
+}
+
+function SectionSkeleton() {
+  return <div className="h-48 animate-pulse rounded-2xl bg-stone-100" />;
+}
+
+// ── Async sub-components ───────────────────────────────
+
+async function MainContent({
+  isDemo,
+  orgSettings,
+}: {
+  isDemo: boolean;
+  orgSettings: { name: string; subdomain: string; timezone: string; allowedDomains: string[] };
+}) {
   const demoCampaigns = isDemo ? mockCampaigns : [];
   const demoIntegrations = isDemo ? integrations : [];
   const demoEscalations = isDemo ? escalations : [];
   const demoTeamMembers = isDemo ? mockTeamMembers : [];
+  const demoOrgPeople = isDemo ? orgPeople : [];
+  const demoOrgThreads = isDemo ? orgThreads : [];
 
-  const [coreValues, orgSettings] = await Promise.all([
-    loadValues(isDemo),
-    loadOrgSettings(isDemo),
-  ]);
+  const coreValues = await loadValues(isDemo);
+
   const activeCampaigns = demoCampaigns.filter((c) => c.status === "collecting").length;
   const participationRate = demoTeamMembers.length > 0
     ? Math.round(
         (demoTeamMembers.filter((m) => m.interactionsThisWeek > 0).length / demoTeamMembers.length) * 100,
       )
     : 0;
-
-  const demoOrgPeople = isDemo ? orgPeople : [];
-  const demoOrgThreads = isDemo ? orgThreads : [];
   const orgTeams = [...new Set(demoOrgPeople.map((p) => p.team).filter(Boolean))];
 
   const quickLinks = [
@@ -105,7 +127,6 @@ export default async function AdminSettings() {
     },
   ];
 
-  // Mock "needs attention" items — in production these come from API health checks
   const openEscCount = demoEscalations.filter((e) => e.status === "open").length;
   const disconnectedCount = demoIntegrations.filter((i) => i.status !== "connected").length;
   const draftCount = demoCampaigns.filter((c) => c.status === "draft").length;
@@ -123,15 +144,7 @@ export default async function AdminSettings() {
   ];
 
   return (
-    <div className="max-w-5xl">
-      {/* Header */}
-      <div className="mb-10">
-        <p className="text-sm font-medium text-stone-400">Administration</p>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
-          {orgSettings.name || "Organization"}
-        </h1>
-      </div>
-
+    <>
       {/* Organization profile */}
       <div
         className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-surface p-6"
@@ -177,16 +190,10 @@ export default async function AdminSettings() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest/[0.08] text-lg">
-                  ◎
-                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest/[0.08] text-lg">◎</div>
                 <div>
-                  <h2 className="font-display text-lg font-semibold text-stone-900">
-                    Organization Chart
-                  </h2>
-                  <p className="text-sm text-stone-500">
-                    Interactive company structure with reporting lines and relationship threads
-                  </p>
+                  <h2 className="font-display text-lg font-semibold text-stone-900">Organization Chart</h2>
+                  <p className="text-sm text-stone-500">Interactive company structure with reporting lines and relationship threads</p>
                 </div>
               </div>
               <div className="mt-4 flex items-center gap-6 text-sm text-stone-500">
@@ -205,50 +212,21 @@ export default async function AdminSettings() {
       {/* Top stats */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          {
-            label: "Team Size",
-            value: demoTeamMembers.length.toString(),
-            sub: "Active members",
-            color: "text-stone-900",
-          },
-          {
-            label: "Participation",
-            value: `${participationRate}%`,
-            sub: "Active this week",
-            color: participationRate >= 70 ? "text-forest" : "text-terracotta",
-          },
-          {
-            label: "Active Campaigns",
-            value: activeCampaigns.toString(),
-            sub: "Collecting feedback",
-            color: "text-forest",
-          },
-          {
-            label: "Core Values",
-            value: coreValues.length.toString(),
-            sub: "Defined",
-            color: "text-forest",
-          },
+          { label: "Team Size", value: demoTeamMembers.length.toString(), sub: "Active members", color: "text-stone-900" },
+          { label: "Participation", value: `${participationRate}%`, sub: "Active this week", color: participationRate >= 70 ? "text-forest" : "text-terracotta" },
+          { label: "Active Campaigns", value: activeCampaigns.toString(), sub: "Collecting feedback", color: "text-forest" },
+          { label: "Core Values", value: coreValues.length.toString(), sub: "Defined", color: "text-forest" },
         ].map((stat, i) => {
           const railColors = ["bg-forest", "bg-forest-light", "bg-terracotta", "bg-forest-muted"];
           return (
             <div
               key={stat.label}
               className="card-enter relative overflow-hidden rounded-2xl border border-stone-200/60 bg-surface pb-5 pl-7 pr-5 pt-5"
-              style={{
-                animationDelay: `${i * 80}ms`,
-                boxShadow: "var(--shadow-sm)",
-              }}
+              style={{ animationDelay: `${i * 80}ms`, boxShadow: "var(--shadow-sm)" }}
             >
               <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
-                {stat.label}
-              </span>
-              <p
-                className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}
-              >
-                {stat.value}
-              </p>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">{stat.label}</span>
+              <p className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}>{stat.value}</p>
               <p className="mt-1 text-xs text-stone-400">{stat.sub}</p>
             </div>
           );
@@ -274,9 +252,7 @@ export default async function AdminSettings() {
               className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
               style={{ animationDelay: "400ms", boxShadow: "var(--shadow-sm)" }}
             >
-              <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
-                Needs Attention
-              </h3>
+              <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Needs Attention</h3>
               <div className="space-y-2">
                 {attentionItems.map((item) => (
                   <Link
@@ -299,9 +275,7 @@ export default async function AdminSettings() {
             className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "500ms", boxShadow: "var(--shadow-sm)" }}
           >
-            <h3 className="mb-4 font-display text-base font-semibold text-stone-800">
-              Quick Access
-            </h3>
+            <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Quick Access</h3>
             <div className="space-y-2">
               {quickLinks.map((link) => (
                 <Link
@@ -309,26 +283,56 @@ export default async function AdminSettings() {
                   href={link.href}
                   className="flex items-center gap-4 rounded-xl px-4 py-3 transition-colors hover:bg-stone-50"
                 >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-forest/[0.06] text-base">
-                    {link.icon}
-                  </span>
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-forest/[0.06] text-base">{link.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-stone-800">
-                      {link.label}
-                    </p>
-                    <p className="truncate text-xs text-stone-400">
-                      {link.description}
-                    </p>
+                    <p className="text-sm font-medium text-stone-800">{link.label}</p>
+                    <p className="truncate text-xs text-stone-400">{link.description}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">
-                    {link.stat}
-                  </span>
+                  <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">{link.stat}</span>
                 </Link>
               ))}
             </div>
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────
+
+export default async function AdminSettings() {
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
+  // Await org settings for the header — fast call, single endpoint
+  const orgSettings = await loadOrgSettings(isDemo);
+
+  return (
+    <div className="max-w-5xl">
+      {/* Header — renders immediately */}
+      <div className="mb-10">
+        <p className="text-sm font-medium text-stone-400">Administration</p>
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+          {orgSettings.name || "Organization"}
+        </h1>
+      </div>
+
+      {/* Main content — streams in (awaits loadValues inside) */}
+      <Suspense
+        fallback={
+          <div className="space-y-8">
+            <SectionSkeleton />
+            <StatsSkeleton />
+            <div className="grid gap-6 lg:grid-cols-12">
+              <div className="lg:col-span-7"><SectionSkeleton /></div>
+              <div className="lg:col-span-5"><SectionSkeleton /></div>
+            </div>
+          </div>
+        }
+      >
+        <MainContent isDemo={isDemo} orgSettings={orgSettings} />
+      </Suspense>
     </div>
   );
 }

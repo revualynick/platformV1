@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getUsers, getBulkEngagementScores } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { listActiveUsers, getBulkLatestEngagement } from "@revualy/db/queries";
 import {
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
@@ -19,17 +20,16 @@ type TeamMember = {
 
 async function loadMembers(userId: string, isDemo: boolean) {
   try {
-    const usersResult = await getUsers({ managerId: userId });
+    const members = await listActiveUsers(getDb(), { managerId: userId });
 
-    if (usersResult.data.length === 0) {
+    if (members.length === 0) {
       return isDemo ? (mockTeamMembers as TeamMember[]) : [];
     }
 
-    const members = usersResult.data;
-    const bulkEng = await getBulkEngagementScores(members.map((m) => m.id)).catch(() => ({ data: {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>> }));
+    const bulkEng = await getBulkLatestEngagement(getDb(), members.map((m) => m.id)).catch(() => ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>));
 
     return members.map((m) => {
-      const scores = bulkEng.data[m.id] ?? [];
+      const scores = bulkEng[m.id] ?? [];
       if (scores.length > 0) {
         const latest = scores[0];
         return {
