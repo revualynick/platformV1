@@ -155,6 +155,20 @@
       "when": 1771167955765,
       "tag": "0021_calibration_org_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1771167956765,
+      "tag": "0022_auth_tables_and_leads",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1771167957765,
+      "tag": "0023_campaigns_and_feedback_digests",
+      "breakpoints": true
     }
   ]
 }
