@@ -47,7 +47,7 @@ const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
-async function buildApp() {
+export async function buildApp() {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
@@ -295,4 +295,10 @@ async function start() {
   }
 }
 
-start();
+// Only auto-start when run directly (not when imported for testing)
+const isDirectRun =
+  import.meta.url === `file://${process.argv[1]}` ||
+  process.argv[1]?.endsWith("/server.js");
+if (isDirectRun) {
+  start();
+}
