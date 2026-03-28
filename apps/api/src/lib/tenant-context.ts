@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import fp from "fastify-plugin";
 import { getTenantDb, type TenantDb } from "@revualy/db";
 
 /**
@@ -94,10 +95,10 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
   };
 }
 
-export async function tenantPlugin(app: FastifyInstance) {
+export const tenantPlugin = fp(async function tenantPlugin(app: FastifyInstance) {
   app.decorateRequest("tenant");
 
   app.addHook("preHandler", async (request) => {
     request.tenant = resolveTenant(request);
   });
-}
+});
