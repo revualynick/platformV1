@@ -1,6 +1,7 @@
 "use server";
 
 import { createKudos } from "@/lib/api";
+import { requireLiveSession } from "@/lib/session-utils";
 import { revalidatePath } from "next/cache";
 
 /** Safely extract a string from FormData (returns null if missing or not a string). */
@@ -10,6 +11,9 @@ function getString(fd: FormData, key: string): string | null {
 }
 
 export async function sendKudos(formData: FormData) {
+  const guard = await requireLiveSession();
+  if (!guard.ok) return { error: guard.error };
+
   const receiverId = getString(formData, "receiverId");
   const message = getString(formData, "message");
   const coreValueId = getString(formData, "coreValueId");

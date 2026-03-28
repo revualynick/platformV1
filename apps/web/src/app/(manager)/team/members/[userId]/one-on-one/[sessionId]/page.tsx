@@ -1,8 +1,10 @@
 import { auth } from "@/lib/auth";
 import { PathNameProvider } from "@/lib/path-context";
-import { getOneOnOneSession, getUser, getWsToken } from "@/lib/api";
+import { getOneOnOneSession, getUser, getUsers, getWsToken } from "@/lib/api";
 import type { OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
+import { isDemoSession } from "@/lib/session-utils";
+import { redirect } from "next/navigation";
 import { SessionEditor } from "@/components/session-editor";
 import {
   startSession,
@@ -16,16 +18,18 @@ import {
   generateAgendaAction,
 } from "../actions";
 
-async function loadSession(userId: string, sessionId: string) {
-  const session = await auth();
-  const managerId = session?.user?.id;
+async function loadSession(userId: string, sessionId: string, managerId: string | undefined, isDemo: boolean) {
 
-  const mockSession = mockSessions.find((s) => s.id === sessionId) ?? mockSessions[0];
+  const mockSession = isDemo
+    ? (mockSessions.find((s) => s.id === sessionId) ?? mockSessions[0])
+    : null;
 
   if (!managerId) {
     return {
-      session: mockSession as unknown as OneOnOneSessionDetail,
-      employeeName: "Sarah Chen",
+      session: isDemo && mockSession
+        ? (mockSession as unknown as OneOnOneSessionDetail)
+        : null,
+      employeeName: isDemo ? "Sarah Chen" : "Team Member",
       currentUserId: "p2",
     };
   }
@@ -39,13 +43,17 @@ async function loadSession(userId: string, sessionId: string) {
     return {
       session: sessionResult.status === "fulfilled"
         ? sessionResult.value
-        : mockSession as unknown as OneOnOneSessionDetail,
+        : isDemo && mockSession
+          ? (mockSession as unknown as OneOnOneSessionDetail)
+          : null,
       employeeName: employeeResult.status === "fulfilled" ? employeeResult.value.name : "Team Member",
       currentUserId: managerId,
     };
   } catch {
     return {
-      session: mockSession as unknown as OneOnOneSessionDetail,
+      session: isDemo && mockSession
+        ? (mockSession as unknown as OneOnOneSessionDetail)
+        : null,
       employeeName: "Team Member",
       currentUserId: managerId ?? "p2",
     };
@@ -58,7 +66,41 @@ export default async function ManagerSessionDetailPage({
   params: Promise<{ userId: string; sessionId: string }>;
 }) {
   const { userId, sessionId } = await params;
-  const data = await loadSession(userId, sessionId);
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
+  // Verify the target user is a direct report of current manager (before loading data)
+  if (!isDemo) {
+    if (!session?.user?.id) {
+      redirect("/team/members");
+    }
+    try {
+      const reports = await getUsers({ managerId: session.user.id });
+      const isDirectReport = reports.data.some((m) => m.id === userId);
+      if (!isDirectReport) {
+        redirect("/team/members");
+      }
+    } catch {
+      redirect("/team/members");
+    }
+  }
+
+  const data = await loadSession(userId, sessionId, session?.user?.id, isDemo);
+
+  // Verify the loaded session belongs to this employee/manager pair
+  if (data.session && !isDemo) {
+    if (data.session.employeeId !== userId || data.session.managerId !== session?.user?.id) {
+      redirect("/team/members");
+    }
+  }
+
+  if (!data.session) {
+    return (
+      <div className="max-w-6xl">
+        <p className="text-sm text-stone-400">Session not found.</p>
+      </div>
+    );
+  }
 
   const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;

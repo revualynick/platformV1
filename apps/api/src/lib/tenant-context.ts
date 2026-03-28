@@ -40,13 +40,13 @@ const DEMO_MODE = process.env.DEMO_MODE === "true";
 /** Paths that skip internal-secret validation in DEMO_MODE */
 const DEMO_PUBLIC_PATHS = ["/api/v1/demo/lead", "/api/v1/demo/start"];
 const DEMO_PUBLIC_PREFIX = "/api/v1/demo/";
-const DEMO_REPLY_SUFFIX = "/reply";
+const DEMO_REPLY_RE = /^\/api\/v1\/demo\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/reply$/;
 
 function isDemoPublicRoute(url: string): boolean {
   if (!DEMO_MODE) return false;
   if (DEMO_PUBLIC_PATHS.includes(url)) return true;
   // Match /api/v1/demo/:conversationId/reply
-  if (url.startsWith(DEMO_PUBLIC_PREFIX) && url.endsWith(DEMO_REPLY_SUFFIX)) {
+  if (DEMO_REPLY_RE.test(url)) {
     return true;
   }
   return false;
@@ -74,11 +74,9 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
 
   // Require a valid internal secret to trust headers
   if (INTERNAL_SECRET) {
-    if (
-      !secret ||
-      secret.length !== INTERNAL_SECRET.length ||
-      !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(INTERNAL_SECRET))
-    ) {
+    const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
+    const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
+    if (!secret || !crypto.timingSafeEqual(expected, actual)) {
       const err = new Error("Invalid internal API secret");
       (err as Error & { statusCode: number }).statusCode = 401;
       throw err;
@@ -88,10 +86,11 @@ export function resolveTenant(request: FastifyRequest): TenantContext {
     throw new Error("INTERNAL_API_SECRET is required in production");
   }
 
+  const rawUserId = userId ?? null;
   return {
     orgId,
     db: getTenantDb(orgId, DATABASE_URL),
-    userId: userId ?? null,
+    userId: rawUserId === "demo-user" ? null : rawUserId,
   };
 }
 

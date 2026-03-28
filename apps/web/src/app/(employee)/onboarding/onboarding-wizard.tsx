@@ -46,21 +46,35 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
     leaderboard_update: true,
   });
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function handleNext() {
+    setError(null);
     if (step === 0) {
       startTransition(async () => {
-        await confirmProfile({ name, timezone });
+        const result = await confirmProfile({ name, timezone });
+        if (result && !result.success) {
+          setError(result.error ?? "Failed to save profile");
+          return;
+        }
         setStep(1);
       });
     } else if (step === 1) {
       startTransition(async () => {
-        await saveNotificationPrefs(prefs);
+        const result = await saveNotificationPrefs(prefs);
+        if (result && !result.success) {
+          setError(result.error ?? "Failed to save preferences");
+          return;
+        }
         setStep(2);
       });
     } else {
       startTransition(async () => {
-        await finishOnboarding();
+        const result = await finishOnboarding();
+        if (result && !result.success) {
+          setError(result.error ?? "Failed to complete onboarding");
+        }
+        // On success, finishOnboarding() calls redirect("/dashboard") server-side
       });
     }
   }
@@ -228,6 +242,13 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
           <p className="text-center text-xs text-stone-400">
             You can always connect your calendar later from Settings.
           </p>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
       )}
 

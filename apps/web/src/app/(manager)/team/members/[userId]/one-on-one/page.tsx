@@ -1,8 +1,10 @@
 import { auth } from "@/lib/auth";
 import { PathNameProvider } from "@/lib/path-context";
-import { getOneOnOneSessions, getOneOnOneSession, getUser, getWsToken } from "@/lib/api";
+import { getOneOnOneSessions, getOneOnOneSession, getUser, getUsers, getWsToken } from "@/lib/api";
 import type { OneOnOneSession, OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
+import { isDemoSession } from "@/lib/session-utils";
+import { redirect } from "next/navigation";
 import { SessionList } from "@/components/session-list";
 import { SessionEditor } from "@/components/session-editor";
 import {
@@ -19,12 +21,11 @@ import {
 } from "./actions";
 import { ScheduleSessionForm } from "./schedule-form";
 
-async function loadData(userId: string) {
-  const session = await auth();
-  const managerId = session?.user?.id;
-
+async function loadData(userId: string, managerId: string | undefined, isDemo: boolean) {
   const defaults = {
-    sessions: mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
+    sessions: isDemo
+      ? (mockSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[])
+      : [],
     activeSession: null as OneOnOneSessionDetail | null,
     employeeName: "Team Member",
     currentUserId: managerId ?? "p2",
@@ -64,7 +65,26 @@ export default async function ManagerOneOnOnePage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  const data = await loadData(userId);
+  const session = await auth();
+  const isDemo = isDemoSession(session);
+
+  // Verify the target user is a direct report of current manager (before loading data)
+  if (!isDemo) {
+    if (!session?.user?.id) {
+      redirect("/team/members");
+    }
+    try {
+      const reports = await getUsers({ managerId: session.user.id });
+      const isDirectReport = reports.data.some((m: { id: string }) => m.id === userId);
+      if (!isDirectReport) {
+        redirect("/team/members");
+      }
+    } catch {
+      redirect("/team/members");
+    }
+  }
+
+  const data = await loadData(userId, session?.user?.id, isDemo);
 
   const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;

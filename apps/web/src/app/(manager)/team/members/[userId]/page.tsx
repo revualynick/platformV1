@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PathNameProvider } from "@/lib/path-context";
 import { auth } from "@/lib/auth";
+import { isDemoSession } from "@/lib/session-utils";
 import {
   getUser,
   getEngagementScores,
@@ -53,33 +54,39 @@ type MockFlaggedItem = {
   date: string;
 };
 
-async function loadEmployeeData(userId: string) {
-  const session = await auth();
-  const managerId = session?.user?.id;
+async function loadEmployeeData(userId: string, managerId: string | undefined, isDemo: boolean) {
 
-  // Default mock data
-  const mockMember = mockTeamMembers.find((m) => m.id === userId) ?? mockTeamMembers[0];
+  // Default data — only populated with mock content in demo mode
+  const mockMember = isDemo
+    ? (mockTeamMembers.find((m) => m.id === userId) ?? mockTeamMembers[0])
+    : null;
   const defaults = {
-    employee: {
-      id: mockMember.id,
-      name: mockMember.name,
-      role: mockMember.role ?? "employee",
-      email: `${mockMember.name.toLowerCase().replace(" ", ".")}@acmecorp.com`,
-    },
-    engagementScore: mockMember.engagementScore,
-    streak: mockMember.streak ?? 0,
-    responseRate: 0.85,
-    engagementHistory: mockEngagementHistory,
-    valuesScores: mockValuesScores,
-    feedback: mockFeedback as MockFeedbackEntry[],
-    flaggedItems: mockFlaggedItems.filter(
-      (f) => f.subjectName === mockMember.name,
-    ) as MockFlaggedItem[],
+    employee: mockMember
+      ? {
+          id: mockMember.id,
+          name: mockMember.name,
+          role: mockMember.role ?? "employee",
+          email: `${mockMember.name.toLowerCase().replace(" ", ".")}@acmecorp.com`,
+        }
+      : { id: userId, name: "Team Member", role: "employee", email: "" },
+    engagementScore: mockMember?.engagementScore ?? 0,
+    streak: mockMember?.streak ?? 0,
+    responseRate: isDemo ? 0.85 : 0,
+    engagementHistory: isDemo ? mockEngagementHistory : [],
+    valuesScores: isDemo ? mockValuesScores : [],
+    feedback: isDemo ? (mockFeedback as MockFeedbackEntry[]) : [],
+    flaggedItems: isDemo
+      ? (mockFlaggedItems.filter(
+          (f) => f.subjectName === mockMember?.name,
+        ) as MockFlaggedItem[])
+      : [],
     notes: [] as ManagerNoteRow[],
-    oneOnOneSessions: mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[],
+    oneOnOneSessions: isDemo
+      ? (mockOneOnOneSessions as (OneOnOneSession & { agendaItems: unknown[]; actionItems: unknown[] })[])
+      : [],
     currentUserId: managerId ?? "p2",
-    isDirectReport: true,
-    usingMockData: true,
+    isDirectReport: isDemo,
+    usingMockData: isDemo,
   };
 
   if (!managerId) return defaults;
@@ -233,12 +240,26 @@ export default async function EmployeeDetailPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  const data = await loadEmployeeData(userId);
+  const session = await auth();
+  const isDemo = isDemoSession(session);
 
-  // Enforce direct report access (#6 — frontend auth gap)
-  if (!data.isDirectReport) {
-    redirect("/team/members");
+  // Enforce direct report access before loading any data
+  if (!isDemo) {
+    if (!session?.user?.id) {
+      redirect("/team/members");
+    }
+    try {
+      const reports = await getUsers({ managerId: session.user.id });
+      const isDirectReport = reports.data.some((m) => m.id === userId);
+      if (!isDirectReport) {
+        redirect("/team/members");
+      }
+    } catch {
+      redirect("/team/members");
+    }
   }
+
+  const data = await loadEmployeeData(userId, session?.user?.id, isDemo);
 
   const { employee, engagementScore, streak, responseRate, engagementHistory, valuesScores, feedback, flaggedItems, notes, oneOnOneSessions, currentUserId } = data;
 

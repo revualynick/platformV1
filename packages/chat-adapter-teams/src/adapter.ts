@@ -86,13 +86,14 @@ export class TeamsAdapter implements ChatAdapter {
 
     const authHeader = headers["authorization"];
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      if (process.env.NODE_ENV === "production") {
-        return { isValid: false };
+      const env = process.env.NODE_ENV;
+      if (process.env.TEAMS_SKIP_JWT_VERIFY === "true" && (env === "development" || env === "test")) {
+        console.warn(
+          "TeamsAdapter.verifyWebhook: no Authorization header — skipping JWT verification (TEAMS_SKIP_JWT_VERIFY=true)",
+        );
+        return { isValid: true };
       }
-      console.warn(
-        "TeamsAdapter.verifyWebhook: no Authorization header — skipping JWT verification (non-production)",
-      );
-      return { isValid: true };
+      return { isValid: false };
     }
 
     const token = authHeader.slice("Bearer ".length);

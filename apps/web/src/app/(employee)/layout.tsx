@@ -1,6 +1,7 @@
 import { Sidebar } from "@/components/sidebar";
 import { PathBar } from "@/components/path-bar";
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◉" },
@@ -19,6 +20,11 @@ export default async function EmployeeLayout({
 }) {
   const session = await auth();
   const isDemoMode = process.env.DEMO_MODE === "true";
+
+  if (!session && !isDemoMode) {
+    redirect("/login");
+  }
+
   const userName = session?.user?.name ?? (isDemoMode ? "Demo User" : undefined);
 
   return (

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/session-utils";
 import { z } from "zod";
 import {
   createCoreValue,
@@ -23,6 +24,9 @@ const questionnaireSchema = z.object({
 });
 
 export async function addValue(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = valueSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description") ?? "",
@@ -47,6 +51,9 @@ const editValueSchema = z.object({
 });
 
 export async function editValue(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = editValueSchema.safeParse({
     id: formData.get("id"),
     name: formData.get("name"),
@@ -68,6 +75,9 @@ export async function editValue(formData: FormData): Promise<ActionResult> {
 const idSchema = z.object({ id: z.string().uuid("Invalid ID") });
 
 export async function removeValue(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = idSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const { id } = parsed.data;
@@ -83,6 +93,9 @@ export async function removeValue(formData: FormData): Promise<ActionResult> {
 }
 
 export async function addQuestionnaire(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = questionnaireSchema.safeParse({
     name: formData.get("name"),
     category: formData.get("category"),
@@ -107,6 +120,9 @@ const editQuestionnaireSchema = z.object({
 });
 
 export async function editQuestionnaire(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = editQuestionnaireSchema.safeParse({
     id: formData.get("id"),
     name: formData.get("name"),
@@ -125,6 +141,9 @@ export async function editQuestionnaire(formData: FormData): Promise<ActionResul
 }
 
 export async function toggleVerbatim(formData: FormData): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const parsed = idSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const { id } = parsed.data;

@@ -1,14 +1,18 @@
 "use server";
 
 import { createManagerQuestionnaire } from "@/lib/api";
+import { requireRole } from "@/lib/session-utils";
 import { revalidatePath } from "next/cache";
 
 export async function createManagerQuestionnaireAction(formData: FormData) {
-  const name = formData.get("name") as string;
-  const category = formData.get("category") as string;
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
+  const name = formData.get("name");
+  const category = formData.get("category");
   const verbatim = formData.get("verbatim") === "on";
 
-  if (!name || !category) {
+  if (!name || typeof name !== "string" || !name.trim() || !category || typeof category !== "string" || !category.trim()) {
     return { error: "Name and category are required" };
   }
 

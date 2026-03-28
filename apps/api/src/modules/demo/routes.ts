@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { Queue } from "bullmq";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   questionnaires,
@@ -137,27 +137,27 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
             .send({ error: "Please register your email first via /lead" });
         }
 
-        const usedToday = getDailyCount(lead);
-        if (usedToday >= MAX_DEMO_CONVERSATIONS_PER_DAY) {
+        const today = todayDateStr();
+
+        // Atomic conditional UPDATE: increment if under limit, reset if new day
+        const updated = await db
+          .update(leads)
+          .set({
+            countToday: sql`CASE WHEN ${leads.conversationDate} = ${today} THEN ${leads.countToday} + 1 ELSE 1 END`,
+            conversationDate: today,
+          })
+          .where(
+            and(
+              eq(leads.id, lead.id),
+              sql`(${leads.conversationDate} IS DISTINCT FROM ${today} OR ${leads.countToday} < ${MAX_DEMO_CONVERSATIONS_PER_DAY})`,
+            ),
+          )
+          .returning({ id: leads.id });
+
+        if (updated.length === 0) {
           return reply.code(429).send({
             error: `Rate limit: max ${MAX_DEMO_CONVERSATIONS_PER_DAY} demo conversations per day`,
           });
-        }
-
-        // Atomic increment with date-aware reset
-        const today = todayDateStr();
-        if (lead.conversationDate === today) {
-          // Same day — increment
-          await db
-            .update(leads)
-            .set({ countToday: sql`${leads.countToday} + 1` })
-            .where(eq(leads.id, lead.id));
-        } else {
-          // New day — reset counter to 1
-          await db
-            .update(leads)
-            .set({ countToday: 1, conversationDate: today })
-            .where(eq(leads.id, lead.id));
         }
 
         // Use first active user as the demo reviewer

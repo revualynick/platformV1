@@ -16,7 +16,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    */
   app.get("/lookup", async (request, reply) => {
     const secret = request.headers["x-internal-secret"] as string | undefined;
-    if (!secret || secret.length !== INTERNAL_SECRET.length || !crypto.timingSafeEqual(Buffer.from(secret), Buffer.from(INTERNAL_SECRET))) {
+    const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
+    const actual = crypto.createHmac("sha256", secret ?? "").update("revualy").digest();
+    if (!secret || !crypto.timingSafeEqual(expected, actual)) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 

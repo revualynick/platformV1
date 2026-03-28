@@ -10,6 +10,7 @@ import {
   updateAgendaItem,
   generateAgenda,
 } from "@/lib/api";
+import { requireRole } from "@/lib/session-utils";
 import { revalidatePath } from "next/cache";
 
 /** Safely extract a string from FormData (returns null if missing or not a string). */
@@ -19,6 +20,9 @@ function getString(fd: FormData, key: string): string | null {
 }
 
 export async function createSession(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const employeeId = getString(formData, "employeeId");
   const scheduledAt = getString(formData, "scheduledAt");
 
@@ -36,6 +40,9 @@ export async function createSession(formData: FormData) {
 }
 
 export async function startSession(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 
@@ -49,6 +56,9 @@ export async function startSession(formData: FormData) {
 }
 
 export async function endSession(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 
@@ -62,6 +72,9 @@ export async function endSession(formData: FormData) {
 }
 
 export async function saveNotes(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const notes = formData.get("notes");
   if (!sessionId) return { error: "Session ID is required" };
@@ -75,6 +88,9 @@ export async function saveNotes(formData: FormData) {
 }
 
 export async function addActionItemAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const text = getString(formData, "text");
   const assigneeId = getString(formData, "assigneeId");
@@ -94,6 +110,9 @@ export async function addActionItemAction(formData: FormData) {
 }
 
 export async function toggleActionItemAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const itemId = getString(formData, "itemId");
   const completed = formData.get("completed") === "true";
@@ -110,6 +129,9 @@ export async function toggleActionItemAction(formData: FormData) {
 }
 
 export async function deleteActionItemAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const itemId = getString(formData, "itemId");
 
@@ -125,6 +147,9 @@ export async function deleteActionItemAction(formData: FormData) {
 }
 
 export async function addAgendaItemAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const text = getString(formData, "text");
 
@@ -140,6 +165,9 @@ export async function addAgendaItemAction(formData: FormData) {
 }
 
 export async function toggleAgendaItemAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   const itemId = getString(formData, "itemId");
   const covered = formData.get("covered") === "true";
@@ -156,6 +184,9 @@ export async function toggleAgendaItemAction(formData: FormData) {
 }
 
 export async function generateAgendaAction(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const sessionId = getString(formData, "sessionId");
   if (!sessionId) return { error: "Session ID is required" };
 

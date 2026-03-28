@@ -5,6 +5,7 @@ import {
   updateManagerNote,
   deleteManagerNote,
 } from "@/lib/api";
+import { requireRole } from "@/lib/session-utils";
 import { revalidatePath } from "next/cache";
 
 /** Safely extract a string from FormData (returns null if missing or not a string). */
@@ -14,6 +15,9 @@ function getString(fd: FormData, key: string): string | null {
 }
 
 export async function addNote(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const subjectId = getString(formData, "subjectId");
   const content = getString(formData, "content");
 
@@ -35,6 +39,9 @@ export async function addNote(formData: FormData) {
 }
 
 export async function editNote(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const noteId = getString(formData, "noteId");
   const subjectId = getString(formData, "subjectId");
   const content = getString(formData, "content");
@@ -57,6 +64,9 @@ export async function editNote(formData: FormData) {
 }
 
 export async function removeNote(formData: FormData) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
   const noteId = getString(formData, "noteId");
   const subjectId = getString(formData, "subjectId");
 
@@ -66,7 +76,7 @@ export async function removeNote(formData: FormData) {
 
   try {
     await deleteManagerNote(noteId);
-    revalidatePath(`/team/members/${subjectId}`);
+    if (subjectId) revalidatePath(`/team/members/${subjectId}`);
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to delete note" };

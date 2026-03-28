@@ -32,6 +32,9 @@ export class GoogleChatAdapter implements ChatAdapter {
 
   constructor(config: GoogleChatAdapterConfig) {
     this.projectId = config.projectId;
+    if (!config.verificationToken) {
+      throw new Error("GoogleChatAdapter: verificationToken must not be empty");
+    }
     this.verificationToken = config.verificationToken;
 
     // Initialize Google Chat API client with service account credentials
@@ -61,28 +64,21 @@ export class GoogleChatAdapter implements ChatAdapter {
     const authHeader = headers["authorization"] ?? headers["Authorization"];
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.slice(7); // "Bearer ".length === 7
-      if (
-        token.length > 0 &&
-        token.length === this.verificationToken.length &&
-        crypto.timingSafeEqual(
-          Buffer.from(token),
-          Buffer.from(this.verificationToken),
-        )
-      ) {
-        return { isValid: true };
+      if (token.length > 0) {
+        const expected = crypto.createHmac("sha256", this.verificationToken).update("gchat").digest();
+        const actual = crypto.createHmac("sha256", token).update("gchat").digest();
+        if (crypto.timingSafeEqual(expected, actual)) {
+          return { isValid: true };
+        }
       }
     }
 
     // Also check token field in body (some Google Chat configurations)
     if (payload.token) {
       const bodyToken = String(payload.token);
-      if (
-        bodyToken.length === this.verificationToken.length &&
-        crypto.timingSafeEqual(
-          Buffer.from(bodyToken),
-          Buffer.from(this.verificationToken),
-        )
-      ) {
+      const expected = crypto.createHmac("sha256", this.verificationToken).update("gchat").digest();
+      const actual = crypto.createHmac("sha256", bodyToken).update("gchat").digest();
+      if (crypto.timingSafeEqual(expected, actual)) {
         return { isValid: true };
       }
     }

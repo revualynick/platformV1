@@ -1,6 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/session-utils";
+import { z } from "zod";
+
+const uuidSchema = z.string().uuid("Invalid ID");
 import {
   createCampaign,
   updateCampaign,
@@ -14,6 +18,9 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function createCampaignAction(
   formData: FormData,
 ): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+
   const name = formData.get("name");
   if (!name || typeof name !== "string" || !name.trim()) {
     return { ok: false, error: "Name is required" };
@@ -47,6 +54,10 @@ export async function updateCampaignAction(
   id: string,
   formData: FormData,
 ): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+  if (!uuidSchema.safeParse(id).success) return { ok: false, error: "Invalid campaign ID" };
+
   const name = formData.get("name");
   if (!name || typeof name !== "string" || !name.trim()) {
     return { ok: false, error: "Name is required" };
@@ -80,6 +91,10 @@ export async function updateCampaignAction(
 export async function deleteCampaignAction(
   id: string,
 ): Promise<ActionResult> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+  if (!uuidSchema.safeParse(id).success) return { ok: false, error: "Invalid campaign ID" };
+
   try {
     await deleteCampaign(id);
     revalidatePath("/settings/campaigns");
@@ -95,6 +110,10 @@ export async function deleteCampaignAction(
 export async function advanceCampaignAction(
   id: string,
 ): Promise<ActionResult & { status?: string }> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+  if (!uuidSchema.safeParse(id).success) return { ok: false, error: "Invalid campaign ID" };
+
   try {
     const updated = await advanceCampaign(id);
     revalidatePath("/settings/campaigns");
@@ -112,6 +131,10 @@ export async function sendCampaignChatAction(
   id: string,
   message: string,
 ): Promise<{ ok: true; reply: string; suggestions: string[] } | { ok: false; error: string }> {
+  const guard = await requireRole("admin");
+  if (!guard.ok) return { ok: false, error: guard.error };
+  if (!uuidSchema.safeParse(id).success) return { ok: false, error: "Invalid campaign ID" };
+
   try {
     const result = await sendCampaignChatMessage(id, message);
     return { ok: true, reply: result.reply, suggestions: result.suggestions };
