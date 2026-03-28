@@ -61,6 +61,7 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/src/migrations ./packages/db/src/migrations
+COPY --from=build /app/packages/db/src/migrations ./packages/db/dist/migrations
 COPY --from=build /app/packages/chat-core/dist ./packages/chat-core/dist
 COPY --from=build /app/packages/chat-adapter-slack/dist ./packages/chat-adapter-slack/dist
 COPY --from=build /app/packages/chat-adapter-gchat/dist ./packages/chat-adapter-gchat/dist
