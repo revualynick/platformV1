@@ -30,8 +30,9 @@ interface TeamOrgChartProps {
 }
 
 // --- Layout constants ---
-const CANVAS_W = 1100;
+const CANVAS_W = 1400;
 const MIN_CANVAS_H = 420;
+const LEVEL_H = 200;
 const NODE_W = 130;
 const NODE_H = 56;
 
@@ -59,34 +60,59 @@ const threadStrokeColors: Record<string, string> = {
   infra: "#57534e",
 };
 
-// --- Auto-layout: manager centered at top, reports spread below ---
+// --- Auto-layout: BFS from root, each level placed below the previous ---
 function computeAutoPositions(
   people: TeamPerson[],
   managerId: string,
 ): Record<string, { x: number; y: number }> {
   const pos: Record<string, { x: number; y: number }> = {};
-  const reports = people.filter((p) => p.reportsTo === managerId);
+  const childrenOf = new Map<string, TeamPerson[]>();
+  for (const p of people) {
+    if (p.reportsTo) {
+      const arr = childrenOf.get(p.reportsTo) ?? [];
+      arr.push(p);
+      childrenOf.set(p.reportsTo, arr);
+    }
+  }
 
-  // Manager centered at top
-  pos[managerId] = { x: CANVAS_W / 2 - NODE_W / 2, y: 40 };
+  // BFS to assign levels
+  const levelMap = new Map<string, number>();
+  const queue: string[] = [managerId];
+  levelMap.set(managerId, 0);
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const lvl = levelMap.get(id)!;
+    for (const child of (childrenOf.get(id) ?? []).sort((a, b) => a.id.localeCompare(b.id))) {
+      if (!levelMap.has(child.id)) {
+        levelMap.set(child.id, lvl + 1);
+        queue.push(child.id);
+      }
+    }
+  }
 
-  // Reports spread evenly below with staggered y
-  const count = reports.length;
-  if (count === 0) return pos;
+  // Group by level
+  const byLevel = new Map<number, string[]>();
+  for (const [id, lvl] of levelMap) {
+    const arr = byLevel.get(lvl) ?? [];
+    arr.push(id);
+    byLevel.set(lvl, arr);
+  }
 
-  const spacing = Math.max(120, Math.min(170, (CANVAS_W - 100) / count));
-  const totalWidth = (count - 1) * spacing;
-  const startX = CANVAS_W / 2 - totalWidth / 2 - NODE_W / 2;
-  const baseY = 200;
-
-  reports
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .forEach((person, i) => {
-      pos[person.id] = {
+  const maxLevel = Math.max(...byLevel.keys());
+  for (let lvl = 0; lvl <= maxLevel; lvl++) {
+    const ids = (byLevel.get(lvl) ?? []).sort((a, b) => a.localeCompare(b));
+    const count = ids.length;
+    const spacing = Math.max(140, Math.min(200, (CANVAS_W - 100) / Math.max(count, 1)));
+    const totalWidth = (count - 1) * spacing;
+    const startX = CANVAS_W / 2 - totalWidth / 2 - NODE_W / 2;
+    const baseY = 40 + lvl * LEVEL_H;
+    ids.forEach((id, i) => {
+      pos[id] = {
         x: Math.max(10, Math.min(CANVAS_W - NODE_W - 10, startX + i * spacing)),
-        y: baseY + (i % 2 === 1 ? 70 : 0),
+        y: baseY + (i % 2 === 1 ? 50 : 0),
       };
     });
+  }
 
   return pos;
 }
@@ -171,7 +197,7 @@ function rebalanceChildren(
   const spacing = Math.max(120, Math.min(170, (CANVAS_W - 100) / children.length));
   const totalWidth = (children.length - 1) * spacing;
   const startX = parentCenter - totalWidth / 2 - NODE_W / 2;
-  const childBaseY = parentY + 160;
+  const childBaseY = parentY + LEVEL_H;
 
   children.forEach((child, i) => {
     result[child.id] = {
@@ -344,7 +370,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
 
       {/* Canvas */}
       <div
-        className="card-enter relative rounded-2xl border border-stone-200/60 bg-surface"
+        className="card-enter relative z-20 rounded-2xl border border-stone-200/60 bg-surface"
         style={{ animationDelay: "350ms", boxShadow: "var(--shadow-sm)" }}
       >
         <div className="overflow-x-auto">
@@ -707,7 +733,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
               : svgToPercent(pos.x + NODE_W / 2, pos.y + NODE_H);
             return (
               <div
-                className={`absolute z-20 -translate-x-1/2 ${openAbove ? "-translate-y-full" : ""}`}
+                className={`absolute z-50 -translate-x-1/2 ${openAbove ? "-translate-y-full" : ""}`}
                 style={{
                   left: anchor.left,
                   top: anchor.top,
@@ -796,7 +822,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
             const openAbove = mid.y > canvasH / 2;
             return (
               <div
-                className={`absolute z-20 -translate-x-1/2 ${openAbove ? "-translate-y-full" : ""}`}
+                className={`absolute z-50 -translate-x-1/2 ${openAbove ? "-translate-y-full" : ""}`}
                 style={{
                   left: pct.left,
                   top: pct.top,
