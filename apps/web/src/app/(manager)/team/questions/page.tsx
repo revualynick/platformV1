@@ -83,9 +83,15 @@ export default async function QuestionsPage() {
 
       {/* My Team Questions */}
       <div className="mb-10">
-        <h2 className="mb-4 font-display text-lg font-semibold text-stone-800">
+        <h2 className="mb-1 font-display text-lg font-semibold text-stone-800">
           My Team Questions
         </h2>
+        <p className="mb-4 text-sm text-stone-500">
+          Team questions target what your team is working on right now (e.g.
+          &ldquo;How is the mobile launch collaboration going?&rdquo;).
+          Org-wide questions below are maintained by admins and used
+          everywhere.
+        </p>
         {teamQuestions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-stone-200 p-8 text-center">
             <p className="text-sm text-stone-400">

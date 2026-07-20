@@ -39,6 +39,7 @@ export function FAQAccordion({ items }: FAQAccordionProps) {
                   stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
+                  aria-hidden="true"
                 >
                   <line x1="7" y1="1" x2="7" y2="13" />
                   <line x1="1" y1="7" x2="13" y2="7" />

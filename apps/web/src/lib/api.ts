@@ -248,6 +248,7 @@ export async function updateOrgSettings(data: {
   name?: string;
   timezone?: string;
   allowedDomains?: string[];
+  checkInTitleMarker?: string;
 }) {
   return apiFetch<OrgSettingsRow>("/api/v1/admin/org", {
     method: "PATCH",
@@ -917,6 +918,195 @@ export async function disconnectIntegration(id: string) {
   );
 }
 
+// ── Assessments & Profiling ────────────────────────────
+
+export interface AssessmentFrameworkRow {
+  framework: string;
+  questionCount: number;
+}
+
+export interface AssessmentQuestionRow {
+  id: string;
+  framework: string;
+  questionType: string;
+  text: string;
+  options: Array<{ key: string; text: string }>;
+  sortOrder: number;
+}
+
+export interface AssessmentSessionRow {
+  id: string;
+  userId: string;
+  framework: string;
+  context: string;
+  responses: Record<string, string>;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export interface ProfileSnapshotRow {
+  id: string;
+  userId: string;
+  framework: string;
+  source: string;
+  sessionId: string | null;
+  dimensions: Record<string, number>;
+  signalCount: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  createdAt: string;
+}
+
+export interface DevelopmentGoalRow {
+  id: string;
+  userId: string;
+  framework: string;
+  dimension: string;
+  targetDirection: string;
+  setById: string;
+  baselineSnapshotId: string | null;
+  status: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAssessmentFrameworks() {
+  return apiFetch<{ data: AssessmentFrameworkRow[] }>(
+    "/api/v1/assessments/frameworks",
+    { cacheTier: "long", tags: ["assessments"] },
+  );
+}
+
+export async function getAssessmentQuestions(framework: string) {
+  return apiFetch<{ data: AssessmentQuestionRow[] }>(
+    `/api/v1/assessments/frameworks/${framework}/questions`,
+    { cacheTier: "long", tags: ["assessments"] },
+  );
+}
+
+export async function startAssessmentSession(data: {
+  framework: string;
+  context?: string;
+}) {
+  return apiFetch<AssessmentSessionRow>("/api/v1/assessments/sessions", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function submitAssessmentSession(
+  sessionId: string,
+  responses: Record<string, string>,
+) {
+  return apiFetch<{
+    session: AssessmentSessionRow;
+    profile: ProfileSnapshotRow;
+  }>(`/api/v1/assessments/sessions/${sessionId}`, {
+    method: "PUT",
+    body: JSON.stringify({ responses }),
+  });
+}
+
+export async function getAssessmentSessions() {
+  return apiFetch<{ data: AssessmentSessionRow[] }>(
+    "/api/v1/assessments/sessions",
+    { cacheTier: "short", tags: ["assessment-sessions"] },
+  );
+}
+
+export async function getMyProfiles(framework?: string) {
+  const qs = framework ? `?framework=${framework}` : "";
+  return apiFetch<{ data: ProfileSnapshotRow[] }>(
+    `/api/v1/profiles/me${qs}`,
+    { cacheTier: "short", tags: ["profiles"] },
+  );
+}
+
+export async function getMyTimeline(framework: string, source?: string) {
+  const params = new URLSearchParams({ framework });
+  if (source) params.set("source", source);
+  return apiFetch<{ data: ProfileSnapshotRow[] }>(
+    `/api/v1/profiles/me/timeline?${params}`,
+    { cacheTier: "short", tags: ["profiles"] },
+  );
+}
+
+export async function getMyGoals() {
+  return apiFetch<{ data: DevelopmentGoalRow[] }>(
+    "/api/v1/profiles/me/goals",
+    { cacheTier: "short", tags: ["profile-goals"] },
+  );
+}
+
+export async function getUserProfile(userId: string, framework?: string) {
+  const qs = framework ? `?framework=${framework}` : "";
+  return apiFetch<{
+    profiles: ProfileSnapshotRow[];
+    goals: DevelopmentGoalRow[];
+  }>(`/api/v1/profiles/users/${userId}${qs}`, {
+    cacheTier: "short",
+    tags: ["profiles"],
+  });
+}
+
+export async function getUserTimeline(userId: string, framework: string) {
+  return apiFetch<{ data: ProfileSnapshotRow[] }>(
+    `/api/v1/profiles/users/${userId}/timeline?framework=${framework}`,
+    { cacheTier: "short", tags: ["profiles"] },
+  );
+}
+
+export async function getUserDrift(userId: string, framework: string) {
+  return apiFetch<{
+    baseline: ProfileSnapshotRow;
+    observed: ProfileSnapshotRow | null;
+    drift: Record<string, number> | null;
+    message?: string;
+  }>(`/api/v1/profiles/users/${userId}/drift?framework=${framework}`, {
+    cacheTier: "short",
+    tags: ["profiles"],
+  });
+}
+
+export async function getTeamProfiles(teamId: string, framework: string) {
+  return apiFetch<{
+    data: Array<{
+      user: { id: string; name: string };
+      profile: ProfileSnapshotRow | null;
+    }>;
+  }>(`/api/v1/profiles/team/${teamId}?framework=${framework}`, {
+    cacheTier: "short",
+    tags: ["profiles"],
+  });
+}
+
+export async function createDevelopmentGoal(
+  userId: string,
+  data: {
+    framework: string;
+    dimension: string;
+    targetDirection: string;
+    baselineSnapshotId?: string;
+    notes?: string;
+  },
+) {
+  return apiFetch<DevelopmentGoalRow>(
+    `/api/v1/profiles/users/${userId}/goals`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export async function updateDevelopmentGoal(
+  goalId: string,
+  data: { status?: string; notes?: string },
+) {
+  return apiFetch<DevelopmentGoalRow>(`/api/v1/profiles/goals/${goalId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Team Insights ──────────────────────────────────────
 
 export interface MemberSummary {
@@ -952,5 +1142,214 @@ export interface FeedbackDigestRow {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Goals ──────────────────────────────────────────────
+
+export interface GoalCycleRow {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  createdAt: string;
+}
+
+export interface GoalRow {
+  id: string;
+  level: "org" | "team" | "individual" | "personal";
+  title: string;
+  description: string;
+  parentGoalId: string | null;
+  cycleId: string | null;
+  teamId: string | null;
+  ownerId: string;
+  createdById: string;
+  status: "draft" | "on_track" | "at_risk" | "behind" | "achieved" | "archived";
+  progressPercent: number;
+  metricName: string | null;
+  metricStartValue: number | null;
+  metricTargetValue: number | null;
+  metricCurrentValue: number | null;
+  shareWithManager: boolean;
+  targetDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoalUpdateRow {
+  id: string;
+  goalId: string;
+  authorId: string;
+  progressPercent: number | null;
+  metricCurrentValue: number | null;
+  status: string | null;
+  note: string;
+  source: string;
+  createdAt: string;
+}
+
+export async function createGoalCycle(data: {
+  name: string;
+  startDate: string;
+  endDate: string;
+}) {
+  return apiFetch<GoalCycleRow>("/api/v1/goals/cycles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateGoalCycle(
+  id: string,
+  data: Partial<{ name: string; startDate: string; endDate: string }>,
+) {
+  return apiFetch<GoalCycleRow>(`/api/v1/goals/cycles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createGoal(data: {
+  level: GoalRow["level"];
+  title: string;
+  description?: string;
+  parentGoalId?: string | null;
+  cycleId?: string | null;
+  teamId?: string | null;
+  ownerId: string;
+  status?: GoalRow["status"];
+  progressPercent?: number;
+  metricName?: string | null;
+  metricStartValue?: number | null;
+  metricTargetValue?: number | null;
+  metricCurrentValue?: number | null;
+  shareWithManager?: boolean;
+  targetDate?: string | null;
+}) {
+  return apiFetch<GoalRow>("/api/v1/goals", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateGoal(
+  id: string,
+  data: Partial<{
+    title: string;
+    description: string;
+    parentGoalId: string | null;
+    status: GoalRow["status"];
+    progressPercent: number;
+    metricName: string | null;
+    metricStartValue: number | null;
+    metricTargetValue: number | null;
+    metricCurrentValue: number | null;
+    shareWithManager: boolean;
+    targetDate: string | null;
+  }>,
+) {
+  return apiFetch<GoalRow>(`/api/v1/goals/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteGoal(id: string) {
+  return apiFetch<{ id: string; deleted: boolean }>(`/api/v1/goals/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function createGoalCheckIn(
+  goalId: string,
+  data: {
+    progressPercent?: number;
+    metricCurrentValue?: number;
+    status?: GoalRow["status"];
+    note?: string;
+  },
+) {
+  return apiFetch<{ update: GoalUpdateRow; goal: GoalRow }>(
+    `/api/v1/goals/${goalId}/updates`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export interface GoalSuggestionRow {
+  id: string;
+  goalId: string;
+  meetingId: string;
+  suggestedProgressPercent: number | null;
+  suggestedStatus: string | null;
+  suggestedMetricCurrentValue: number | null;
+  suggestedNote: string;
+  evidenceQuote: string;
+  status: "pending" | "applied" | "dismissed";
+  createdAt: string;
+}
+
+export async function applyGoalSuggestion(
+  id: string,
+  edits: {
+    progressPercent?: number;
+    metricCurrentValue?: number;
+    status?: GoalRow["status"];
+    note?: string;
+  } = {},
+) {
+  return apiFetch<{
+    suggestion: GoalSuggestionRow;
+    update: GoalUpdateRow;
+    goal: GoalRow;
+  }>(`/api/v1/goals/suggestions/${id}/apply`, {
+    method: "POST",
+    body: JSON.stringify(edits),
+  });
+}
+
+export async function dismissGoalSuggestion(id: string) {
+  return apiFetch<{ suggestion: GoalSuggestionRow }>(
+    `/api/v1/goals/suggestions/${id}/dismiss`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+/** Manager review of a flag on one of their reports. */
+export async function reviewFlaggedEscalation(
+  id: string,
+  action: "investigate" | "dismiss",
+  note?: string,
+) {
+  return apiFetch<{ id: string; status: string }>(
+    `/api/v1/escalations/${id}/review`,
+    { method: "POST", body: JSON.stringify({ action, note }) },
+  );
+}
+
+/** Admin escalation transition (status + optional resolution note). */
+export async function updateEscalation(
+  id: string,
+  data: { status?: string; resolution?: string; severity?: string },
+) {
+  return apiFetch<{ id: string; status: string }>(`/api/v1/escalations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Nudge a report (by email) to take a profile assessment. */
+export async function sendAssessmentInvite(userId: string) {
+  return apiFetch<{ invited: boolean }>(
+    `/api/v1/profiles/users/${userId}/assessment-invite`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function getGoogleIntegrationStatus() {
+  return apiFetch<{
+    connected: boolean;
+    expiresAt: string | null;
+    hasDriveScope: boolean;
+  }>("/api/v1/integrations/google/status");
 }
 

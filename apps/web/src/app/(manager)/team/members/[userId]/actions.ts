@@ -4,6 +4,7 @@ import {
   createManagerNote,
   updateManagerNote,
   deleteManagerNote,
+  sendAssessmentInvite,
 } from "@/lib/api";
 import { requireRole } from "@/lib/session-utils";
 import { revalidatePath } from "next/cache";
@@ -80,5 +81,18 @@ export async function removeNote(formData: FormData) {
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Failed to delete note" };
+  }
+}
+
+/** Email a report a nudge to take the profile assessments. */
+export async function inviteToAssessmentAction(userId: string) {
+  const guard = await requireRole("manager", "admin");
+  if (!guard.ok) return { error: guard.error };
+
+  try {
+    await sendAssessmentInvite(userId);
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to send invite" };
   }
 }

@@ -152,3 +152,23 @@ export function nudgeTemplate(data: NudgeData): string {
 </table>
 `);
 }
+
+export interface AssessmentInviteData {
+  userName: string;
+  managerName: string;
+}
+
+export function assessmentInviteTemplate(data: AssessmentInviteData): string {
+  return layout("Your manager suggests a quick assessment", `
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${escapeHtml(data.userName)},</p>
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 24px;"><strong>${escapeHtml(data.managerName)}</strong> suggested you take a short Revualy assessment — about 5 minutes covering your communication style (Colour Profile) and decision-making approach (CDM).</p>
+
+<p style="color:#78716C;font-size:14px;margin:0 0 24px;">Your results help you and your manager understand how you work best — they're a coaching tool, never a score.</p>
+
+<table cellpadding="0" cellspacing="0">
+<tr><td style="background:${BRAND.forest};border-radius:10px;padding:12px 24px;">
+<a href="${APP_URL}/dashboard/profile" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Take the assessment</a>
+</td></tr>
+</table>
+`);
+}

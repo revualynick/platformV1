@@ -4,6 +4,16 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
 import { getEscalations as getEscalationsQuery } from "@revualy/db/queries";
+import { InfoHint } from "@/components/info-hint";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
+import { EscalationActions } from "./escalation-actions";
+
+// Statuses the shared style map doesn't cover yet (open/resolved live there).
+const extraStatusStyles: Record<string, { bg: string; text: string; label: string }> = {
+  investigating: { bg: "bg-amber/10", text: "text-warning", label: "Investigating" },
+  dismissed: { bg: "bg-stone-100", text: "text-stone-500", label: "Dismissed" },
+};
 
 type AuditEntry = { action: string; by: string; date: string; notes: string | null };
 type RelatedFeedback = { id: string; date: string; score: number; excerpt: string };
@@ -19,11 +29,13 @@ type EscalationItem = {
   relatedFeedback: RelatedFeedback[];
 };
 
-async function loadEscalations(isDemo: boolean): Promise<EscalationItem[]> {
-  if (isDemo) return escalationDetails as EscalationItem[];
+async function loadEscalations(
+  isDemo: boolean,
+): Promise<{ items: EscalationItem[]; loadFailed: boolean }> {
+  if (isDemo) return { items: escalationDetails as EscalationItem[], loadFailed: false };
   try {
     const rows = await getEscalationsQuery(getDb());
-    return rows.map((e) => ({
+    const items = rows.map((e) => ({
       id: e.id,
       severity: e.severity,
       status: e.status,
@@ -34,14 +46,31 @@ async function loadEscalations(isDemo: boolean): Promise<EscalationItem[]> {
       auditTrail: [],
       relatedFeedback: [],
     }));
-  } catch {
-    return [];
+    return { items, loadFailed: false };
+  } catch (err) {
+    logPageError("admin-escalations", err);
+    return { items: [], loadFailed: true };
   }
 }
 
 export default async function EscalationsPage() {
   const session = await auth();
-  const items = await loadEscalations(isDemoSession(session));
+  const isDemo = isDemoSession(session);
+  const { items, loadFailed } = await loadEscalations(isDemo);
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">HR Review</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Escalations
+          </h1>
+        </div>
+        <DataUnavailable what="escalations" />
+      </div>
+    );
+  }
   const openCount = items.filter(
     (e) => e.status === "open",
   ).length;
@@ -108,6 +137,19 @@ export default async function EscalationsPage() {
         ))}
       </div>
 
+      {/* Severity + workflow explainer */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500">
+        <span className="flex items-center font-medium text-stone-600">
+          Severity levels
+          <InfoHint entry="severityLevels" />
+        </span>
+        <span className="text-stone-300">&middot;</span>
+        <span>
+          Workflow: Open → Investigating → Resolved or Dismissed. Every
+          transition is recorded in the audit trail.
+        </span>
+      </div>
+
       {/* Escalation detail cards */}
       <div className="space-y-6">
         {items.length === 0 && (
@@ -120,8 +162,15 @@ export default async function EscalationsPage() {
         )}
         {items.map((esc, i) => {
           const severity = severityStyles[esc.severity];
-          const status = statusStyles[esc.status];
+          const status =
+            statusStyles[esc.status] ??
+            extraStatusStyles[esc.status] ?? {
+              bg: "bg-stone-100",
+              text: "text-stone-500",
+              label: esc.status,
+            };
           const isResolved = esc.status === "resolved";
+          const isActionable = esc.status === "open" || esc.status === "investigating";
 
           return (
             <div
@@ -258,17 +307,34 @@ export default async function EscalationsPage() {
               </div>
 
               {/* Actions */}
-              {!isResolved && (
-                <div className="flex items-center gap-3 border-t border-stone-100 px-6 py-4">
-                  <button className="rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white hover:bg-forest-light">
-                    Begin Investigation
-                  </button>
-                  <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
-                    Assign to HR
-                  </button>
-                  <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
-                    Mark Resolved
-                  </button>
+              {isActionable && (
+                <div className="border-t border-stone-100 px-6 py-4">
+                  {isDemo ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      {esc.status === "open" && (
+                        <button
+                          disabled
+                          className="cursor-not-allowed rounded-xl bg-forest shadow-[0_8px_20px_rgba(61,24,55,0.25)] px-4 py-2 text-xs font-medium text-white opacity-50"
+                        >
+                          Begin Investigation
+                        </button>
+                      )}
+                      <button
+                        disabled
+                        className="cursor-not-allowed rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 opacity-50"
+                      >
+                        Mark Resolved
+                      </button>
+                      <button
+                        disabled
+                        className="cursor-not-allowed rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 opacity-50"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  ) : (
+                    <EscalationActions id={esc.id} status={esc.status} />
+                  )}
                 </div>
               )}
             </div>

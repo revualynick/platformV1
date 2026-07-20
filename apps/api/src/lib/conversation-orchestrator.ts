@@ -95,17 +95,24 @@ export async function initiateConversation(
   // 4. Determine max messages based on interaction type
   const maxMessages = getMaxMessages(params.interactionType);
 
-  // 5. Generate opening question
+  // 5. Generate opening question, prefixed with a deterministic intro
+  // (what this is, how long it takes, where answers go — the privacy
+  // line must never be LLM-paraphrased).
   const firstTheme = selectedThemes[0];
-  const openingQuestion = await generateQuestion(deps.llm, {
-    theme: firstTheme,
-    verbatim: questionnaire?.verbatim ?? false,
-    reviewerName: reviewer?.name ?? "there",
-    subjectName: subject?.name ?? "your colleague",
-    interactionType: params.interactionType,
-    isOpening: true,
-    priorMessages: [],
-  });
+  const openingQuestion =
+    getInteractionIntro(
+      params.interactionType,
+      subject?.name ?? "your colleague",
+    ) +
+    (await generateQuestion(deps.llm, {
+      theme: firstTheme,
+      verbatim: questionnaire?.verbatim ?? false,
+      reviewerName: reviewer?.name ?? "there",
+      subjectName: subject?.name ?? "your colleague",
+      interactionType: params.interactionType,
+      isOpening: true,
+      priorMessages: [],
+    }));
 
   // 6. Create conversation record + opening message in a transaction
   const conversation = await db.transaction(async (tx) => {
@@ -165,11 +172,15 @@ export async function initiateConversation(
  * Handle an inbound reply from the user.
  * Decides whether to follow up, move to next theme, or close.
  */
+const TRUNCATION_NOTE =
+  "(Heads up — your last message was quite long and I could only read the first part. Feel free to split longer thoughts across messages.)\n\n";
+
 export async function handleReply(
   db: TenantDb,
   deps: OrchestratorDeps,
   state: ConversationState,
   userMessage: string,
+  opts: { truncatedInbound?: boolean } = {},
 ): Promise<{ state: ConversationState; closed: boolean }> {
   // 1. Store the user's message
   await db.insert(conversationMessages).values({
@@ -219,20 +230,25 @@ export async function handleReply(
     priorMessages: state.messages,
   });
 
-  // 5. Store and send
+  // 5. Store and send — acknowledging inbound truncation so long
+  // replies are never silently cut without the user knowing.
+  const outbound = opts.truncatedInbound
+    ? TRUNCATION_NOTE + nextQuestion
+    : nextQuestion;
+
   await db.insert(conversationMessages).values({
     conversationId: state.conversationId,
     role: "assistant",
-    content: nextQuestion,
+    content: outbound,
   });
 
-  state.messages.push({ role: "assistant", content: nextQuestion });
+  state.messages.push({ role: "assistant", content: outbound });
   state.messageCount++;
 
   await sendMessage(deps.adapters, {
     platform: state.platform,
     channelId: state.channelId,
-    text: nextQuestion,
+    text: outbound,
     threadId: state.threadId,
   });
 
@@ -424,16 +440,40 @@ export function getMaxMessages(type: InteractionType): number {
   }
 }
 
+/**
+ * Deterministic intro prepended to the LLM-generated opening question.
+ * Explains what the interaction is, how long it takes, and where the
+ * answers go. Privacy language is static on purpose — it must never be
+ * LLM-paraphrased.
+ */
+export function getInteractionIntro(
+  type: InteractionType,
+  subjectName: string,
+): string {
+  switch (type) {
+    case "peer_review":
+      return `👋 I'm Revualy's feedback assistant. I'll ask a couple of quick questions about working with ${subjectName} — it takes about 2–3 minutes. Your answers shape ${subjectName}'s feedback summary: they and their manager see the themes, not your name.\n\n`;
+    case "self_reflection":
+      return `👋 Time for your weekly reflection — a few minutes to process the week. This one's private: only you (and your dashboard) see what you write here.\n\n`;
+    case "three_sixty":
+      return `👋 I'm Revualy's feedback assistant. This is a 360 review for ${subjectName} — a few questions, about 3–4 minutes. Your input is combined with others' into an anonymized summary.\n\n`;
+    case "pulse_check":
+      return `👋 Quick pulse check — one or two questions on how things are going. Your answers help spot team-level trends early.\n\n`;
+    default:
+      return `👋 I'm Revualy's feedback assistant — this takes just a few minutes.\n\n`;
+  }
+}
+
 export function getClosingMessage(type: InteractionType): string {
   switch (type) {
     case "peer_review":
-      return "Thanks so much for sharing your thoughts! Your feedback makes a real difference. Have a great rest of your day.";
+      return "Thanks so much for sharing your thoughts! Your feedback makes a real difference — it'll be reflected (without your name) in your colleague's feedback summary shortly. Have a great rest of your day.";
     case "self_reflection":
-      return "Great reflection session! Taking time to think about your week is a real strength. Keep it up!";
+      return "Great reflection session! Taking time to think about your week is a real strength. You'll find this saved on your Reflections page. Keep it up!";
     case "three_sixty":
-      return "Really appreciate your candid feedback. This kind of input is invaluable for growth. Thank you!";
+      return "Really appreciate your candid feedback. It'll be combined with others' input into an anonymized growth summary. Thank you!";
     case "pulse_check":
-      return "Thanks for the quick check-in! Your input helps us keep a pulse on how things are going.";
+      return "Thanks for the quick check-in! Your input feeds the team-level pulse trends your leaders see — never as individual answers.";
     default:
       return "Thanks for your time! Your input is really valuable.";
   }

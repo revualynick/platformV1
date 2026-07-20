@@ -68,6 +68,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     if (body.name !== undefined) updates.name = body.name;
     if (body.timezone !== undefined) updates.timezone = body.timezone;
     if (body.allowedDomains !== undefined) updates.allowedDomains = body.allowedDomains;
+    if (body.checkInTitleMarker !== undefined) updates.checkInTitleMarker = body.checkInTitleMarker;
 
     const [existing] = await db.select({ id: orgSettings.id }).from(orgSettings);
     if (!existing) return reply.code(404).send({ error: "Org settings not found" });

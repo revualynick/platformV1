@@ -226,3 +226,27 @@ revualy/
 - [ ] Outlook calendar integration
 - [ ] Production monitoring + alerting
 - [ ] Stripe billing integration
+- [ ] Employee handover system (reorg manager changes) — see spec below
+
+### Employee Handover System (backlog spec)
+**Problem:** When an employee moves between managers (reorg, transfer, promotion), the only lever today is changing `users.managerId`. That silently flips reporting-tree access — the new manager instantly gains everything tree-scoped (individual goals, shared personal goals, engagement, feedback, 1:1 access), while the outgoing manager loses it — with no transition, no record, and no handling of the two things that *don't* auto-transfer: the employee's private reflections and the outgoing manager's private notes. There's no structured way to pass context between the two managers.
+
+**Two parts the feature must cover:**
+
+1. **Access transition (consent-aware).** A managed handover action (admin or the two managers) instead of a bare `managerId` edit. Must decide, per data type, what transfers:
+   - `self_reflections` — **private to the employee by design** (the UI promises "only you and your AI coach can see these"). Must be consent-gated: the employee opts in to sharing history (or a window of it) with the incoming manager; default is *no transfer*. Never silently expose.
+   - `manager_notes` — outgoing manager's private observations. Offer transfer/copy to the incoming manager with the outgoing manager's consent; otherwise archive.
+   - `goals` `shareWithManager` on personal goals — "shared with manager" currently resolves via the live reporting tree, so a reorg re-points it at the new manager automatically. Decide whether that's desired or whether the employee should re-confirm the share for the new manager.
+   - Auto-transferring by tree today (feedback, engagement, individual goals, 1:1 sessions) — confirm these are acceptable to pass immediately, or gate them too.
+
+2. **Handover conversations.** A structured, recorded handover artifact between outgoing and incoming manager — likely a new `interactionType` in the conversation orchestrator (alongside peer_review / self_reflection / three_sixty / pulse_check) or a dedicated `handovers` table: prompts for context (strengths, in-flight goals, watch-items, active flags/escalations), producing a summary both managers sign off on. Should surface open escalations and in-cycle goals for the employee so nothing is dropped mid-transition.
+
+**Touch points:** `users.managerId` + `getReportingTree`; `self_reflections`, `manager_notes`, `goals` (shareWithManager), `one_on_one_sessions`, `escalations`; conversation orchestrator (new interaction type) or new schema; admin People/Access UI (the handover action) + an audit trail. **Key tension to resolve at design time:** reflection privacy vs. continuity of coaching — err toward employee consent, and log every access grant.
+
+### Remediation pass (2026-07-14, post-review)
+A four-lens review (backend, frontend, employee UX, manager/admin UX) was fully remediated:
+- **Data integrity**: goals check-in/apply/delete and the check-in pipeline now use transactions; transcript give-up has an attempt ceiling; pipeline error codes are sanitized (no content echo); `GET /goals` and feedback export are paginated (`limit`/`offset` + `hasMore`).
+- **Honesty**: web pages log load failures (`lib/page-errors.ts`) and render `DataUnavailable` instead of masquerading as empty; chat messages over 2000 chars get a bot acknowledgment instead of silent truncation (conversation dedup key now includes user id).
+- **Self-explanation**: `lib/glossary.ts` + `InfoHint` define every metric once; `DismissibleCard` powers the employee orientation, manager check-in-suggestion explainer (with live Google-connection status), and the admin setup checklist; the bot now opens with a deterministic intro (purpose, duration, static privacy line) and closes with "what happens next".
+- **Wired previously-dead UI**: manager Flagged Investigate/Dismiss (new `POST /escalations/:id/review`, reporting-tree scoped) and admin escalation transitions (existing PATCH) with confirmation dialogs; assessment invite is a real email (endpoint + notification worker + template).
+- **Decisions recorded**: weekly digest boundaries are UTC (documented in workers); export caps documented in responses; webhooks exempt from IP rate limiting (signature-verified); accessibility pass added dialog semantics/focus traps/aria labels.

@@ -5,6 +5,10 @@ import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
 import { getEngagementScoresForUser, getFeedbackForSubject, getActiveCoreValues, getSessionsForPair, getUserWithManager } from "@revualy/db/queries";
 import { EngagementRing } from "@/components/engagement-ring";
+import { InfoHint } from "@/components/info-hint";
+import { DismissibleCard } from "@/components/dismissible-card";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
@@ -56,9 +60,10 @@ async function TopRow({
   let scoreDelta = isDemo ? 5 : 0;
   let streak = 0;
   let interactionsThisWeek = isDemo ? 3 : 0;
+  let loadFailed = false;
 
   try {
-    const scores = await getEngagementScoresForUser(getDb(), userId).catch(() => []);
+    const scores = await getEngagementScoresForUser(getDb(), userId);
 
     if (scores.length > 0) {
       const latest = scores[0];
@@ -68,8 +73,17 @@ async function TopRow({
       streak = latest.streak;
       interactionsThisWeek = latest.interactionsCompleted;
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("dashboard:top-row", err);
+    loadFailed = true;
+  }
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="mb-8">
+        <DataUnavailable what="your engagement stats" />
+      </div>
+    );
   }
 
   return (
@@ -88,6 +102,7 @@ async function TopRow({
               <path d={scoreDelta >= 0 ? "M6 2L10 8H2L6 2Z" : "M6 10L2 4H10L6 10Z"} />
             </svg>
             {scoreDelta >= 0 ? "+" : ""}{scoreDelta}
+            <span className="sr-only">{scoreDelta >= 0 ? "improving" : "declining"} vs last week</span>
           </span>
           <span className="text-xs text-stone-400">vs last week</span>
         </div>
@@ -96,10 +111,10 @@ async function TopRow({
       {/* Quick stats */}
       <div className="grid grid-cols-2 gap-4 lg:col-span-4">
         {[
-          { label: "Interactions", value: `${interactionsThisWeek} / 3`, sub: interactionsThisWeek >= 3 ? "This week — complete!" : "This week", color: "text-forest" },
-          { label: "Streak", value: `${streak}w`, sub: "Consecutive weeks", color: "text-terracotta" },
-          { label: "Avg Quality", value: currentScore.toString(), sub: "Across all feedback", color: "text-forest" },
-          { label: "Response Rate", value: "100%", sub: "Always responsive", color: "text-forest" },
+          { label: "Interactions", value: `${interactionsThisWeek} / 3`, sub: interactionsThisWeek >= 3 ? "This week — complete!" : "This week", color: "text-forest", hint: "interactions" as const },
+          { label: "Streak", value: `${streak}w`, sub: "Consecutive weeks", color: "text-terracotta", hint: "streak" as const },
+          { label: "Avg Quality", value: currentScore.toString(), sub: "Across all feedback", color: "text-forest", hint: "avgQuality" as const },
+          { label: "Response Rate", value: "100%", sub: "Always responsive", color: "text-forest", hint: undefined },
         ].map((stat, i) => {
           const railColors = ["bg-forest", "bg-forest-light", "bg-terracotta", "bg-forest-muted"];
           return (
@@ -109,7 +124,10 @@ async function TopRow({
               style={{ animationDelay: `${i * 80 + 100}ms`, boxShadow: "var(--shadow-sm)" }}
             >
               <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
-              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">{stat.label}</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                {stat.label}
+                {stat.hint && <InfoHint entry={stat.hint} />}
+              </span>
               <span className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}>{stat.value}</span>
               <span className="mt-auto pt-2 text-xs text-stone-400">{stat.sub}</span>
             </div>
@@ -299,14 +317,23 @@ async function SessionsSection({
           className="rounded-2xl border border-stone-200/60 bg-surface p-5 text-center"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
-          <p className="text-sm text-stone-400">No manager assigned.</p>
+          <p className="text-sm font-medium text-stone-600">No manager assigned yet.</p>
+          <p className="mt-1 text-xs text-stone-400">
+            1:1 sessions are live notes you and your manager share during
+            check-ins. Ask your admin to set your reporting line — if you just
+            joined, this may still be in progress.
+          </p>
         </div>
       ) : oneOnOneSessions.length === 0 ? (
         <div
           className="rounded-2xl border border-stone-200/60 bg-surface p-5 text-center"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
-          <p className="text-sm text-stone-400">No 1:1 sessions yet.</p>
+          <p className="text-sm font-medium text-stone-600">No 1:1 sessions yet.</p>
+          <p className="mt-1 text-xs text-stone-400">
+            When you and your manager hold a 1:1, the shared live notes and
+            action items show up here.
+          </p>
         </div>
       ) : (() => {
         const nextSession = oneOnOneSessions.find((s) => s.status === "active" || s.status === "scheduled");
@@ -478,6 +505,24 @@ export default async function EmployeeDashboard() {
         </h1>
       </div>
 
+      <DismissibleCard id="employee-orientation" title="New here? Two minutes of context">
+        <p>
+          Revualy sends you short feedback conversations in Slack, Teams, or
+          Google Chat — a few questions, 2–3 minutes each, a few times a week.
+        </p>
+        <p>
+          What you and your teammates share becomes the feedback, engagement
+          score, and insights on this dashboard. Your{" "}
+          <strong>Engagement Score</strong> (0–100) reflects how thoughtful
+          your feedback is — not how often you're online.
+        </p>
+        <p>
+          Set goals under <strong>My Goals</strong>, reflect weekly under{" "}
+          <strong>Reflections</strong>, and celebrate teammates with{" "}
+          <strong>Kudos</strong>.
+        </p>
+      </DismissibleCard>
+
       {/* Top row: Engagement ring + stats + upcoming */}
       <Suspense fallback={<TopRowSkeleton />}>
         <TopRow userId={userId} isDemo={isDemo} />
@@ -506,7 +551,9 @@ export default async function EmployeeDashboard() {
 
       {/* Recent feedback */}
       <Suspense fallback={<SectionSkeleton />}>
-        <FeedbackSection userId={userId} isDemo={isDemo} />
+        <ChartErrorBoundary>
+          <FeedbackSection userId={userId} isDemo={isDemo} />
+        </ChartErrorBoundary>
       </Suspense>
     </div>
   );

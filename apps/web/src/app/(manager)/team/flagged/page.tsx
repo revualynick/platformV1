@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
 import { getFlaggedItemsForReports, listActiveUsers } from "@revualy/db/queries";
 import {
@@ -8,10 +9,13 @@ import {
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
 import { severityStyles } from "@/lib/style-constants";
+import { InfoHint } from "@/components/info-hint";
+import { FlagReviewButtons } from "./flag-review-buttons";
 
 type FlaggedItem = {
   id: string;
   severity: string;
+  status: string;
   subjectName: string;
   reason: string;
   excerpt: string | null;
@@ -32,13 +36,19 @@ async function loadFlaggedData(userId: string, isDemo: boolean) {
     const db = getDb();
     const members = await listActiveUsers(db, { managerId: userId });
     const memberIds = members.map((m) => m.id);
-    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch(() => []);
+    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch((err) => {
+      logPageError("flagged", err);
+      return [];
+    });
 
-    let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
+    let flaggedItems: FlaggedItem[] = isDemo
+      ? mockFlaggedItems.map((i) => ({ ...i, status: "open" }))
+      : [];
     if (flaggedResult.length > 0) {
       flaggedItems = flaggedResult.map((item) => ({
         id: item.escalation.id,
         severity: item.escalation.severity,
+        status: item.escalation.status,
         subjectName: item.subjectName ?? "Team Member",
         reason: item.escalation.reason,
         excerpt: item.escalation.flaggedContent || null,
@@ -64,7 +74,7 @@ async function loadFlaggedData(userId: string, isDemo: boolean) {
   } catch {
     if (isDemo) {
       return {
-        flaggedItems: mockFlaggedItems as FlaggedItem[],
+        flaggedItems: mockFlaggedItems.map((i) => ({ ...i, status: "open" })) as FlaggedItem[],
         needsAttention: (mockTeamMembers as TeamMember[])
           .filter((m) => m.engagementScore < 60 || m.trend === "down")
           .sort((a, b) => a.engagementScore - b.engagementScore),
@@ -93,6 +103,10 @@ export default async function FlaggedPage() {
         <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
           Flagged Items
         </h1>
+        <p className="mt-1 text-sm text-stone-500">
+          Flags are raised automatically when AI analysis of feedback
+          conversations detects concerning patterns.
+        </p>
       </div>
 
       {/* Stats */}
@@ -145,9 +159,15 @@ export default async function FlaggedPage() {
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Flagged items */}
         <div className="space-y-4 lg:col-span-7">
-          <h3 className="font-display text-base font-semibold text-stone-800">
-            Language & Behavior Flags
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-base font-semibold text-stone-800">
+              Language & Behavior Flags
+            </h3>
+            <span className="inline-flex items-center text-xs font-medium text-stone-400">
+              Severity
+              <InfoHint entry="severityLevels" />
+            </span>
+          </div>
           {flaggedItems.map((item, i) => {
             const style = severityStyles[item.severity] ?? severityStyles.coaching;
             return (
@@ -184,14 +204,11 @@ export default async function FlaggedPage() {
                         </p>
                       </div>
                     )}
-                    <div className="mt-4 flex gap-2">
-                      <button className="rounded-xl bg-surface px-4 py-2 text-xs font-medium text-stone-700 shadow-sm hover:shadow-md">
-                        Investigate
-                      </button>
-                      <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-500 hover:bg-stone-50">
-                        Dismiss
-                      </button>
-                    </div>
+                    <FlagReviewButtons
+                      escalationId={item.id}
+                      subjectName={item.subjectName}
+                      status={item.status}
+                    />
                   </div>
                 </div>
               </div>

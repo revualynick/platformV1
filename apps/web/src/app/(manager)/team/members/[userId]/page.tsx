@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { PathNameProvider } from "@/lib/path-context";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
 import { getUserById, listActiveUsers } from "@revualy/db/queries";
 import { getEngagementScoresForUser } from "@revualy/db/queries";
@@ -17,6 +18,9 @@ import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ValuesRadar } from "@/components/charts/values-radar";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import { NotesSection } from "./notes-section";
+import { ProfileSection } from "./profile-section";
+import { getUserProfile, getUserDrift } from "@/lib/api";
+import type { ProfileSnapshotRow, DevelopmentGoalRow } from "@/lib/api";
 import {
   teamMembers as mockTeamMembers,
   engagementHistory as mockEngagementHistory,
@@ -236,16 +240,28 @@ async function FeedbackSection({
   let feedback: MockFeedbackEntry[] = isDemo ? (mockFeedback as MockFeedbackEntry[]) : [];
 
   try {
-    const entries = await getFeedbackForSubject(getDb(), userId).catch(() => []);
-    if (entries.length > 0) {
-      feedback = entries.map((e) => ({
+    const [entriesResult, coreValuesResult] = await Promise.allSettled([
+      getFeedbackForSubject(getDb(), userId),
+      getActiveCoreValues(getDb()),
+    ]);
+
+    // Build id→name map so value chips show names, not UUIDs
+    const valueNameMap = new Map<string, string>();
+    if (coreValuesResult.status === "fulfilled") {
+      for (const cv of coreValuesResult.value) {
+        valueNameMap.set(cv.id, cv.name);
+      }
+    }
+
+    if (entriesResult.status === "fulfilled" && entriesResult.value.length > 0) {
+      feedback = entriesResult.value.map((e) => ({
         id: e.id,
         fromName: "Peer",
         date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         summary: e.aiSummary || e.rawContent.slice(0, 200),
         sentiment: e.sentiment,
         engagementScore: e.engagementScore,
-        values: e.valueScores?.map((v) => v.coreValueId) ?? [],
+        values: e.valueScores?.map((v) => valueNameMap.get(v.coreValueId) ?? v.coreValueId) ?? [],
       }));
     }
   } catch {
@@ -315,7 +331,10 @@ async function FlaggedSection({
     : [];
 
   try {
-    const items = await getFlaggedItemsForReports(getDb(), [userId]).catch(() => []);
+    const items = await getFlaggedItemsForReports(getDb(), [userId]).catch((err) => {
+      logPageError("member-detail:flags", err);
+      return [];
+    });
     if (items.length > 0) {
       flaggedItems = items.map((item) => ({
         id: item.escalation.id,
@@ -386,7 +405,10 @@ async function SessionsSection({
     : [];
 
   try {
-    const sessions = await getSessionsForPair(getDb(), managerId, { employeeId: userId }).catch(() => []);
+    const sessions = await getSessionsForPair(getDb(), managerId, { employeeId: userId }).catch((err) => {
+      logPageError("member-detail:sessions", err);
+      return [];
+    });
     oneOnOneSessions = sessions;
   } catch {
     // use defaults
@@ -471,6 +493,58 @@ async function SessionsSection({
   );
 }
 
+async function ProfileWrapper({
+  userId,
+  isDemo,
+}: {
+  userId: string;
+  isDemo: boolean;
+}) {
+  let profiles: ProfileSnapshotRow[] = [];
+  let goals: DevelopmentGoalRow[] = [];
+  let driftData: {
+    framework: string;
+    baseline: ProfileSnapshotRow;
+    observed: ProfileSnapshotRow | null;
+    drift: Record<string, number> | null;
+  } | null = null;
+
+  if (!isDemo) {
+    try {
+      const profileRes = await getUserProfile(userId);
+      profiles = profileRes.profiles;
+      goals = profileRes.goals;
+
+      // Try to get drift for whichever framework they have
+      const hasColour = profiles.some((p) => p.framework === "colour");
+      if (hasColour) {
+        try {
+          const colourDrift = await getUserDrift(userId, "colour");
+          if (colourDrift.drift) {
+            driftData = { framework: "colour", ...colourDrift };
+          }
+        } catch {
+          // no drift data
+        }
+      }
+    } catch {
+      // no profile data
+    }
+  }
+
+  return (
+    <div className="card-enter mb-8" style={{ animationDelay: "350ms" }}>
+      <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Profile & Development</h3>
+      <ProfileSection
+        userId={userId}
+        profiles={profiles}
+        goals={goals}
+        drift={driftData}
+      />
+    </div>
+  );
+}
+
 async function NotesWrapper({
   userId,
   managerId,
@@ -484,7 +558,10 @@ async function NotesWrapper({
 
   if (!isDemo) {
     try {
-      const rows = await getManagerNotes(getDb(), managerId, userId).catch(() => []);
+      const rows = await getManagerNotes(getDb(), managerId, userId).catch((err) => {
+      logPageError("member-detail:notes", err);
+      return [];
+    });
       notes = rows.map((r) => ({
         id: r.id,
         managerId: r.managerId,
@@ -598,6 +675,11 @@ export default async function EmployeeDetailPage({
         {/* 1:1 Sessions */}
         <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
           <SessionsSection userId={userId} managerId={managerId} isDemo={isDemo} />
+        </Suspense>
+
+        {/* Profile & Development */}
+        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+          <ProfileWrapper userId={userId} isDemo={isDemo} />
         </Suspense>
 
         {/* Manager notes */}

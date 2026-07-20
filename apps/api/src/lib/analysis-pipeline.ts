@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
 import {
   conversations,
@@ -53,6 +54,7 @@ export async function runAnalysisPipeline(
   conversationId: string,
   logger: Pick<Console, "error" | "warn" | "info"> = console,
   orgId?: string,
+  profileSignalsQueue?: Queue,
 ): Promise<AnalysisPipelineResult> {
   // 1. Fetch conversation + messages in parallel
   const [[conversation], messages] = await Promise.all([
@@ -179,11 +181,27 @@ export async function runAnalysisPipeline(
     }
   });
 
-  // Fire-and-forget: evaluate pulse check trigger for the feedback subject
+  // Follow-on work: awaited so failures surface in this job's logs
+  // (and BullMQ retries), but deliberately non-fatal — a queue hiccup
+  // must not fail an otherwise-complete analysis.
   if (feedbackEntryId) {
-    evaluatePulseCheckTrigger(db, conversation.subjectId, orgId ?? "", logger).catch(
-      (err) => logger.error(`[PulseCheck] Evaluation failed for subject ${conversation.subjectId}:`, err),
-    );
+    if (profileSignalsQueue) {
+      try {
+        await profileSignalsQueue.add("extract_signals", {
+          type: "extract_signals",
+          feedbackEntryId,
+          orgId: orgId ?? "",
+        });
+      } catch (err) {
+        logger.error(`[ProfileSignals] Enqueue failed for entry ${feedbackEntryId}:`, err);
+      }
+    }
+
+    try {
+      await evaluatePulseCheckTrigger(db, conversation.subjectId, orgId ?? "", logger);
+    } catch (err) {
+      logger.error(`[PulseCheck] Evaluation failed for subject ${conversation.subjectId}:`, err);
+    }
   }
 
   return {

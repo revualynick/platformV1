@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+import { InfoHint } from "@/components/info-hint";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
@@ -33,6 +36,8 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
       getFeedbackForSubject(getDb(), userId),
       getActiveCoreValues(getDb()),
     ]);
+    if (fbResult.status === "rejected") logPageError("feedback", fbResult.reason);
+    if (orgResult.status === "rejected") logPageError("feedback", orgResult.reason);
 
     const valuesMap = new Map<string, string>();
     if (orgResult.status === "fulfilled") {
@@ -71,11 +76,13 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
       }
     }
 
-    return { feedback, valuesScores };
-  } catch {
+    return { feedback, valuesScores, loadFailed: fbResult.status === "rejected" };
+  } catch (err) {
+    logPageError("feedback", err);
     return {
       feedback: isDemo ? (mockFeedback as FeedbackItem[]) : [],
       valuesScores: isDemo ? mockValuesScores : [],
+      loadFailed: true,
     };
   }
 }
@@ -83,7 +90,21 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
 export default async function FeedbackPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
-  const { feedback, valuesScores } = await loadFeedbackData(session, isDemo);
+  const { feedback, valuesScores, loadFailed } = await loadFeedbackData(session, isDemo);
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Your feedback</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Feedback History
+          </h1>
+        </div>
+        <DataUnavailable what="your feedback history" />
+      </div>
+    );
+  }
 
   const positive = feedback.filter((f) => f.sentiment === "positive").length;
   const neutral = feedback.filter((f) => f.sentiment === "neutral").length;
@@ -107,6 +128,10 @@ export default async function FeedbackPage() {
         <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
           Feedback History
         </h1>
+        <p className="mt-1 text-sm text-stone-500">
+          Insights from your team's feedback conversations in chat — new
+          items arrive as colleagues complete them.
+        </p>
       </div>
 
       {/* Stats row */}
@@ -221,6 +246,7 @@ export default async function FeedbackPage() {
                     </span>
                     <span className="text-xs tabular-nums text-stone-400">
                       Score: {fb.engagementScore}
+                      <InfoHint entry="engagementScore" />
                     </span>
                   </div>
                 </div>

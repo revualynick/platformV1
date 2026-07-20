@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+export * from "./goals.js";
+
 export function generateId(): string {
   return randomUUID();
 }

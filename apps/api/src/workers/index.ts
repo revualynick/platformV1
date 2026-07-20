@@ -12,6 +12,8 @@ import {
   escalations,
   notificationPreferences,
   calendarTokens,
+  behavioralSignals,
+  profileSnapshots,
 } from "@revualy/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import type { LLMGateway } from "@revualy/ai-core";
@@ -26,10 +28,13 @@ import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { sendEmail } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
+import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
+import { extractProfileSignals } from "../lib/profile-signal-extractor.js";
 import {
   weeklyDigestTemplate,
   flagAlertTemplate,
   nudgeTemplate,
+  assessmentInviteTemplate,
   type WeeklyDigestData,
   type FlagAlertData,
   type NudgeData,
@@ -51,6 +56,7 @@ const replyJobSchema = z.object({
   conversationId: z.string(),
   orgId: z.string(),
   userMessage: z.string(),
+  truncated: z.boolean().optional(),
 });
 
 const closeJobSchema = z.object({
@@ -100,6 +106,8 @@ export function createQueues(redisUrl: string) {
     schedulerQueue: new Queue("scheduler", { connection, defaultJobOptions }),
     notificationQueue: new Queue("notification", { connection, defaultJobOptions }),
     calendarSyncQueue: new Queue("calendar-sync", { connection, defaultJobOptions }),
+    profileSignalsQueue: new Queue("profile-signals", { connection, defaultJobOptions }),
+    checkInQueue: new Queue("check-in", { connection, defaultJobOptions }),
   };
 }
 
@@ -274,6 +282,7 @@ export function createWorkers(config: WorkerConfig) {
               { llm, adapters, analysisQueue: queues.analysisQueue },
               state,
               data.userMessage,
+              { truncatedInbound: data.truncated ?? false },
             );
 
             if (result.closed) {
@@ -323,7 +332,7 @@ export function createWorkers(config: WorkerConfig) {
         process.env.DATABASE_URL ?? "",
       );
 
-      await runAnalysisPipeline(db, llm, conversationId, console, orgId);
+      await runAnalysisPipeline(db, llm, conversationId, console, orgId, queues.profileSignalsQueue);
     },
     { connection, concurrency: 3, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
@@ -412,7 +421,11 @@ export function createWorkers(config: WorkerConfig) {
             break;
           }
 
-          // Gather data for the past week
+          // Gather data for the past week.
+          // NOTE: week boundaries are UTC-based (cron fires Monday 09:00
+          // UTC and engagement_scores.week_starting is a UTC date). Orgs
+          // far from UTC see up to ~half a day of skew — acceptable for
+          // a digest; revisit if per-org timezone weeks are ever needed.
           const now = new Date();
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
@@ -541,6 +554,46 @@ export function createWorkers(config: WorkerConfig) {
           break;
         }
 
+        case "assessment_invite": {
+          const data = job.data as {
+            orgId: string;
+            userId: string;
+            email: string;
+            userName: string;
+            managerName: string;
+          };
+
+          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+
+          // Respect the user's preference (type defaults to enabled
+          // when no row exists, matching the other notification types)
+          const [pref] = await db
+            .select()
+            .from(notificationPreferences)
+            .where(
+              and(
+                eq(notificationPreferences.userId, data.userId),
+                eq(notificationPreferences.type, "assessment_invite"),
+              ),
+            );
+          if (pref && !pref.enabled) {
+            job.log(`Assessment invites disabled for user ${data.userId}`);
+            break;
+          }
+
+          await sendEmail({
+            to: data.email,
+            subject: `${data.managerName} suggests a quick Revualy assessment`,
+            html: assessmentInviteTemplate({
+              userName: data.userName.split(" ")[0],
+              managerName: data.managerName,
+            }),
+            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+          });
+          job.log(`Assessment invite sent to ${data.userId}`);
+          break;
+        }
+
         case "leaderboard_update":
           // TODO Phase 5: Compute and publish leaderboard
           break;
@@ -586,6 +639,161 @@ export function createWorkers(config: WorkerConfig) {
     { connection, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
 
+  // Profile signals worker — extracts behavioral signals and aggregates snapshots
+  const profileSignalsWorker = new Worker(
+    "profile-signals",
+    async (job) => {
+      const { type } = job.data as { type: string };
+
+      switch (type) {
+        case "extract_signals": {
+          const { feedbackEntryId, orgId } = job.data as { feedbackEntryId: string; orgId: string };
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+          const [entry] = await db
+            .select()
+            .from(feedbackEntries)
+            .where(eq(feedbackEntries.id, feedbackEntryId));
+
+          if (!entry) {
+            job.log(`Feedback entry ${feedbackEntryId} not found`);
+            return;
+          }
+
+          const signals = extractProfileSignals({
+            text: entry.rawContent,
+            sentiment: entry.sentiment,
+            wordCount: entry.wordCount,
+            hasSpecificExamples: entry.hasSpecificExamples,
+            interactionType: entry.interactionType,
+          });
+
+          if (signals.length === 0) {
+            job.log(`No signals extracted for feedback entry ${feedbackEntryId}`);
+            return;
+          }
+
+          await db.insert(behavioralSignals).values(
+            signals.map((s) => ({
+              userId: entry.reviewerId,
+              framework: s.framework,
+              dimension: s.dimension,
+              value: s.value,
+              confidence: s.confidence,
+              sourceType: entry.interactionType,
+              sourceId: entry.id,
+            })),
+          );
+
+          job.log(`Inserted ${signals.length} signals for user ${entry.reviewerId}`);
+          break;
+        }
+
+        case "aggregate_behavioral": {
+          const { userId, framework, orgId } = job.data as { userId: string; framework: string; orgId: string };
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+          const conditions = [
+            eq(behavioralSignals.userId, userId),
+            eq(behavioralSignals.framework, framework),
+            gte(behavioralSignals.capturedAt, thirtyDaysAgo),
+          ];
+
+          const signals = await db
+            .select()
+            .from(behavioralSignals)
+            .where(and(...conditions));
+
+          if (signals.length === 0) {
+            job.log(`No signals for user ${userId} / framework ${framework}`);
+            return;
+          }
+
+          // Weighted average: value * confidence / sum(confidence) per dimension
+          const byDimension = new Map<string, { weightedSum: number; totalWeight: number }>();
+          for (const s of signals) {
+            const existing = byDimension.get(s.dimension) ?? { weightedSum: 0, totalWeight: 0 };
+            existing.weightedSum += s.value * s.confidence;
+            existing.totalWeight += s.confidence;
+            byDimension.set(s.dimension, existing);
+          }
+
+          const dimensions: Record<string, number> = {};
+          for (const [dim, agg] of byDimension.entries()) {
+            dimensions[dim] = agg.totalWeight > 0 ? agg.weightedSum / agg.totalWeight : 0;
+          }
+
+          const periodStart = thirtyDaysAgo.toISOString().slice(0, 10);
+          const periodEnd = new Date().toISOString().slice(0, 10);
+
+          await db.insert(profileSnapshots).values({
+            userId,
+            framework,
+            source: "behavioral",
+            dimensions,
+            signalCount: signals.length,
+            periodStart,
+            periodEnd,
+          });
+
+          job.log(`Aggregated ${signals.length} signals into snapshot for user ${userId}`);
+          break;
+        }
+
+        case "aggregate_all": {
+          const { orgId } = job.data as { orgId: string };
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+          // Find all distinct userId+framework pairs with signals in the last 30 days
+          const rows = await db
+            .selectDistinct({
+              userId: behavioralSignals.userId,
+              framework: behavioralSignals.framework,
+            })
+            .from(behavioralSignals)
+            .where(gte(behavioralSignals.capturedAt, thirtyDaysAgo));
+
+          job.log(`Dispatching aggregate_behavioral for ${rows.length} user/framework pairs`);
+
+          await queues.profileSignalsQueue.addBulk(
+            rows.map((r) => ({
+              name: "aggregate_behavioral",
+              data: { type: "aggregate_behavioral", userId: r.userId, framework: r.framework, orgId },
+            })),
+          );
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown profile-signals job type: ${type}`);
+      }
+    },
+    { connection, concurrency: 3, lockDuration: 60_000, lockRenewTime: 20_000 },
+  );
+
+  // Check-in worker — discovers Meet check-in meetings and turns their
+  // transcripts into suggested goal updates (suggest + confirm, never
+  // auto-applied)
+  const checkInWorker = new Worker(
+    "check-in",
+    async (job) => {
+      const { orgId } = job.data as { orgId: string };
+      const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+      const result = await runCheckInPipeline(db, llm, {
+        log: (msg) => job.log(msg),
+      });
+      job.log(
+        `Check-in run: ${result.discovered} discovered, ${result.processed} processed`,
+      );
+    },
+    { connection, lockDuration: 300_000, lockRenewTime: 60_000 },
+  );
+
   // Attach error listeners to prevent unhandled rejections
   const logWorkerError = (name: string) => (err: Error) => console.error(`[Worker:${name}] Error:`, err);
   conversationWorker.on("error", logWorkerError("conversation"));
@@ -593,6 +801,8 @@ export function createWorkers(config: WorkerConfig) {
   schedulerWorker.on("error", logWorkerError("scheduler"));
   notificationWorker.on("error", logWorkerError("notification"));
   calendarSyncWorker.on("error", logWorkerError("calendar-sync"));
+  profileSignalsWorker.on("error", logWorkerError("profile-signals"));
+  checkInWorker.on("error", logWorkerError("check-in"));
 
   return {
     conversationWorker,
@@ -600,5 +810,7 @@ export function createWorkers(config: WorkerConfig) {
     schedulerWorker,
     notificationWorker,
     calendarSyncWorker,
+    profileSignalsWorker,
+    checkInWorker,
   };
 }

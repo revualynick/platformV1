@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getUsers } from "@/lib/api";
 import type { UserRow } from "@/lib/api";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import { ChangeRoleDialog, DeactivateButton } from "./access-actions";
 
 const roleLabels: Record<string, string> = {
@@ -25,20 +27,47 @@ const roleOrder: Record<string, number> = {
   employee: 3,
 };
 
-async function loadUsers(isDemo: boolean): Promise<UserRow[]> {
-  if (isDemo) return [];
+async function loadUsers(isDemo: boolean): Promise<{ users: UserRow[]; loadFailed: boolean }> {
+  if (isDemo) return { users: [], loadFailed: false };
   try {
     const { data } = await getUsers();
-    return data;
-  } catch {
-    return [];
+    return { users: data, loadFailed: false };
+  } catch (err) {
+    logPageError("admin-access", err);
+    return { users: [], loadFailed: true };
   }
 }
+
+const roleCapabilities: Array<{ role: string; badge: string; capabilities: string }> = [
+  {
+    role: "Employee",
+    badge: roleBadgeStyles.employee,
+    capabilities:
+      "Receives & gives feedback, own goals + private personal goals, own reflections/kudos.",
+  },
+  {
+    role: "Manager",
+    badge: roleBadgeStyles.manager,
+    capabilities:
+      "Everything an employee has, plus team overview/insights, team goals laddered to org goals, reports' goals, flagged-item review, 1:1 notes, question bank.",
+  },
+  {
+    role: "Admin",
+    badge: roleBadgeStyles.admin,
+    capabilities:
+      "Everything a manager has, plus org settings, people & structure, core values, cycles & org goals, campaigns, integrations, escalations.",
+  },
+  {
+    role: "Super Admin",
+    badge: roleBadgeStyles.super_admin,
+    capabilities: "Everything an admin has, plus managing admin roles.",
+  },
+];
 
 export default async function AccessPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
-  const allUsers = await loadUsers(isDemo);
+  const { users: allUsers, loadFailed } = await loadUsers(isDemo);
 
   const currentUserId = session?.user?.id ?? "";
   const currentUserRole = (session as { role?: string })?.role ?? "employee";
@@ -86,6 +115,29 @@ export default async function AccessPage() {
         </div>
       </div>
 
+      {/* Role capabilities */}
+      <details className="mb-6 rounded-2xl border border-stone-200/60 bg-surface p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <summary className="cursor-pointer text-sm font-medium text-stone-700 hover:text-stone-900">
+          What can each role do?
+        </summary>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {roleCapabilities.map((rc) => (
+            <div key={rc.role} className="rounded-xl bg-stone-50 p-4">
+              <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${rc.badge}`}>
+                {rc.role}
+              </span>
+              <p className="mt-2 text-xs leading-relaxed text-stone-600">
+                {rc.capabilities}
+              </p>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      {loadFailed && !isDemo ? (
+        <DataUnavailable what="user access data" />
+      ) : (
+        <>
       {/* Privileged users table */}
       <div className="mb-8">
         <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-stone-400">
@@ -223,6 +275,8 @@ export default async function AccessPage() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

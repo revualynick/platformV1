@@ -6,6 +6,7 @@ import {
   boolean,
   integer,
   real,
+  doublePrecision,
   timestamp,
   date,
   jsonb,
@@ -616,6 +617,10 @@ export const calendarTokens = pgTable(
     accessToken: text("access_token").notNull(),
     refreshToken: text("refresh_token").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Space-separated granted OAuth scopes. Empty for tokens issued
+    // before scope tracking — those users must reconnect to grant
+    // drive.readonly for check-in transcript access.
+    scopes: text("scopes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -986,6 +991,11 @@ export const orgSettings = pgTable("org_settings", {
   subdomain: varchar("subdomain", { length: 100 }).notNull().default(""),
   timezone: varchar("timezone", { length: 100 }).notNull().default("UTC"),
   allowedDomains: jsonb("allowed_domains").$type<string[]>().notNull().default([]),
+  // Calendar events whose title contains this marker are treated as
+  // goal check-in meetings by the transcript pipeline.
+  checkInTitleMarker: varchar("check_in_title_marker", { length: 100 })
+    .notNull()
+    .default("[Check-in]"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1036,5 +1046,341 @@ export const leads = pgTable(
   (table) => [
     unique("uq_leads_email").on(table.email),
     index("idx_leads_email").on(table.email),
+  ],
+);
+
+// ── Profiling: Assessment Questions ─────────────────────
+// Quiz content for colour and CDM frameworks.
+
+export const assessmentQuestions = pgTable(
+  "assessment_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    framework: varchar("framework", { length: 20 }).notNull(), // colour | cdm
+    questionType: varchar("question_type", { length: 20 }).notNull(), // forced_choice | scenario
+    text: text("text").notNull(),
+    options: jsonb("options")
+      .$type<
+        Array<{ key: string; text: string; scores: Record<string, number> }>
+      >()
+      .notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_assessment_questions_framework").on(table.framework),
+  ],
+);
+
+// ── Profiling: Assessment Sessions ──────────────────────
+// Each time a user takes a quiz.
+
+export const assessmentSessions = pgTable(
+  "assessment_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    framework: varchar("framework", { length: 20 }).notNull(),
+    context: varchar("context", { length: 30 }).notNull().default("onboarding"),
+    responses: jsonb("responses")
+      .$type<Record<string, string>>() // questionId → selected option key
+      .notNull()
+      .default({}),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_assessment_sessions_user").on(table.userId),
+    index("idx_assessment_sessions_user_framework").on(
+      table.userId,
+      table.framework,
+    ),
+  ],
+);
+
+// ── Profiling: Profile Snapshots ────────────────────────
+// Scored profile at a point in time — from assessment or behavioral aggregation.
+
+export const profileSnapshots = pgTable(
+  "profile_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    framework: varchar("framework", { length: 20 }).notNull(),
+    source: varchar("source", { length: 20 }).notNull(), // assessment | behavioral
+    sessionId: uuid("session_id").references(() => assessmentSessions.id),
+    dimensions: jsonb("dimensions")
+      .$type<Record<string, number>>()
+      .notNull(),
+    signalCount: integer("signal_count").notNull().default(0),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_profile_snapshots_user_framework").on(
+      table.userId,
+      table.framework,
+      table.createdAt,
+    ),
+  ],
+);
+
+// ── Profiling: Behavioral Signals ───────────────────────
+// Raw data points captured from interactions over time.
+
+export const behavioralSignals = pgTable(
+  "behavioral_signals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    framework: varchar("framework", { length: 20 }).notNull(),
+    dimension: varchar("dimension", { length: 30 }).notNull(),
+    value: real("value").notNull(), // 0–1
+    confidence: real("confidence").notNull(), // 0–1
+    sourceType: varchar("source_type", { length: 30 }).notNull(), // peer_review, feedback, one_on_one, self_reflection
+    sourceId: uuid("source_id"),
+    capturedAt: timestamp("captured_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_behavioral_signals_user_framework").on(
+      table.userId,
+      table.framework,
+      table.capturedAt,
+    ),
+    index("idx_behavioral_signals_user_dimension").on(
+      table.userId,
+      table.dimension,
+      table.capturedAt,
+    ),
+  ],
+);
+
+// ── Profiling: Development Goals ────────────────────────
+// Coaching-oriented goals tied to specific profile dimensions.
+
+export const profileDevelopmentGoals = pgTable(
+  "profile_development_goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    framework: varchar("framework", { length: 20 }).notNull(),
+    dimension: varchar("dimension", { length: 30 }).notNull(),
+    targetDirection: varchar("target_direction", { length: 10 }).notNull(), // increase | decrease
+    setById: uuid("set_by_id")
+      .notNull()
+      .references(() => users.id),
+    baselineSnapshotId: uuid("baseline_snapshot_id").references(
+      () => profileSnapshots.id,
+    ),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_profile_goals_user").on(table.userId),
+    index("idx_profile_goals_user_framework").on(
+      table.userId,
+      table.framework,
+    ),
+  ],
+);
+
+// ── Goals: Cycles ───────────────────────────────────────
+// Admin-defined time periods (e.g. "Q3 2026") that org/team/individual
+// goals belong to. Personal goals live outside cycles. "Current cycle"
+// is computed from the date range — no isActive flag to maintain.
+
+export const goalCycles = pgTable(
+  "goal_cycles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 100 }).notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_goal_cycles_start_date").on(table.startDate)],
+);
+
+// ── Goals ───────────────────────────────────────────────
+// One table for all four levels; the ladder is parentGoalId
+// (org ← team ← individual). Personal goals have no parent/cycle/team
+// and are private to the owner unless shareWithManager is set.
+// Level/parent invariants: CHECK constraints in migration 0028 where
+// expressible; parent-level correctness enforced in the API.
+
+export const goals = pgTable(
+  "goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    level: varchar("level", { length: 20 }).notNull(), // org | team | individual | personal
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull().default(""),
+    parentGoalId: uuid("parent_goal_id"), // self-reference added via raw SQL in migration
+    cycleId: uuid("cycle_id").references(() => goalCycles.id),
+    teamId: uuid("team_id").references(() => teams.id), // team goals; denormalized onto individual goals
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    createdById: uuid("created_by_id")
+      .notNull()
+      .references(() => users.id),
+    status: varchar("status", { length: 20 }).notNull().default("on_track"), // draft | on_track | at_risk | behind | achieved | archived
+    progressPercent: integer("progress_percent").notNull().default(0),
+    metricName: varchar("metric_name", { length: 255 }),
+    metricStartValue: doublePrecision("metric_start_value"),
+    metricTargetValue: doublePrecision("metric_target_value"),
+    metricCurrentValue: doublePrecision("metric_current_value"),
+    shareWithManager: boolean("share_with_manager").notNull().default(false),
+    targetDate: date("target_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_goals_level").on(table.level),
+    index("idx_goals_parent_goal_id").on(table.parentGoalId),
+    index("idx_goals_cycle_id").on(table.cycleId),
+    index("idx_goals_owner_id").on(table.ownerId),
+    index("idx_goals_team_id").on(table.teamId),
+  ],
+);
+
+// ── Goals: Updates ──────────────────────────────────────
+// Check-in trail. source is the future integration hook:
+// "dashboard" today; "chat" (conversation orchestrator) and
+// "meet_transcript" (suggestion apply) later.
+
+export const goalUpdates = pgTable(
+  "goal_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id),
+    progressPercent: integer("progress_percent"),
+    metricCurrentValue: doublePrecision("metric_current_value"),
+    status: varchar("status", { length: 20 }),
+    note: text("note").notNull().default(""),
+    source: varchar("source", { length: 20 }).notNull().default("dashboard"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_goal_updates_goal_created").on(table.goalId, table.createdAt),
+  ],
+);
+
+// ── Goals: Check-in Meetings ────────────────────────────
+// Google Meet check-in calls discovered via the organizer's Calendar
+// (title contains orgSettings.checkInTitleMarker). NOT an extension of
+// calendar_events — that table is a rolling 7-day-future sync; this one
+// tracks past meetings through a processing lifecycle.
+
+export const checkInMeetings = pgTable(
+  "check_in_meetings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizerId: uuid("organizer_id")
+      .notNull()
+      .references(() => users.id),
+    subjectUserId: uuid("subject_user_id").references(() => users.id),
+    externalEventId: varchar("external_event_id", { length: 255 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    eventStart: timestamp("event_start", { withTimezone: true }).notNull(),
+    transcriptDocId: varchar("transcript_doc_id", { length: 255 }),
+    // pending_transcript | processing | processed | transcript_missing
+    // | no_subject_match | no_goals | failed
+    status: varchar("status", { length: 30 })
+      .notNull()
+      .default("pending_transcript"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_check_in_meetings_org_event").on(
+      table.organizerId,
+      table.externalEventId,
+    ),
+    index("idx_check_in_meetings_status").on(table.status),
+    index("idx_check_in_meetings_subject").on(table.subjectUserId),
+  ],
+);
+
+// ── Goals: Update Suggestions ───────────────────────────
+// LLM-extracted goal updates from check-in transcripts. Never applied
+// automatically — the goal owner/manager reviews, then applying creates
+// a goal_updates row (source "meet_transcript"). No transcript text is
+// stored, only short evidence quotes (PII decision in docs/plan.md).
+
+export const goalUpdateSuggestions = pgTable(
+  "goal_update_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id),
+    meetingId: uuid("meeting_id")
+      .notNull()
+      .references(() => checkInMeetings.id),
+    suggestedProgressPercent: integer("suggested_progress_percent"),
+    suggestedStatus: varchar("suggested_status", { length: 20 }),
+    suggestedMetricCurrentValue: doublePrecision(
+      "suggested_metric_current_value",
+    ),
+    suggestedNote: text("suggested_note").notNull().default(""),
+    evidenceQuote: text("evidence_quote").notNull().default(""),
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | applied | dismissed
+    reviewedById: uuid("reviewed_by_id").references(() => users.id),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    appliedUpdateId: uuid("applied_update_id").references(() => goalUpdates.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_goal_suggestion_goal_meeting").on(table.goalId, table.meetingId),
+    index("idx_goal_suggestions_goal_status").on(table.goalId, table.status),
+    index("idx_goal_suggestions_status").on(table.status),
   ],
 );

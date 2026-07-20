@@ -1,4 +1,8 @@
 import { google } from "googleapis";
+import { eq, and } from "drizzle-orm";
+import type { TenantDb } from "@revualy/db";
+import { calendarTokens } from "@revualy/db";
+import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "";
@@ -13,15 +17,24 @@ function createOAuth2Client() {
   );
 }
 
+export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+
 /**
- * Generate the Google OAuth2 authorization URL for calendar access.
+ * Generate the Google OAuth2 authorization URL for calendar + Drive
+ * access. Drive (readonly) is needed to read Meet transcript Docs for
+ * goal check-in processing. Users who connected before the Drive scope
+ * was added must reconnect to grant it.
  */
 export function getAuthUrl(state: string): string {
   const client = createOAuth2Client();
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    include_granted_scopes: true,
+    scope: [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      GOOGLE_DRIVE_SCOPE,
+    ],
     state,
   });
 }
@@ -33,6 +46,7 @@ export async function exchangeCode(code: string): Promise<{
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
+  scopes: string;
 }> {
   const client = createOAuth2Client();
   const { tokens } = await client.getToken(code);
@@ -45,6 +59,7 @@ export async function exchangeCode(code: string): Promise<{
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     expiresAt: new Date(tokens.expiry_date ?? Date.now() + 3600 * 1000),
+    scopes: tokens.scope ?? "",
   };
 }
 
@@ -66,12 +81,111 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
   };
 }
 
+/**
+ * Get a fresh (decrypted, refreshed-if-expired) access token for a
+ * user's stored Google credentials. Shared by calendar sync and the
+ * check-in transcript pipeline. Returns null if not connected.
+ */
+export async function getFreshGoogleAccessToken(
+  db: TenantDb,
+  userId: string,
+): Promise<{ accessToken: string; scopes: string } | null> {
+  const [token] = await db
+    .select()
+    .from(calendarTokens)
+    .where(
+      and(
+        eq(calendarTokens.userId, userId),
+        eq(calendarTokens.provider, "google"),
+      ),
+    );
+  if (!token) return null;
+
+  const decryptIfNeeded = (val: string) =>
+    isEncryptionConfigured() ? decrypt(val) : val;
+  const encryptIfNeeded = (val: string) =>
+    isEncryptionConfigured() ? encrypt(val) : val;
+
+  let accessToken = decryptIfNeeded(token.accessToken);
+  if (token.expiresAt <= new Date()) {
+    const refreshed = await refreshAccessToken(decryptIfNeeded(token.refreshToken));
+    accessToken = refreshed.accessToken;
+
+    await db
+      .update(calendarTokens)
+      .set({
+        accessToken: encryptIfNeeded(refreshed.accessToken),
+        expiresAt: refreshed.expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarTokens.id, token.id));
+  }
+
+  return { accessToken, scopes: token.scopes };
+}
+
 export interface CalendarEvent {
   externalEventId: string;
   title: string;
   attendees: string[];
   startAt: Date;
   endAt: Date;
+}
+
+export interface CheckInEvent extends CalendarEvent {
+  organizerEmail: string | null;
+  attachments: Array<{ fileId: string; title: string; mimeType: string }>;
+}
+
+/**
+ * Fetch past events (last `lookbackDays`) whose title matches the
+ * check-in marker. Google's `q` filter is fuzzy — callers must re-check
+ * `title.includes(marker)`.
+ */
+export async function fetchPastCheckInEvents(
+  accessToken: string,
+  marker: string,
+  lookbackDays = 14,
+): Promise<CheckInEvent[]> {
+  const client = createOAuth2Client();
+  client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: client });
+
+  const now = new Date();
+  const lookback = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+
+  const response = await calendar.events.list({
+    calendarId: "primary",
+    q: marker,
+    timeMin: lookback.toISOString(),
+    timeMax: now.toISOString(),
+    singleEvents: true,
+    orderBy: "startTime",
+    maxResults: 100,
+  });
+
+  const items = response.data.items ?? [];
+
+  return items
+    .filter((e) => e.start?.dateTime && e.end?.dateTime)
+    .map((e) => ({
+      externalEventId: e.id!,
+      title: e.summary ?? "(No title)",
+      attendees: (e.attendees ?? [])
+        .map((a) => a.email)
+        .filter((email): email is string => !!email),
+      startAt: new Date(e.start!.dateTime!),
+      endAt: new Date(e.end!.dateTime!),
+      organizerEmail: e.organizer?.email ?? null,
+      attachments: (e.attachments ?? [])
+        .filter((a) => a.fileId)
+        .map((a) => ({
+          fileId: a.fileId!,
+          title: a.title ?? "",
+          mimeType: a.mimeType ?? "",
+        })),
+    }));
 }
 
 /**

@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, or, isNull, inArray } from "drizzle-orm";
-import type { TenantDb } from "@revualy/db";
 import {
   users,
   questionnaires,
@@ -13,6 +12,7 @@ import {
   feedbackValueScores,
   coreValues,
 } from "@revualy/db";
+import { getReportingTree } from "@revualy/db/queries";
 import { requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
@@ -25,48 +25,6 @@ import {
   updateManagerNoteSchema,
   managerNoteQuerySchema,
 } from "../../lib/validation.js";
-
-/**
- * BFS from a manager through users.managerId to find all direct/indirect reports.
- * Loads all active users once and traverses in memory to avoid N+1 queries.
- */
-async function getReportingTree(
-  db: TenantDb,
-  managerId: string,
-): Promise<Set<string>> {
-  // Single query: load all active users' id + managerId
-  const allUsers = await db
-    .select({ id: users.id, managerId: users.managerId })
-    .from(users)
-    .where(eq(users.isActive, true));
-
-  // Build adjacency list: managerId → [reportIds]
-  const childrenOf = new Map<string, string[]>();
-  for (const u of allUsers) {
-    if (u.managerId) {
-      const list = childrenOf.get(u.managerId) ?? [];
-      list.push(u.id);
-      childrenOf.set(u.managerId, list);
-    }
-  }
-
-  // BFS in memory
-  const tree = new Set<string>([managerId]);
-  const queue = [managerId];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const reports = childrenOf.get(current) ?? [];
-    for (const reportId of reports) {
-      if (!tree.has(reportId)) {
-        tree.add(reportId);
-        queue.push(reportId);
-      }
-    }
-  }
-
-  return tree;
-}
 
 export const managerRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireRole("manager"));

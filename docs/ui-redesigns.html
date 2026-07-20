@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Revualy — 4 Full UI Redesign Concepts</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fraunces:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=Sora:wght@400;500;600;700&family=Crimson+Pro:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+
+  /* Tabs */
+  .tab-btn { cursor: pointer; transition: all 0.2s; }
+  .tab-btn.active { border-bottom: 3px solid currentColor; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Design-specific font families */
+  .design-a .font-heading { font-family: 'Space Grotesk', sans-serif; }
+  .design-a .font-body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  .design-b .font-heading { font-family: 'Fraunces', serif; }
+  .design-b .font-body { font-family: 'Manrope', sans-serif; }
+  .design-c .font-heading { font-family: 'Sora', sans-serif; }
+  .design-c .font-body { font-family: 'Inter', sans-serif; }
+  .design-d .font-heading { font-family: 'Crimson Pro', serif; }
+  .design-d .font-body { font-family: 'Outfit', sans-serif; }
+</style>
+</head>
+<body class="bg-neutral-100">
+
+<!-- ═══ TOP NAV ═══ -->
+<header class="sticky top-0 z-50 border-b border-neutral-200 bg-white/90 backdrop-blur-sm">
+  <div class="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
+    <h1 class="text-lg font-bold text-neutral-900">Revualy UI Redesigns</h1>
+    <div class="flex gap-1" id="tab-nav">
+      <button onclick="showTab('a')" class="tab-btn active rounded-lg px-4 py-2 text-sm font-medium text-cyan-600" data-tab="a">A — Neon Grid</button>
+      <button onclick="showTab('b')" class="tab-btn rounded-lg px-4 py-2 text-sm font-medium text-neutral-500" data-tab="b">B — Sunlit Editorial</button>
+      <button onclick="showTab('c')" class="tab-btn rounded-lg px-4 py-2 text-sm font-medium text-neutral-500" data-tab="c">C — Midnight Luxe</button>
+      <button onclick="showTab('d')" class="tab-btn rounded-lg px-4 py-2 text-sm font-medium text-neutral-500" data-tab="d">D — Soft Bloom</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DESIGN A — Neon Grid Brutalist (Codex)
+     "Futurist control room"
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-a" class="tab-panel active design-a">
+  <div class="flex min-h-screen" style="background: #0A0F1C;">
+
+    <!-- Sidebar -->
+    <aside class="flex w-[260px] shrink-0 flex-col border-r" style="background: #070B14; border-color: #1B263B;">
+      <div class="flex items-center gap-3 px-6 pt-8 pb-6">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg font-heading text-sm font-bold" style="background: #00D1FF; color: #05070D;">R</div>
+        <span class="font-heading text-lg font-bold tracking-tight" style="color: #E6EDF7;">Revualy</span>
+      </div>
+      <nav class="flex-1 px-3 space-y-1 font-body text-sm">
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 font-medium" style="background: #101F36; color: #00D1FF; box-shadow: inset 3px 0 0 0 #00D1FF;">
+          <span style="filter: drop-shadow(0 0 8px rgba(0,209,255,0.45));">◉</span> Team Overview
+          <span class="ml-auto h-2 w-2 rounded-full" style="background: #00D1FF;"></span>
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors" style="color: #9FB0C9;"><span style="color: #5F7290;">◈</span> Team Insights</a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors" style="color: #9FB0C9;"><span style="color: #5F7290;">◑</span> Team Members</a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors" style="color: #9FB0C9;"><span style="color: #5F7290;">⚑</span> Flagged Items</a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors" style="color: #9FB0C9;"><span style="color: #5F7290;">◆</span> Leaderboard</a>
+        <a href="#" class="flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors" style="color: #9FB0C9;"><span style="color: #5F7290;">◇</span> Question Bank</a>
+      </nav>
+      <div class="border-t px-4 py-5" style="border-color: #1B263B;">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold" style="background: #1B263B; color: #00D1FF;">SC</div>
+          <div><p class="text-sm font-medium" style="color: #E6EDF7;">Sarah Chen</p><p class="text-xs" style="color: #5F7290;">Manager</p></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 p-8 font-body" style="color: #E6EDF7;">
+      <!-- Breadcrumb -->
+      <nav class="mb-6 flex items-center gap-2 text-sm" style="color: #94A3B8;">
+        <span class="rounded px-2.5 py-1" style="background: #0F1728; border: 1px solid #22314A; color: #C3D0E2;">Team</span>
+        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="rounded px-2.5 py-1" style="background: #0F1728; border: 1px solid #22314A; color: #C3D0E2;">Members</span>
+        <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+        <span class="rounded px-2.5 py-1" style="border: 1px solid rgba(0,209,255,0.4); color: #00D1FF;">Jamie Chen</span>
+      </nav>
+
+      <!-- Header -->
+      <h1 class="font-heading text-[40px] font-bold tracking-[-0.02em] mb-1">Jamie Chen</h1>
+      <p class="text-sm mb-8" style="color: #94A3B8;">Senior Engineer &middot; jamie.chen@acmecorp.com</p>
+
+      <!-- Stat cards -->
+      <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="rounded-lg p-6" style="background: #111827; border: 1px solid #243249; box-shadow: 0 12px 30px -18px rgba(0,0,0,0.85);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #94A3B8;">Engagement</p>
+          <p class="font-heading text-4xl font-bold" style="color: #00D1FF;">87</p>
+        </div>
+        <div class="rounded-lg p-6" style="background: #111827; border: 1px solid #243249;">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #94A3B8;">Streak</p>
+          <p class="font-heading text-4xl font-bold" style="color: #7C3AED;">12w</p>
+        </div>
+        <div class="rounded-lg p-6" style="background: #111827; border: 1px solid #243249;">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #94A3B8;">Response Rate</p>
+          <p class="font-heading text-4xl font-bold" style="color: #22C55E;">94%</p>
+        </div>
+      </div>
+
+      <!-- Buttons row -->
+      <div class="flex gap-3 mb-8">
+        <button class="rounded-md px-5 py-3 text-sm font-semibold tracking-wide transition-all hover:-translate-y-0.5" style="background: #00D1FF; color: #05070D; box-shadow: 0 8px 24px -8px rgba(0,209,255,0.55);">Schedule 1:1</button>
+        <button class="rounded-md px-5 py-3 text-sm font-semibold" style="background: #7C3AED; color: white; box-shadow: 0 8px 20px -10px rgba(124,58,237,0.65);">Add Note</button>
+        <button class="rounded-md px-5 py-3 text-sm font-medium" style="border: 1px solid #2A3A55; color: #E6EDF7;">Export Report</button>
+      </div>
+
+      <!-- Badges -->
+      <div class="flex gap-2 mb-8">
+        <span class="rounded-full px-2.5 py-1 text-xs font-semibold" style="background: #0B2A1E; color: #4ADE80; border: 1px solid #1E6A4B;">Active</span>
+        <span class="rounded-full px-2.5 py-1 text-xs font-semibold" style="background: #142A4A; color: #60A5FA; border: 1px solid #2B5F9D;">Completed</span>
+        <span class="rounded-full px-2.5 py-1 text-xs font-semibold" style="background: #2A2230; color: #C4B5FD; border: 1px solid #5B3D8D;">Draft</span>
+      </div>
+
+      <!-- Form input -->
+      <div class="max-w-md mb-8">
+        <label class="block text-xs font-medium uppercase tracking-wider mb-2" style="color: #94A3B8;">Search team</label>
+        <input type="text" placeholder="Search by name or role..." class="w-full rounded-md px-3.5 py-2.5 text-sm outline-none transition-all" style="background: #0E1626; border: 1px solid #2A3A55; color: #E6EDF7;" onfocus="this.style.borderColor='#00D1FF'; this.style.boxShadow='0 0 0 3px rgba(0,209,255,0.15)'" onblur="this.style.borderColor='#2A3A55'; this.style.boxShadow='none'" />
+      </div>
+
+      <!-- Color palette -->
+      <div class="rounded-lg p-6" style="background: #111827; border: 1px solid #243249;">
+        <h3 class="font-heading text-base font-semibold mb-4">Color Palette</h3>
+        <div class="flex gap-3 flex-wrap">
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #00D1FF;"></div><span class="text-[10px]" style="color:#94A3B8;">Primary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #7C3AED;"></div><span class="text-[10px]" style="color:#94A3B8;">Secondary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #FF2E88;"></div><span class="text-[10px]" style="color:#94A3B8;">Accent</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #22C55E;"></div><span class="text-[10px]" style="color:#94A3B8;">Success</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #F59E0B;"></div><span class="text-[10px]" style="color:#94A3B8;">Warning</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #EF4444;"></div><span class="text-[10px]" style="color:#94A3B8;">Danger</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #0A0F1C; border: 1px solid #243249;"></div><span class="text-[10px]" style="color:#94A3B8;">BG</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #111827; border: 1px solid #243249;"></div><span class="text-[10px]" style="color:#94A3B8;">Surface</span></div>
+        </div>
+        <p class="mt-4 text-xs" style="color: #5F7290;">Fonts: Space Grotesk (headings) + Plus Jakarta Sans (body)</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DESIGN B — Sunlit Editorial Soft-Tech (Codex)
+     "Literary product studio"
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-b" class="tab-panel design-b">
+  <div class="flex min-h-screen" style="background: #FFF6E8;">
+
+    <!-- Sidebar -->
+    <aside class="flex w-[260px] shrink-0 flex-col border-r" style="background: #FBEFDE; border-color: #E5D2BD;">
+      <div class="flex items-center gap-3 px-6 pt-8 pb-6">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl font-heading text-sm font-bold" style="background: #4A2545; color: #FFFDF9;">R</div>
+        <span class="font-heading text-lg font-bold tracking-tight" style="color: #2B1E17;">Revualy</span>
+      </div>
+      <nav class="flex-1 px-3 space-y-1 font-body text-sm">
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium text-white" style="background: #4A2545; box-shadow: inset 0 0 0 1px rgba(255,253,249,0.18);">
+          <span style="color: #F2A93B;">◉</span> Team Overview
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6E5B4D;"><span style="color: #A08572;">◈</span> Team Insights</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6E5B4D;"><span style="color: #A08572;">◑</span> Team Members</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6E5B4D;"><span style="color: #A08572;">⚑</span> Flagged Items</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6E5B4D;"><span style="color: #A08572;">◆</span> Leaderboard</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6E5B4D;"><span style="color: #A08572;">◇</span> Question Bank</a>
+      </nav>
+      <div class="border-t px-4 py-5" style="border-color: #E5D2BD;">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold" style="background: #4A2545; color: #F2A93B;">SC</div>
+          <div><p class="text-sm font-medium" style="color: #2B1E17;">Sarah Chen</p><p class="text-xs" style="color: #A08572;">Manager</p></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-8 font-body" style="color: #2B1E17;">
+      <!-- Breadcrumb -->
+      <nav class="mb-6 flex items-center gap-2 text-sm" style="color: #6E5B4D;">
+        <a href="#" class="underline decoration-2 underline-offset-4" style="text-decoration-color: #D9B58A;">Team</a>
+        <span style="color: #C9AF95;">/</span>
+        <a href="#" class="underline decoration-2 underline-offset-4" style="text-decoration-color: #D9B58A;">Members</a>
+        <span style="color: #C9AF95;">/</span>
+        <span class="font-semibold" style="color: #2B1E17;">Jamie Chen</span>
+      </nav>
+
+      <h1 class="font-heading text-[42px] font-bold tracking-[-0.015em] mb-1" style="color: #2B1E17;">Jamie Chen</h1>
+      <p class="text-sm mb-8" style="color: #6E5B4D;">Senior Engineer &middot; jamie.chen@acmecorp.com</p>
+
+      <!-- Stat cards — note the saffron bottom-shadow -->
+      <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="rounded-[20px] p-7" style="background: #FFFCF6; border: 1px solid #E7D7C5; box-shadow: 0 6px 0 0 #F2A93B, 0 16px 28px -18px rgba(85,56,29,0.35);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6E5B4D;">Engagement</p>
+          <p class="font-heading text-4xl font-bold" style="color: #4A2545;">87</p>
+        </div>
+        <div class="rounded-[20px] p-7" style="background: #FFFCF6; border: 1px solid #E7D7C5; box-shadow: 0 6px 0 0 #2A9D8F, 0 16px 28px -18px rgba(85,56,29,0.35);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6E5B4D;">Streak</p>
+          <p class="font-heading text-4xl font-bold" style="color: #2A9D8F;">12w</p>
+        </div>
+        <div class="rounded-[20px] p-7" style="background: #FFFCF6; border: 1px solid #E7D7C5; box-shadow: 0 6px 0 0 #F2A93B, 0 16px 28px -18px rgba(85,56,29,0.35);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6E5B4D;">Response Rate</p>
+          <p class="font-heading text-4xl font-bold" style="color: #2E7D5B;">94%</p>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-3 mb-8">
+        <button class="rounded-full px-6 py-3 text-sm font-semibold transition-colors" style="background: #4A2545; color: #FFFDF9; box-shadow: 0 10px 22px -12px rgba(74,37,69,0.55);">Schedule 1:1</button>
+        <button class="rounded-full px-6 py-3 text-sm font-semibold" style="background: #F2A93B; color: #2B1E17; box-shadow: 0 10px 20px -12px rgba(242,169,59,0.55);">Add Note</button>
+        <button class="rounded-full px-6 py-3 text-sm font-medium" style="border: 1px solid #D8C3AE; color: #4A2545;">Export Report</button>
+      </div>
+
+      <!-- Badges -->
+      <div class="flex gap-2 mb-8">
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #E5F3EC; color: #2E7D5B; border: 1px solid #B7DCCB;">Active</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #EEE8FA; color: #5A3D88; border: 1px solid #D2C1EF;">Completed</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #FBEEDB; color: #9A5B1B; border: 1px solid #F1D1A3;">Draft</span>
+      </div>
+
+      <!-- Form input -->
+      <div class="max-w-md mb-8">
+        <label class="block text-xs font-medium uppercase tracking-wider mb-2" style="color: #6E5B4D;">Search team</label>
+        <input type="text" placeholder="Search by name or role..." class="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all" style="background: #FFFDF9; border: 1px solid #DCC7B2; color: #2B1E17;" onfocus="this.style.borderColor='#2A9D8F'; this.style.boxShadow='0 0 0 3px rgba(42,157,143,0.15)'" onblur="this.style.borderColor='#DCC7B2'; this.style.boxShadow='none'" />
+      </div>
+
+      <!-- Palette -->
+      <div class="rounded-[20px] p-6" style="background: #FFFCF6; border: 1px solid #E7D7C5;">
+        <h3 class="font-heading text-base font-semibold mb-4">Color Palette</h3>
+        <div class="flex gap-3 flex-wrap">
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #4A2545;"></div><span class="text-[10px]" style="color:#6E5B4D;">Primary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #F2A93B;"></div><span class="text-[10px]" style="color:#6E5B4D;">Secondary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #2A9D8F;"></div><span class="text-[10px]" style="color:#6E5B4D;">Accent</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #2E7D5B;"></div><span class="text-[10px]" style="color:#6E5B4D;">Success</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #C7791A;"></div><span class="text-[10px]" style="color:#6E5B4D;">Warning</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #B33A3A;"></div><span class="text-[10px]" style="color:#6E5B4D;">Danger</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #FFF6E8; border: 1px solid #E7D7C5;"></div><span class="text-[10px]" style="color:#6E5B4D;">BG</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #FFFCF6; border: 1px solid #E7D7C5;"></div><span class="text-[10px]" style="color:#6E5B4D;">Surface</span></div>
+        </div>
+        <p class="mt-4 text-xs" style="color: #A08572;">Fonts: Fraunces (headings) + Manrope (body)</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DESIGN C — Midnight Luxe (Claude)
+     "Dark silk minimalism"
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-c" class="tab-panel design-c">
+  <div class="flex min-h-screen" style="background: #121118;">
+
+    <!-- Sidebar -->
+    <aside class="flex w-[260px] shrink-0 flex-col border-r" style="background: #0D0B12; border-color: #2A2533;">
+      <div class="flex items-center gap-3 px-6 pt-8 pb-6">
+        <div class="flex h-10 w-10 items-center justify-center rounded-2xl font-heading text-sm font-bold" style="background: linear-gradient(135deg, #A78BFA, #7C3AED); color: white;">R</div>
+        <span class="font-heading text-lg font-semibold tracking-tight" style="color: #E8E4F0;">Revualy</span>
+      </div>
+      <nav class="flex-1 px-3 space-y-1 font-body text-sm">
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium" style="background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(124,58,237,0.1)); color: #C4B5FD; border: 1px solid rgba(167,139,250,0.2);">
+          <span>◉</span> Team Overview
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6B6180;"><span>◈</span> Team Insights</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6B6180;"><span>◑</span> Team Members</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6B6180;"><span>⚑</span> Flagged Items</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6B6180;"><span>◆</span> Leaderboard</a>
+        <a href="#" class="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors" style="color: #6B6180;"><span>◇</span> Question Bank</a>
+      </nav>
+      <div class="border-t px-4 py-5" style="border-color: #2A2533;">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold" style="background: linear-gradient(135deg, #A78BFA, #7C3AED); color: white;">SC</div>
+          <div><p class="text-sm font-medium" style="color: #E8E4F0;">Sarah Chen</p><p class="text-xs" style="color: #6B6180;">Manager</p></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-8 font-body" style="color: #E8E4F0;">
+      <!-- Breadcrumb -->
+      <nav class="mb-6 flex items-center gap-2 text-sm" style="color: #6B6180;">
+        <a href="#" class="transition-colors" style="color: #8B7FA3;">Team</a>
+        <span style="color: #3D3550;">›</span>
+        <a href="#" style="color: #8B7FA3;">Members</a>
+        <span style="color: #3D3550;">›</span>
+        <span class="font-medium" style="color: #C4B5FD;">Jamie Chen</span>
+      </nav>
+
+      <h1 class="font-heading text-[38px] font-semibold tracking-[-0.02em] mb-1" style="color: #F0ECF6;">Jamie Chen</h1>
+      <p class="text-sm mb-8" style="color: #6B6180;">Senior Engineer &middot; jamie.chen@acmecorp.com</p>
+
+      <!-- Stat cards with glass effect -->
+      <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="rounded-2xl p-6" style="background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.15); backdrop-filter: blur(12px);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6B6180;">Engagement</p>
+          <p class="font-heading text-4xl font-bold" style="color: #A78BFA;">87</p>
+        </div>
+        <div class="rounded-2xl p-6" style="background: rgba(236,72,153,0.08); border: 1px solid rgba(236,72,153,0.15);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6B6180;">Streak</p>
+          <p class="font-heading text-4xl font-bold" style="color: #EC4899;">12w</p>
+        </div>
+        <div class="rounded-2xl p-6" style="background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.15);">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #6B6180;">Response Rate</p>
+          <p class="font-heading text-4xl font-bold" style="color: #34D399;">94%</p>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-3 mb-8">
+        <button class="rounded-xl px-5 py-3 text-sm font-semibold transition-all" style="background: linear-gradient(135deg, #A78BFA, #7C3AED); color: white; box-shadow: 0 8px 25px -8px rgba(124,58,237,0.5);">Schedule 1:1</button>
+        <button class="rounded-xl px-5 py-3 text-sm font-semibold" style="background: rgba(236,72,153,0.15); color: #EC4899; border: 1px solid rgba(236,72,153,0.3);">Add Note</button>
+        <button class="rounded-xl px-5 py-3 text-sm font-medium" style="border: 1px solid #2A2533; color: #8B7FA3;">Export Report</button>
+      </div>
+
+      <!-- Badges -->
+      <div class="flex gap-2 mb-8">
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: rgba(52,211,153,0.1); color: #34D399; border: 1px solid rgba(52,211,153,0.25);">Active</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: rgba(167,139,250,0.1); color: #A78BFA; border: 1px solid rgba(167,139,250,0.25);">Completed</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: rgba(107,97,128,0.15); color: #8B7FA3; border: 1px solid rgba(107,97,128,0.25);">Draft</span>
+      </div>
+
+      <!-- Form -->
+      <div class="max-w-md mb-8">
+        <label class="block text-xs font-medium uppercase tracking-wider mb-2" style="color: #6B6180;">Search team</label>
+        <input type="text" placeholder="Search by name or role..." class="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all" style="background: #1A1622; border: 1px solid #2A2533; color: #E8E4F0;" onfocus="this.style.borderColor='#A78BFA'; this.style.boxShadow='0 0 0 3px rgba(167,139,250,0.15)'" onblur="this.style.borderColor='#2A2533'; this.style.boxShadow='none'" />
+      </div>
+
+      <!-- Palette -->
+      <div class="rounded-2xl p-6" style="background: rgba(167,139,250,0.05); border: 1px solid rgba(167,139,250,0.12);">
+        <h3 class="font-heading text-base font-semibold mb-4">Color Palette</h3>
+        <div class="flex gap-3 flex-wrap">
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #7C3AED;"></div><span class="text-[10px]" style="color:#6B6180;">Primary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #EC4899;"></div><span class="text-[10px]" style="color:#6B6180;">Secondary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #A78BFA;"></div><span class="text-[10px]" style="color:#6B6180;">Accent</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #34D399;"></div><span class="text-[10px]" style="color:#6B6180;">Success</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #FBBF24;"></div><span class="text-[10px]" style="color:#6B6180;">Warning</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #F87171;"></div><span class="text-[10px]" style="color:#6B6180;">Danger</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #121118; border: 1px solid #2A2533;"></div><span class="text-[10px]" style="color:#6B6180;">BG</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-lg mb-1" style="background: #1A1622; border: 1px solid #2A2533;"></div><span class="text-[10px]" style="color:#6B6180;">Surface</span></div>
+        </div>
+        <p class="mt-4 text-xs" style="color: #6B6180;">Fonts: Sora (headings) + Inter (body)</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DESIGN D — Soft Bloom (Claude)
+     "Airy garden warmth"
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="panel-d" class="tab-panel design-d">
+  <div class="flex min-h-screen" style="background: #F7F3EE;">
+
+    <!-- Sidebar -->
+    <aside class="flex w-[260px] shrink-0 flex-col border-r" style="background: #FFFFFF; border-color: #E8E0D8;">
+      <div class="flex items-center gap-3 px-6 pt-8 pb-6">
+        <div class="flex h-10 w-10 items-center justify-center rounded-full font-heading text-base font-bold" style="background: #D4564E; color: white;">R</div>
+        <span class="font-heading text-xl font-semibold" style="color: #2C1810; letter-spacing: -0.01em;">Revualy</span>
+      </div>
+      <nav class="flex-1 px-3 space-y-0.5 font-body text-sm">
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 font-medium" style="background: #D4564E; color: white; box-shadow: 0 4px 16px -4px rgba(212,86,78,0.35);">
+          <span>◉</span> Team Overview
+        </a>
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors" style="color: #8C7B6E;"><span>◈</span> Team Insights</a>
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors" style="color: #8C7B6E;"><span>◑</span> Team Members</a>
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors" style="color: #8C7B6E;"><span>⚑</span> Flagged Items</a>
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors" style="color: #8C7B6E;"><span>◆</span> Leaderboard</a>
+        <a href="#" class="flex items-center gap-3 rounded-2xl px-4 py-3 transition-colors" style="color: #8C7B6E;"><span>◇</span> Question Bank</a>
+      </nav>
+      <div class="border-t px-4 py-5" style="border-color: #E8E0D8;">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold" style="background: #FCEAE8; color: #D4564E;">SC</div>
+          <div><p class="text-sm font-medium" style="color: #2C1810;">Sarah Chen</p><p class="text-xs" style="color: #8C7B6E;">Manager</p></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 p-8 font-body" style="color: #2C1810;">
+      <!-- Breadcrumb — pill-based -->
+      <nav class="mb-6 flex items-center gap-1.5 text-sm">
+        <a href="#" class="rounded-full px-3 py-1 transition-colors" style="background: #F0EAE3; color: #8C7B6E;">Team</a>
+        <span style="color: #D1C7BC;">›</span>
+        <a href="#" class="rounded-full px-3 py-1 transition-colors" style="background: #F0EAE3; color: #8C7B6E;">Members</a>
+        <span style="color: #D1C7BC;">›</span>
+        <span class="rounded-full px-3 py-1 font-medium" style="background: #FCEAE8; color: #D4564E;">Jamie Chen</span>
+      </nav>
+
+      <h1 class="font-heading text-[44px] font-semibold mb-1" style="color: #2C1810; letter-spacing: -0.01em;">Jamie Chen</h1>
+      <p class="text-sm mb-8" style="color: #8C7B6E;">Senior Engineer &middot; jamie.chen@acmecorp.com</p>
+
+      <!-- Stats — soft pastel cards -->
+      <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="rounded-3xl p-7" style="background: #FCEAE8; border: none;">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #B8756F;">Engagement</p>
+          <p class="font-heading text-4xl font-bold" style="color: #D4564E;">87</p>
+        </div>
+        <div class="rounded-3xl p-7" style="background: #E8F5EE;">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #5B9B7A;">Streak</p>
+          <p class="font-heading text-4xl font-bold" style="color: #3D8B63;">12w</p>
+        </div>
+        <div class="rounded-3xl p-7" style="background: #EDE8F5;">
+          <p class="text-xs font-medium uppercase tracking-wider mb-2" style="color: #8B76B8;">Response Rate</p>
+          <p class="font-heading text-4xl font-bold" style="color: #6B4FA0;">94%</p>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-3 mb-8">
+        <button class="rounded-full px-6 py-3 text-sm font-semibold transition-all" style="background: #D4564E; color: white; box-shadow: 0 6px 20px -6px rgba(212,86,78,0.4);">Schedule 1:1</button>
+        <button class="rounded-full px-6 py-3 text-sm font-semibold" style="background: #3D8B63; color: white; box-shadow: 0 6px 20px -6px rgba(61,139,99,0.35);">Add Note</button>
+        <button class="rounded-full px-6 py-3 text-sm font-medium" style="border: 2px solid #E8E0D8; color: #6B5D52;">Export Report</button>
+      </div>
+
+      <!-- Badges -->
+      <div class="flex gap-2 mb-8">
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #E8F5EE; color: #3D8B63;">Active</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #EDE8F5; color: #6B4FA0;">Completed</span>
+        <span class="rounded-full px-3 py-1 text-xs font-semibold" style="background: #F0EAE3; color: #8C7B6E;">Draft</span>
+      </div>
+
+      <!-- Form -->
+      <div class="max-w-md mb-8">
+        <label class="block text-xs font-medium uppercase tracking-wider mb-2" style="color: #8C7B6E;">Search team</label>
+        <input type="text" placeholder="Search by name or role..." class="w-full rounded-2xl px-4 py-3 text-sm outline-none transition-all" style="background: #FFFFFF; border: 2px solid #E8E0D8; color: #2C1810;" onfocus="this.style.borderColor='#D4564E'; this.style.boxShadow='0 0 0 4px rgba(212,86,78,0.1)'" onblur="this.style.borderColor='#E8E0D8'; this.style.boxShadow='none'" />
+      </div>
+
+      <!-- Palette -->
+      <div class="rounded-3xl p-6" style="background: #FFFFFF; border: 2px solid #E8E0D8;">
+        <h3 class="font-heading text-lg font-semibold mb-4">Color Palette</h3>
+        <div class="flex gap-3 flex-wrap">
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #D4564E;"></div><span class="text-[10px]" style="color:#8C7B6E;">Primary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #3D8B63;"></div><span class="text-[10px]" style="color:#8C7B6E;">Secondary</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #6B4FA0;"></div><span class="text-[10px]" style="color:#8C7B6E;">Accent</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #3D8B63;"></div><span class="text-[10px]" style="color:#8C7B6E;">Success</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #D4954E;"></div><span class="text-[10px]" style="color:#8C7B6E;">Warning</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #D4564E;"></div><span class="text-[10px]" style="color:#8C7B6E;">Danger</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #F7F3EE; border: 2px solid #E8E0D8;"></div><span class="text-[10px]" style="color:#8C7B6E;">BG</span></div>
+          <div class="text-center"><div class="h-12 w-12 rounded-xl mb-1" style="background: #FFFFFF; border: 2px solid #E8E0D8;"></div><span class="text-[10px]" style="color:#8C7B6E;">Surface</span></div>
+        </div>
+        <p class="mt-4 text-xs" style="color: #8C7B6E;">Fonts: Crimson Pro (headings) + Outfit (body)</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.style.color = '#737373'; });
+  document.getElementById('panel-' + id).classList.add('active');
+  const btn = document.querySelector('[data-tab="' + id + '"]');
+  btn.classList.add('active');
+  const colors = { a: '#00D1FF', b: '#4A2545', c: '#7C3AED', d: '#D4564E' };
+  btn.style.color = colors[id];
+}
+// Init colors
+document.querySelectorAll('.tab-btn:not(.active)').forEach(b => b.style.color = '#737373');
+</script>
+
+</body>
+</html>

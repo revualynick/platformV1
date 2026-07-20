@@ -8,6 +8,8 @@ import {
 } from "@/lib/mock-data";
 import { trendIcons } from "@/lib/style-constants";
 import { isDemoSession } from "@/lib/session-utils";
+import { logPageError } from "@/lib/page-errors";
+import { DataUnavailable } from "@/components/data-unavailable";
 
 type TeamMember = {
   id: string;
@@ -26,7 +28,10 @@ async function loadMembers(userId: string, isDemo: boolean) {
       return isDemo ? (mockTeamMembers as TeamMember[]) : [];
     }
 
-    const bulkEng = await getBulkLatestEngagement(getDb(), members.map((m) => m.id)).catch(() => ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>));
+    const bulkEng = await getBulkLatestEngagement(getDb(), members.map((m) => m.id)).catch((err) => {
+      logPageError("team-members", err);
+      return {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>;
+    });
 
     return members.map((m) => {
       const scores = bulkEng[m.id] ?? [];
@@ -50,8 +55,10 @@ async function loadMembers(userId: string, isDemo: boolean) {
         trend: "stable",
       };
     });
-  } catch {
-    return isDemo ? (mockTeamMembers as TeamMember[]) : [];
+  } catch (err) {
+    logPageError("team-members", err);
+    // null signals "load failed" — distinct from an empty team
+    return isDemo ? (mockTeamMembers as TeamMember[]) : null;
   }
 }
 
@@ -61,6 +68,20 @@ export default async function TeamMembersPage() {
   if (!userId) redirect("/login");
   const isDemo = isDemoSession(session);
   const teamMembers = await loadMembers(userId, isDemo);
+
+  if (teamMembers === null) {
+    return (
+      <div className="max-w-6xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Manager</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Team Members
+          </h1>
+        </div>
+        <DataUnavailable what="your team" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl">

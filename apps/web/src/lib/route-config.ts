@@ -22,6 +22,12 @@ const segmentLabels: Record<string, string> = {
   escalations: "Escalations",
   "one-on-one": "1:1 Sessions",
   demo: "Demo",
+  profile: "My Profile",
+  profiles: "Team Profiles",
+  assess: "Assessment",
+  results: "Results",
+  goals: "Goals",
+  alignment: "Alignment",
 };
 
 export interface Breadcrumb {

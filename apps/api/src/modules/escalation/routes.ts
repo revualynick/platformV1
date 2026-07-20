@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { escalations, escalationNotes, users } from "@revualy/db";
+import { getReportingTree } from "@revualy/db/queries";
 import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
@@ -9,6 +10,7 @@ import {
   updateEscalationSchema,
   escalationQuerySchema,
   createEscalationNoteSchema,
+  managerReviewEscalationSchema,
 } from "../../lib/validation.js";
 
 export const escalationRoutes: FastifyPluginAsync = async (app) => {
@@ -193,6 +195,75 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Escalation not found" });
 
       return reply.send(result);
+    },
+  );
+
+  // POST /:id/review — Manager review of a flag on one of their reports.
+  // "investigate" moves it to investigating (visible to admins for
+  // follow-up); "dismiss" closes it as a false positive. Both leave an
+  // audit note. Full status control stays admin-only (PATCH /:id).
+  app.post(
+    "/:id/review",
+    { preHandler: requireRole("manager") },
+    async (request, reply) => {
+      const { id } = parseBody(idParamSchema, request.params);
+      const { db } = request.tenant;
+      const userId = getAuthenticatedUserId(request);
+      const body = parseBody(managerReviewEscalationSchema, request.body);
+
+      const [esc] = await db
+        .select()
+        .from(escalations)
+        .where(eq(escalations.id, id));
+      if (!esc) return reply.code(404).send({ error: "Escalation not found" });
+
+      // The flag's subject must be in the manager's reporting tree
+      // (admins pass requireRole but still follow the same rule here;
+      // they have full control via PATCH anyway).
+      const tree = await getReportingTree(db, userId);
+      if (!esc.subjectId || !tree.has(esc.subjectId)) {
+        return reply
+          .code(403)
+          .send({ error: "This flag is not about one of your reports" });
+      }
+
+      if (esc.status === "resolved" || esc.status === "dismissed") {
+        return reply
+          .code(409)
+          .send({ error: `Flag already ${esc.status}` });
+      }
+
+      const isInvestigate = body.action === "investigate";
+      const updates: Record<string, unknown> = {
+        status: isInvestigate ? "investigating" : "dismissed",
+        updatedAt: new Date(),
+      };
+      if (!isInvestigate) {
+        updates.resolvedAt = new Date();
+        updates.resolvedById = userId;
+        updates.resolution = body.note ?? "Dismissed by manager as not a concern";
+      }
+
+      const updated = await db.transaction(async (tx) => {
+        const [upd] = await tx
+          .update(escalations)
+          .set(updates)
+          .where(eq(escalations.id, id))
+          .returning();
+
+        await tx.insert(escalationNotes).values({
+          escalationId: id,
+          action: isInvestigate
+            ? "Manager opened investigation"
+            : "Manager dismissed flag",
+          performedBy: userId,
+          content: body.note ?? "",
+        });
+
+        return upd;
+      });
+
+      return reply.send(updated);
     },
   );
 

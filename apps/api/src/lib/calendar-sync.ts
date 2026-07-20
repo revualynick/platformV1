@@ -1,15 +1,13 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
-  calendarTokens,
   calendarEvents,
   users,
   userRelationships,
 } from "@revualy/db";
-import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared";
 import {
   fetchCalendarEvents,
-  refreshAccessToken,
+  getFreshGoogleAccessToken,
 } from "./google-calendar.js";
 
 /**
@@ -20,43 +18,12 @@ export async function syncCalendarForUser(
   db: TenantDb,
   userId: string,
 ): Promise<{ synced: number; relationships: number }> {
-  // 1. Get the user's Google calendar token
-  const [token] = await db
-    .select()
-    .from(calendarTokens)
-    .where(
-      and(
-        eq(calendarTokens.userId, userId),
-        eq(calendarTokens.provider, "google"),
-      ),
-    );
-
+  // 1. Get a fresh access token (decrypts + refreshes if expired)
+  const token = await getFreshGoogleAccessToken(db, userId);
   if (!token) return { synced: 0, relationships: 0 };
 
-  // 2. Decrypt stored tokens
-  const decryptIfNeeded = (val: string) =>
-    isEncryptionConfigured() ? decrypt(val) : val;
-  const encryptIfNeeded = (val: string) =>
-    isEncryptionConfigured() ? encrypt(val) : val;
-
-  // 3. Refresh token if expired
-  let accessToken = decryptIfNeeded(token.accessToken);
-  if (token.expiresAt <= new Date()) {
-    const refreshed = await refreshAccessToken(decryptIfNeeded(token.refreshToken));
-    accessToken = refreshed.accessToken;
-
-    await db
-      .update(calendarTokens)
-      .set({
-        accessToken: encryptIfNeeded(refreshed.accessToken),
-        expiresAt: refreshed.expiresAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(calendarTokens.id, token.id));
-  }
-
-  // 3. Fetch events from Google
-  const events = await fetchCalendarEvents(accessToken);
+  // 2. Fetch events from Google
+  const events = await fetchCalendarEvents(token.accessToken);
 
   // 4. Upsert events into calendar_events (batched)
   if (events.length > 0) {

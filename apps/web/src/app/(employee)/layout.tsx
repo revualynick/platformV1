@@ -8,7 +8,9 @@ const navItems = [
   { label: "My Feedback", href: "/dashboard/feedback", icon: "◈" },
   { label: "1:1 Notes", href: "/dashboard/one-on-ones", icon: "◐" },
   { label: "Reflections", href: "/dashboard/reflections", icon: "◎" },
+  { label: "My Goals", href: "/dashboard/goals", icon: "◍" },
   { label: "Engagement", href: "/dashboard/engagement", icon: "△" },
+  { label: "My Profile", href: "/dashboard/profile", icon: "◑" },
   { label: "Kudos", href: "/dashboard/kudos", icon: "♡" },
   { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];

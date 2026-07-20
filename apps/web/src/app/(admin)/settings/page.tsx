@@ -1,7 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { getActiveCoreValues, getOrgSettings as queryOrgSettings } from "@revualy/db/queries";
+import {
+  getActiveCoreValues,
+  getOrgSettings as queryOrgSettings,
+  listActiveUsers,
+  getIntegrations,
+  getGoalCycles,
+  getCurrentCycle,
+  getOrgGoalsWithAlignment,
+} from "@revualy/db/queries";
 import {
   coreValues as mockCoreValues,
   teamMembers as mockTeamMembers,
@@ -13,6 +21,8 @@ import {
 } from "@/lib/mock-data";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { DismissibleCard } from "@/components/dismissible-card";
+import { logPageError } from "@/lib/page-errors";
 import { ValuesCard } from "./values-card";
 import { OrgEditDialog } from "./org-edit-dialog";
 
@@ -25,7 +35,8 @@ async function loadValues(isDemo: boolean) {
       description: v.description,
       active: v.isActive,
     }));
-  } catch {
+  } catch (err) {
+    logPageError("admin-settings:values", err);
     return isDemo ? mockCoreValues : [];
   }
 }
@@ -37,9 +48,79 @@ async function loadOrgSettings(isDemo: boolean) {
   try {
     const settings = await queryOrgSettings(getDb());
     return settings ?? { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] as string[] };
-  } catch {
+  } catch (err) {
+    logPageError("admin-settings:org", err);
     return { name: "", subdomain: "", timezone: "UTC", allowedDomains: [] as string[] };
   }
+}
+
+// ── Setup checklist ────────────────────────────────────
+
+const CHAT_PLATFORMS = new Set(["slack", "google_chat", "teams"]);
+
+interface SetupItem {
+  label: string;
+  done: boolean;
+  href: string;
+}
+
+/** Five setup milestones, failure-tolerant: a failed check logs and counts as not done. */
+async function loadSetupChecklist(): Promise<SetupItem[]> {
+  const db = getDb();
+  const [valuesResult, usersResult, integrationsResult, cyclesResult, currentCycleResult] =
+    await Promise.allSettled([
+      getActiveCoreValues(db),
+      listActiveUsers(db),
+      getIntegrations(db),
+      getGoalCycles(db),
+      getCurrentCycle(db),
+    ]);
+  for (const result of [valuesResult, usersResult, integrationsResult, cyclesResult, currentCycleResult]) {
+    if (result.status === "rejected") logPageError("admin-settings:setup", result.reason);
+  }
+
+  const chatConnected =
+    integrationsResult.status === "fulfilled" &&
+    integrationsResult.value.some(
+      (i) => CHAT_PLATFORMS.has(i.platform) && i.status === "connected",
+    );
+
+  let orgGoalsExist = false;
+  if (currentCycleResult.status === "fulfilled" && currentCycleResult.value) {
+    try {
+      orgGoalsExist = (await getOrgGoalsWithAlignment(db, currentCycleResult.value.id)).length > 0;
+    } catch (err) {
+      logPageError("admin-settings:setup", err);
+    }
+  }
+
+  return [
+    {
+      label: "Define your core values",
+      done: valuesResult.status === "fulfilled" && valuesResult.value.length > 0,
+      href: "/settings/values",
+    },
+    {
+      label: "Add your people",
+      done: usersResult.status === "fulfilled" && usersResult.value.length > 1,
+      href: "/settings/people",
+    },
+    {
+      label: "Connect a chat integration",
+      done: chatConnected,
+      href: "/settings/integrations",
+    },
+    {
+      label: "Create a goal cycle",
+      done: cyclesResult.status === "fulfilled" && cyclesResult.value.length > 0,
+      href: "/settings/goals",
+    },
+    {
+      label: "Create org goals",
+      done: orgGoalsExist,
+      href: "/settings/goals",
+    },
+  ];
 }
 
 const attentionSeverityStyles = {
@@ -80,6 +161,8 @@ async function MainContent({
   const demoOrgThreads = isDemo ? orgThreads : [];
 
   const coreValues = await loadValues(isDemo);
+  const setupItems = isDemo ? [] : await loadSetupChecklist();
+  const setupIncomplete = setupItems.some((item) => !item.done);
 
   const activeCampaigns = demoCampaigns.filter((c) => c.status === "collecting").length;
   const participationRate = demoTeamMembers.length > 0
@@ -145,6 +228,33 @@ async function MainContent({
 
   return (
     <>
+      {/* Setup checklist — non-demo, hidden once all five steps are done */}
+      {!isDemo && setupIncomplete && (
+        <DismissibleCard id="admin-setup" title="Set up Revualy — recommended order">
+          <ol className="space-y-1.5">
+            {setupItems.map((item, i) => (
+              <li key={`${item.href}-${item.label}`} className="flex items-baseline gap-2">
+                <span className="tabular-nums text-stone-400">{i + 1}.</span>
+                {item.done ? (
+                  <span className="text-stone-400 line-through">✓ {item.label}</span>
+                ) : (
+                  <Link
+                    href={item.href}
+                    className="font-medium text-forest hover:text-forest-light"
+                  >
+                    ☐ {item.label}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-2 text-xs text-stone-500">
+            Managers can only create team goals after org goals exist; employees
+            only receive conversations once a chat platform is connected.
+          </p>
+        </DismissibleCard>
+      )}
+
       {/* Organization profile */}
       <div
         className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-surface p-6"

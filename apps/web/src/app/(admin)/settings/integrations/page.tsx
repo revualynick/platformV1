@@ -5,17 +5,19 @@ import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
 import { getIntegrations } from "@revualy/db/queries";
 import type { IntegrationRow } from "@/lib/api";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import { ConnectDialog, ConfigureButton, DisconnectButton } from "./integration-actions";
 
 const platformDescriptions: Record<string, string> = {
   slack:
-    "Send and receive feedback interactions via Slack DMs. Supports Block Kit rich messages, slash commands, and interactive components.",
+    "Send and receive feedback interactions via Slack DMs. Supports Block Kit rich messages, slash commands, and interactive components. Without it, employees on Slack won't receive feedback conversations.",
   google_chat:
-    "Integrate with Google Chat spaces and DMs. Uses Cards v2 for rich formatting and Pub/Sub for real-time events.",
+    "Integrate with Google Chat spaces and DMs. Uses Cards v2 for rich formatting and Pub/Sub for real-time events. Without it, employees on Google Chat won't receive feedback conversations.",
   teams:
-    "Connect to Microsoft Teams channels and chats. Uses Adaptive Cards for interactive feedback flows.",
+    "Connect to Microsoft Teams channels and chats. Uses Adaptive Cards for interactive feedback flows. Without it, employees on Teams won't receive feedback conversations.",
   google_calendar:
-    "Sync calendar events to automatically build relationship graphs and find optimal interaction times.",
+    "Sync calendar events to automatically build relationship graphs and find optimal interaction times. Without it, calendar-aware scheduling and check-in transcript suggestions are unavailable.",
 };
 
 export default async function IntegrationsPage() {
@@ -23,6 +25,7 @@ export default async function IntegrationsPage() {
   const isDemo = isDemoSession(session);
 
   let items: IntegrationRow[];
+  let loadFailed = false;
   if (isDemo) {
     items = mockIntegrations.map((m) => ({
       id: m.id,
@@ -40,9 +43,25 @@ export default async function IntegrationsPage() {
     try {
       const rows = await getIntegrations(getDb());
       items = rows as unknown as IntegrationRow[];
-    } catch {
+    } catch (err) {
+      logPageError("admin-integrations", err);
       items = [];
+      loadFailed = true;
     }
+  }
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Configuration</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Integrations
+          </h1>
+        </div>
+        <DataUnavailable what="integrations" />
+      </div>
+    );
   }
 
   const connected = items.filter((i) => i.status === "connected").length;

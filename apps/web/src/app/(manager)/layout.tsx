@@ -7,8 +7,10 @@ const navItems = [
   { label: "Team Overview", href: "/team", icon: "◉" },
   { label: "Team Insights", href: "/team/feedback", icon: "◈" },
   { label: "Team Members", href: "/team/members", icon: "◑" },
+  { label: "Team Goals", href: "/team/goals", icon: "◍" },
   { label: "Flagged Items", href: "/team/flagged", icon: "⚑" },
   { label: "Leaderboard", href: "/team/leaderboard", icon: "◆" },
+  { label: "Team Profiles", href: "/team/profiles", icon: "◐" },
   { label: "Question Bank", href: "/team/questions", icon: "◇" },
   { label: "Org Chart", href: "/team/org-chart", icon: "◎" },
 ];

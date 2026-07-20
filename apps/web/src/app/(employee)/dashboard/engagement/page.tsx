@@ -7,6 +7,8 @@ import { getEngagementScoresForUser } from "@revualy/db/queries";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import {
   weeklyEngagementDetail as mockWeeklyDetail,
   engagementHistory as mockHistory,
@@ -38,6 +40,7 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
         weeklyDetail: isDemo ? (mockWeeklyDetail as WeekDetail[]) : [],
         chartData: isDemo ? mockHistory : [],
         streak: isDemo ? mockUser.streak : 0,
+        loadFailed: false,
       };
     }
 
@@ -69,12 +72,15 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
       weeklyDetail,
       chartData,
       streak: latest.streak,
+      loadFailed: false,
     };
-  } catch {
+  } catch (err) {
+    logPageError("engagement", err);
     return {
       weeklyDetail: isDemo ? (mockWeeklyDetail as WeekDetail[]) : [],
       chartData: isDemo ? mockHistory : [],
       streak: isDemo ? mockUser.streak : 0,
+      loadFailed: true,
     };
   }
 }
@@ -82,7 +88,21 @@ async function loadEngagementData(session: Awaited<ReturnType<typeof auth>>, isD
 export default async function EngagementPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
-  const { weeklyDetail, chartData, streak } = await loadEngagementData(session, isDemo);
+  const { weeklyDetail, chartData, streak, loadFailed } = await loadEngagementData(session, isDemo);
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Your engagement</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Engagement Score
+          </h1>
+        </div>
+        <DataUnavailable what="your engagement data" />
+      </div>
+    );
+  }
 
   const current = weeklyDetail[0];
   const previous = weeklyDetail[1] ?? current;
@@ -139,13 +159,13 @@ export default async function EngagementPage() {
             {
               label: "Interactions",
               value: `${current.interactions} / 3`,
-              sub: "Target met",
+              sub: current.interactions >= 3 ? "Weekly target met" : "Weekly target: 3",
               color: "text-forest",
             },
             {
               label: "Avg Word Count",
               value: current.avgWordCount > 0 ? current.avgWordCount.toString() : "—",
-              sub: "Words per response",
+              sub: current.avgWordCount > 0 ? "Words per response" : "Tracked as you give feedback",
               color: "text-stone-900",
             },
             {
@@ -157,7 +177,7 @@ export default async function EngagementPage() {
             {
               label: "Specific Examples",
               value: current.specificExamples > 0 ? current.specificExamples.toString() : "—",
-              sub: "Cited in feedback",
+              sub: current.specificExamples > 0 ? "Cited in feedback" : "Tracked as you give feedback",
               color: "text-forest",
             },
           ].map((stat, i) => {

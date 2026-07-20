@@ -24,8 +24,11 @@ import { threeSixtyRoutes } from "./modules/three-sixty/routes.js";
 import { themeRoutes } from "./modules/themes/routes.js";
 import { campaignRoutes } from "./modules/campaigns/routes.js";
 import { demoRoutes, setDemoAnalysisQueue } from "./modules/demo/routes.js";
+import { goalsRoutes } from "./modules/goals/routes.js";
 import { reflectionRoutes, setReflectionAnalysisQueue } from "./modules/reflections/routes.js";
 import { exportRoutes } from "./modules/export/routes.js";
+import { assessmentRoutes } from "./modules/assessments/routes.js";
+import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
@@ -75,6 +78,10 @@ export async function buildApp() {
     timeWindow: "1 minute",
     keyGenerator: (request) =>
       request.tenant?.userId ?? request.ip,
+    // Chat platforms deliver webhooks from shared IP pools, so IP-keyed
+    // limiting would let one busy workspace throttle another. Webhooks
+    // are already authenticated by per-platform signature verification.
+    allowList: (request) => request.url.startsWith("/webhooks"),
   });
   await app.register(tenantPlugin);
 
@@ -126,7 +133,10 @@ export async function buildApp() {
   await app.register(reflectionRoutes, { prefix: "/api/v1/reflections" });
   await app.register(exportRoutes, { prefix: "/api/v1/export" });
   await app.register(themeRoutes, { prefix: "/api/v1/themes" });
+  await app.register(assessmentRoutes, { prefix: "/api/v1/assessments" });
+  await app.register(profileRoutes, { prefix: "/api/v1/profiles" });
   await app.register(demoRoutes, { prefix: "/api/v1/demo" });
+  await app.register(goalsRoutes, { prefix: "/api/v1/goals" });
 
   // WebSocket routes
   registerOneOnOneWs(app, REDIS_URL);
@@ -165,6 +175,7 @@ async function start() {
   const queues = createQueues(REDIS_URL);
   setConversationQueue(queues.conversationQueue);
   setDemoAnalysisQueue(queues.analysisQueue);
+  setProfilesNotificationQueue(queues.notificationQueue);
   setReflectionAnalysisQueue(queues.analysisQueue);
 
   // LLM gateway — provider determined by env vars
@@ -247,14 +258,14 @@ async function start() {
     queues,
   });
 
-  app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification)");
+  app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification, profile-signals)");
 
   // ── Repeatable cron jobs ───────────────────────────────
   // Per-tenant deployment: single org per instance.
   const cronOrgId = process.env.ORG_ID ?? "dev-org";
 
   // Clean up stale repeatable jobs before re-adding
-  for (const queue of [queues.notificationQueue, queues.calendarSyncQueue]) {
+  for (const queue of [queues.notificationQueue, queues.calendarSyncQueue, queues.profileSignalsQueue, queues.checkInQueue]) {
     const repeatableJobs = await queue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await queue.removeRepeatableByKey(job.key);
@@ -275,6 +286,21 @@ async function start() {
     { repeat: { pattern: "*/15 * * * *" }, jobId: "calendar-sync-cron" },
   );
 
+  // Profile signal aggregation: 1st of each month at 2 AM UTC
+  await queues.profileSignalsQueue.add(
+    "aggregate_all",
+    { type: "aggregate_all", orgId: cronOrgId },
+    { repeat: { pattern: "0 2 1 * *" }, jobId: "profile-signals-aggregate-cron" },
+  );
+
+  // Check-in transcript pipeline: hourly (transcripts appear hours
+  // after meetings; hourly retries double as the discovery backoff)
+  await queues.checkInQueue.add(
+    "check-in-poll",
+    { orgId: cronOrgId },
+    { repeat: { pattern: "0 * * * *" }, jobId: "check-in-poll-cron" },
+  );
+
   // ── Graceful shutdown ────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`${signal} received — shutting down`);
@@ -286,11 +312,15 @@ async function start() {
         workers.schedulerWorker.close(),
         workers.notificationWorker.close(),
         workers.calendarSyncWorker.close(),
+        workers.profileSignalsWorker.close(),
+        workers.checkInWorker.close(),
         queues.conversationQueue.close(),
         queues.analysisQueue.close(),
         queues.schedulerQueue.close(),
         queues.notificationQueue.close(),
         queues.calendarSyncQueue.close(),
+        queues.profileSignalsQueue.close(),
+        queues.checkInQueue.close(),
         closeStateRedis(),
         closeWsRedis(),
       ]),

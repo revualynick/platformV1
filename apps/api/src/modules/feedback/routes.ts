@@ -175,18 +175,29 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       // Admins pass through
     }
 
+    // Exports page at 1000 entries — fetch one extra to signal more,
+    // callers pass ?offset= to continue.
+    const EXPORT_PAGE_SIZE = 1000;
+    const { offset: rawOffset } = request.query as { offset?: string };
+    const offset = Math.max(0, parseInt(rawOffset ?? "0", 10) || 0);
+
     const entries = await db
       .select()
       .from(feedbackEntries)
       .where(eq(feedbackEntries.subjectId, id))
       .orderBy(desc(feedbackEntries.createdAt))
-      .limit(1000);
+      .limit(EXPORT_PAGE_SIZE + 1)
+      .offset(offset);
 
-    // CSV-like export structure
+    const hasMore = entries.length > EXPORT_PAGE_SIZE;
+
     return reply.send({
       format: "json",
       userId: id,
-      entries,
+      entries: hasMore ? entries.slice(0, EXPORT_PAGE_SIZE) : entries,
+      hasMore,
+      offset,
+      nextOffset: hasMore ? offset + EXPORT_PAGE_SIZE : null,
       exportedAt: new Date().toISOString(),
     });
   });

@@ -120,6 +120,11 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
               Welcome to Revualy
             </h2>
             <p className="mt-2 text-sm text-stone-500">
+              Revualy runs lightweight peer feedback through chat — short
+              conversations in Slack, Teams, or Google Chat that build into
+              your feedback, goals, and growth dashboard here.
+            </p>
+            <p className="mt-2 text-sm text-stone-500">
               Let&apos;s get you set up. Confirm your details below.
             </p>
           </div>
@@ -242,6 +247,16 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
           <p className="text-center text-xs text-stone-400">
             You can always connect your calendar later from Settings.
           </p>
+          <div className="rounded-xl bg-forest/[0.05] p-4 text-center">
+            <p className="text-sm font-medium text-stone-800">
+              What happens next
+            </p>
+            <p className="mt-1 text-xs text-stone-500">
+              Watch for Revualy messages in your chat app this week — short
+              feedback conversations that take 2–3 minutes. Your dashboard
+              fills in as you take part.
+            </p>
+          </div>
         </div>
       )}
 

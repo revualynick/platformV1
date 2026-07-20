@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
 import { listActiveUsers, getBulkLatestEngagement } from "@revualy/db/queries";
 import {
@@ -8,6 +9,7 @@ import {
   leaderboardHistory as mockHistory,
   teamMembers as mockTeamMembers,
 } from "@/lib/mock-data";
+import { InfoHint } from "@/components/info-hint";
 
 const rankStyles = [
   "bg-forest text-white",
@@ -44,7 +46,10 @@ async function loadLeaderboardData(userId: string, isDemo: boolean) {
       return { leaderboard: [], history: [], teamSize: 0, activeCount: 0 };
     }
 
-    const bulkEng = await getBulkLatestEngagement(getDb(), teamUsers.map((u) => u.id)).catch(() => ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>));
+    const bulkEng = await getBulkLatestEngagement(getDb(), teamUsers.map((u) => u.id)).catch((err) => {
+      logPageError("leaderboard", err);
+      return {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>;
+    });
 
     const entries: LeaderboardEntry[] = teamUsers.map((u) => {
       const scores = bulkEng[u.id] ?? [];
@@ -159,6 +164,7 @@ export default async function LeaderboardPage() {
               <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
               <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
                 {stat.label}
+                {stat.label === "Longest Streak" && <InfoHint entry="streak" />}
               </span>
               <p
                 className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}

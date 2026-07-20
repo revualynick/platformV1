@@ -63,6 +63,7 @@ export function CreateQuestionnaireModal() {
           </h3>
           <button
             onClick={() => !isPending && setOpen(false)}
+            aria-label="Close"
             className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
           >
             ✕
@@ -71,7 +72,10 @@ export function CreateQuestionnaireModal() {
 
         {success ? (
           <div className="py-8 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-forest/10 text-xl text-forest">
+            <div
+              aria-hidden="true"
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-forest/10 text-xl text-forest"
+            >
               ✓
             </div>
             <p className="text-sm font-medium text-stone-700">Questionnaire created!</p>

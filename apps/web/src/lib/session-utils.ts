@@ -20,13 +20,15 @@ export async function requireLiveSession() {
   return { ok: true as const, session };
 }
 
+/** Highest role — satisfies any requireRole check. */
+export const SUPER_ADMIN_ROLE = "super_admin";
+
 export async function requireRole(...roles: string[]) {
   const result = await requireLiveSession();
   if (!result.ok) return result;
   const session = result.session as import("next-auth").Session & { role?: string };
   const userRole = session.role ?? "";
-  // super_admin satisfies any role check
-  if (userRole !== "super_admin" && !roles.includes(userRole)) {
+  if (userRole !== SUPER_ADMIN_ROLE && !roles.includes(userRole)) {
     return { ok: false as const, error: "Insufficient permissions" };
   }
   return { ...result, role: userRole };

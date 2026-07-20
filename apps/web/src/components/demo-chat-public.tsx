@@ -347,6 +347,7 @@ export function DemoChatPublic() {
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
+                  aria-label="Send message"
                   className="text-forest disabled:text-stone-300 transition-colors"
                 >
                   <svg
@@ -355,6 +356,7 @@ export function DemoChatPublic() {
                     viewBox="0 0 24 24"
                     strokeWidth={2}
                     stroke="currentColor"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"

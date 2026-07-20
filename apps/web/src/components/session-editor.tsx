@@ -313,6 +313,12 @@ export function SessionEditor({
                       <button
                         onClick={() => handleToggleAgenda(item)}
                         disabled={isCompleted}
+                        aria-pressed={item.covered}
+                        aria-label={
+                          item.covered
+                            ? `Mark "${item.text}" as not covered`
+                            : `Mark "${item.text}" as covered`
+                        }
                         className="mt-0.5 shrink-0"
                       >
                         <span
@@ -351,6 +357,7 @@ export function SessionEditor({
                   <button
                     onClick={handleAddAgenda}
                     disabled={!newAgendaText.trim()}
+                    aria-label="Add agenda topic"
                     className="rounded-md bg-stone-100 px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200 disabled:opacity-40"
                   >
                     +
@@ -378,6 +385,12 @@ export function SessionEditor({
                       <button
                         onClick={() => handleToggleAction(item)}
                         disabled={isCompleted}
+                        aria-pressed={item.completed}
+                        aria-label={
+                          item.completed
+                            ? `Mark "${item.text}" as incomplete`
+                            : `Mark "${item.text}" as complete`
+                        }
                         className="mt-0.5 shrink-0"
                       >
                         <span
@@ -407,6 +420,7 @@ export function SessionEditor({
                       {!isCompleted && (
                         <button
                           onClick={() => handleDeleteAction(item.id)}
+                          aria-label={`Delete action item "${item.text}"`}
                           className="shrink-0 text-xs text-stone-300 hover:text-danger"
                         >
                           &times;
@@ -428,6 +442,7 @@ export function SessionEditor({
                   <button
                     onClick={handleAddAction}
                     disabled={!newActionText.trim()}
+                    aria-label="Add action item"
                     className="rounded-md bg-stone-100 px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-200 disabled:opacity-40"
                   >
                     +

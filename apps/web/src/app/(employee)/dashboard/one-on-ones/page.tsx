@@ -5,6 +5,8 @@ import { getDb } from "@/lib/db";
 import { getSessionsForPair, getUserWithManager, getUserById } from "@revualy/db/queries";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionList } from "@/components/session-list";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 
 async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
@@ -22,6 +24,7 @@ async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDem
         sessions: [],
         managerName: null,
         hasManager: false,
+        loadFailed: false,
       };
     }
 
@@ -29,17 +32,22 @@ async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDem
       getSessionsForPair(getDb(), userId),
       getUserById(getDb(), managerId),
     ]);
+    if (sessionsResult.status === "rejected") logPageError("one-on-ones", sessionsResult.reason);
+    if (managerResult.status === "rejected") logPageError("one-on-ones", managerResult.reason);
 
     return {
       sessions: sessionsResult.status === "fulfilled" ? sessionsResult.value : [],
       managerName: managerResult.status === "fulfilled" && managerResult.value ? managerResult.value.name : "Your Manager",
       hasManager: true,
+      loadFailed: sessionsResult.status === "rejected",
     };
-  } catch {
+  } catch (err) {
+    logPageError("one-on-ones", err);
     return {
       sessions: isDemo ? mockSessions : [],
       managerName: isDemo ? "Jordan Wells" : null,
       hasManager: isDemo,
+      loadFailed: true,
     };
   }
 }
@@ -49,6 +57,19 @@ export default async function OneOnOnesPage() {
   const isDemo = isDemoSession(session);
   const data = await loadOneOnOneData(session, isDemo);
 
+  if (data.loadFailed && !isDemo) {
+    return (
+      <div className="max-w-3xl">
+        <div className="mb-8">
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900">
+            1:1 Sessions
+          </h1>
+        </div>
+        <DataUnavailable what="your 1:1 sessions" />
+      </div>
+    );
+  }
+
   if (!data.hasManager) {
     return (
       <div className="max-w-3xl">
@@ -57,16 +78,21 @@ export default async function OneOnOnesPage() {
             1:1 Sessions
           </h1>
           <p className="mt-1 text-sm text-stone-500">
-            Live meeting notes with your manager
+            Shared live notes from your manager check-ins — you both edit
+            them in real time, and action items carry forward
           </p>
         </div>
         <div
           className="rounded-2xl border border-stone-200/60 bg-surface p-8 text-center"
           style={{ boxShadow: "var(--shadow-sm)" }}
         >
-          <p className="text-sm text-stone-400">
-            No manager assigned. Contact your admin to set up your reporting
-            line.
+          <p className="text-sm font-medium text-stone-600">
+            No manager assigned yet.
+          </p>
+          <p className="mt-1 text-sm text-stone-400">
+            Once your admin sets your reporting line, 1:1 sessions with your
+            manager appear here — synced from your calendar. If you just
+            joined, this may still be in progress; check back soon.
           </p>
         </div>
       </div>
@@ -80,7 +106,8 @@ export default async function OneOnOnesPage() {
           1:1 Sessions
         </h1>
         <p className="mt-1 text-sm text-stone-500">
-          Live meeting notes with {data.managerName}
+          Shared live notes with {data.managerName} — you both edit them in
+          real time
         </p>
       </div>
 

@@ -8,6 +8,8 @@ import {
   kudosGiven as mockGiven,
 } from "@/lib/mock-data";
 import { SendKudosModal } from "@/components/send-kudos-modal";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 
 const valueColors: Record<string, string> = {
   Ownership: "bg-terracotta/10 text-terracotta",
@@ -39,6 +41,9 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
       getActiveCoreValues(getDb()),
       listActiveUsers(getDb()),
     ]);
+    for (const result of [kudosResult, orgResult, usersResult]) {
+      if (result.status === "rejected") logPageError("kudos", result.reason);
+    }
 
     const valuesMap = new Map<string, string>();
     const valuesList: Array<{ id: string; name: string }> = [];
@@ -81,7 +86,7 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
         }));
 
       if (received.length > 0 || given.length > 0) {
-        return { received, given, users: usersList, values: valuesList };
+        return { received, given, users: usersList, values: valuesList, loadFailed: false };
       }
     }
 
@@ -90,13 +95,16 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
       given: isDemo ? mockGiven : [],
       users: usersList,
       values: valuesList,
+      loadFailed: kudosResult.status === "rejected",
     };
-  } catch {
+  } catch (err) {
+    logPageError("kudos", err);
     return {
       received: isDemo ? mockReceived : [],
       given: isDemo ? mockGiven : [],
       users: [],
       values: [],
+      loadFailed: true,
     };
   }
 }
@@ -104,7 +112,21 @@ async function loadKudosData(session: Awaited<ReturnType<typeof auth>>, isDemo: 
 export default async function KudosPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
-  const { received, given, users, values } = await loadKudosData(session, isDemo);
+  const { received, given, users, values, loadFailed } = await loadKudosData(session, isDemo);
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Recognition</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Kudos
+          </h1>
+        </div>
+        <DataUnavailable what="your kudos" />
+      </div>
+    );
+  }
 
   // Determine top value from received kudos
   const valueCounts: Record<string, number> = {};
@@ -114,11 +136,14 @@ export default async function KudosPage() {
   return (
     <div className="max-w-5xl">
       {/* Header */}
-      <div className="mb-10">
-        <p className="text-sm font-medium text-stone-400">Recognition</p>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
-          Kudos
-        </h1>
+      <div className="mb-10 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-stone-400">Recognition</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Kudos
+          </h1>
+        </div>
+        <SendKudosModal users={users} values={values} />
       </div>
 
       {/* Stats */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useId } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -9,12 +9,40 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 export function Modal({ open, onClose, title, children }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      if (e.key === "Tab" && panelRef.current) {
+        const focusables = Array.from(
+          panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+        );
+        if (focusables.length === 0) {
+          e.preventDefault();
+          panelRef.current.focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || !panelRef.current.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !panelRef.current.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     },
     [onClose],
   );
@@ -29,6 +57,21 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
     };
   }, [open, handleKeyDown]);
 
+  // Move focus into the panel on open; restore it on close.
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    if (panel) {
+      const first = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? panel).focus();
+    }
+    return () => {
+      previouslyFocusedRef.current?.focus?.();
+      previouslyFocusedRef.current = null;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -39,13 +82,24 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-2xl border border-stone-200/60 bg-surface p-6 shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-2xl border border-stone-200/60 bg-surface p-6 shadow-xl outline-none"
+      >
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="font-display text-lg font-semibold text-stone-900">
+          <h2
+            id={titleId}
+            className="font-display text-lg font-semibold text-stone-900"
+          >
             {title}
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
           >
             <svg
@@ -54,6 +108,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
               viewBox="0 0 24 24"
               strokeWidth={1.5}
               stroke="currentColor"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"

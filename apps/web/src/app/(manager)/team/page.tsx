@@ -13,6 +13,9 @@ import {
 } from "@/lib/mock-data";
 import { trendIcons, severityStyles } from "@/lib/style-constants";
 import { isDemoSession } from "@/lib/session-utils";
+import { logPageError } from "@/lib/page-errors";
+import { InfoHint } from "@/components/info-hint";
+import { DataUnavailable } from "@/components/data-unavailable";
 
 type TeamMember = {
   id: string;
@@ -70,6 +73,7 @@ async function StatsSection({
 }) {
   let teamMembers: TeamMember[] = isDemo ? mockTeamMembers : [];
   let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
+  let loadFailed = false;
 
   try {
     const db = getDb();
@@ -113,8 +117,17 @@ async function StatsSection({
         }));
       }
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("team-overview", err);
+    loadFailed = true;
+  }
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="mb-8">
+        <DataUnavailable what="your team's stats" />
+      </div>
+    );
   }
 
   const avgEngagement = teamMembers.length > 0
@@ -139,7 +152,10 @@ async function StatsSection({
             style={{ animationDelay: `${i * 80}ms`, boxShadow: "var(--shadow-sm)" }}
           >
             <div className={`absolute bottom-4 left-0 top-4 w-1.5 rounded-full ${railColors[i % railColors.length]}`} />
-            <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">{stat.label}</span>
+            <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">
+              {stat.label}
+              {stat.label === "Avg Engagement" && <InfoHint entry="engagementThresholds" />}
+            </span>
             <p className={`mt-1 font-display text-2xl font-semibold ${stat.color}`}>{stat.value}</p>
             <p className="mt-1 text-xs text-stone-400">{stat.sub}</p>
           </div>
@@ -158,14 +174,22 @@ async function ChartAndLeaderboardSection({
 }) {
   let leaderboard: LeaderboardEntry[] = isDemo ? mockLeaderboard : [];
   const trendData = isDemo ? mockTrend : [];
+  let loadFailed = false;
 
   try {
-    const usersResult = await listActiveUsers(getDb(), { managerId: userId }).catch(() => [] as Array<{ id: string; name: string }>);
+    const usersResult = await listActiveUsers(getDb(), { managerId: userId }).catch((err) => {
+      logPageError("team-overview", err);
+      loadFailed = true;
+      return [] as Array<{ id: string; name: string }>;
+    });
 
     if (usersResult.length > 0) {
       const members = usersResult;
       const bulkEng = await getBulkLatestEngagement(getDb(), members.map((m) => m.id)).catch(
-        () => ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>),
+        (err) => {
+          logPageError("team-overview", err);
+          return {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>;
+        },
       );
 
       const teamMembers: TeamMember[] = members.map((m) => {
@@ -181,8 +205,17 @@ async function ChartAndLeaderboardSection({
         .sort((a, b) => b.engagementScore - a.engagementScore)
         .map((m, i) => ({ rank: i + 1, name: m.name, score: m.engagementScore, streak: 0 }));
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("team-overview", err);
+    loadFailed = true;
+  }
+
+  if (loadFailed && !isDemo) {
+    return (
+      <div className="mb-8">
+        <DataUnavailable what="team engagement data" />
+      </div>
+    );
   }
 
   return (
@@ -253,12 +286,17 @@ async function FlaggedSection({
   isDemo: boolean;
 }) {
   let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
+  let loadFailed = false;
 
   try {
     const db = getDb();
     const members = await listActiveUsers(db, { managerId: userId });
     const memberIds = members.map((m) => m.id);
-    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch(() => [] as Array<{ escalation: { id: string; severity: string; reason: string; flaggedContent: string | null; createdAt: Date }; feedback: unknown; subjectName: string | null }>);
+    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch((err) => {
+      logPageError("team-overview", err);
+      loadFailed = true;
+      return [] as Array<{ escalation: { id: string; severity: string; reason: string; flaggedContent: string | null; createdAt: Date }; feedback: unknown; subjectName: string | null }>;
+    });
     if (flaggedResult.length > 0) {
       flaggedItems = flaggedResult.map((item) => ({
         id: item.escalation.id,
@@ -269,8 +307,13 @@ async function FlaggedSection({
         date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       }));
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("team-overview", err);
+    loadFailed = true;
+  }
+
+  if (loadFailed && !isDemo) {
+    return <DataUnavailable what="flagged items" />;
   }
 
   if (flaggedItems.length === 0) return null;

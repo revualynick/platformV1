@@ -82,6 +82,7 @@ export const updateOrgSettingsSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   timezone: z.string().max(100).optional(),
   allowedDomains: z.array(z.string().max(255)).optional(),
+  checkInTitleMarker: z.string().min(1).max(100).optional(),
 });
 
 export const listUsersQuerySchema = z.object({
@@ -389,6 +390,231 @@ export const leadCaptureSchema = z.object({
   name: z.string().max(255).optional(),
 });
 
+// ── Assessments & Profiling ─────────────────────────────
+
+export const frameworkParamSchema = z.object({
+  framework: z.enum(["colour", "cdm"]),
+});
+
+export const startSessionSchema = z.object({
+  framework: z.enum(["colour", "cdm"]),
+  context: z.enum(["onboarding", "quarterly", "coaching", "retake"]).optional(),
+});
+
+export const submitSessionSchema = z.object({
+  responses: z.record(z.string().uuid(), z.string().min(1)), // questionId → option key
+});
+
+export const profileQuerySchema = z.object({
+  framework: z.enum(["colour", "cdm"]).optional(),
+});
+
+export const profileTimelineQuerySchema = z.object({
+  framework: z.enum(["colour", "cdm"]),
+  source: z.enum(["assessment", "behavioral", "all"]).optional(),
+});
+
+export const teamProfileQuerySchema = z.object({
+  framework: z.enum(["colour", "cdm"]),
+});
+
+export const createDevelopmentGoalSchema = z.object({
+  framework: z.enum(["colour", "cdm"]),
+  dimension: z.string().min(1).max(30),
+  targetDirection: z.enum(["increase", "decrease"]),
+  baselineSnapshotId: uuid.optional(),
+  notes: z.string().max(5000).optional(),
+});
+
+export const updateDevelopmentGoalSchema = z.object({
+  status: z.enum(["active", "achieved", "paused"]).optional(),
+  notes: z.string().max(5000).optional(),
+});
+
+// ── Goals ──────────────────────────────────────────────
+
+const goalLevel = z.enum(["org", "team", "individual", "personal"]);
+const goalStatus = z.enum([
+  "draft",
+  "on_track",
+  "at_risk",
+  "behind",
+  "achieved",
+  "archived",
+]);
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD");
+
+export const createGoalCycleSchema = z
+  .object({
+    name: z.string().min(1).max(100),
+    startDate: isoDate,
+    endDate: isoDate,
+  })
+  .refine((c) => c.endDate > c.startDate, {
+    message: "endDate must be after startDate",
+    path: ["endDate"],
+  });
+
+export const updateGoalCycleSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    startDate: isoDate.optional(),
+    endDate: isoDate.optional(),
+  })
+  .refine(
+    (c) => !c.startDate || !c.endDate || c.endDate > c.startDate,
+    { message: "endDate must be after startDate", path: ["endDate"] },
+  );
+
+const goalMetricFields = {
+  metricName: z.string().min(1).max(255).nullish(),
+  metricStartValue: z.number().finite().nullish(),
+  metricTargetValue: z.number().finite().nullish(),
+  metricCurrentValue: z.number().finite().nullish(),
+};
+
+function metricAllOrNone(
+  g: {
+    metricName?: string | null;
+    metricStartValue?: number | null;
+    metricTargetValue?: number | null;
+    metricCurrentValue?: number | null;
+  },
+  ctx: z.RefinementCtx,
+) {
+  const parts = [
+    g.metricName,
+    g.metricStartValue,
+    g.metricTargetValue,
+    g.metricCurrentValue,
+  ];
+  const set = parts.filter((p) => p !== null && p !== undefined).length;
+  if (set !== 0 && set !== parts.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "metric fields (name, start, target, current) must be provided together",
+      path: ["metricName"],
+    });
+  }
+}
+
+export const createGoalSchema = z
+  .object({
+    level: goalLevel,
+    title: z.string().min(1).max(255),
+    description: z.string().max(5000).default(""),
+    parentGoalId: uuid.nullish(),
+    cycleId: uuid.nullish(),
+    teamId: uuid.nullish(),
+    ownerId: uuid,
+    status: goalStatus.default("on_track"),
+    progressPercent: z.number().int().min(0).max(100).default(0),
+    ...goalMetricFields,
+    shareWithManager: z.boolean().default(false),
+    targetDate: isoDate.nullish(),
+  })
+  .superRefine((g, ctx) => {
+    metricAllOrNone(g, ctx);
+    if (g.level === "personal") {
+      if (g.parentGoalId || g.cycleId || g.teamId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "personal goals cannot have a parent, cycle, or team",
+          path: ["level"],
+        });
+      }
+    } else {
+      if (!g.cycleId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${g.level} goals require a cycleId`,
+          path: ["cycleId"],
+        });
+      }
+      if (g.level !== "org" && !g.parentGoalId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${g.level} goals must ladder to a parent goal`,
+          path: ["parentGoalId"],
+        });
+      }
+      if (g.level === "org" && g.parentGoalId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "org goals cannot have a parent",
+          path: ["parentGoalId"],
+        });
+      }
+      if (g.level === "team" && !g.teamId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "team goals require a teamId",
+          path: ["teamId"],
+        });
+      }
+    }
+  });
+
+export const updateGoalSchema = z
+  .object({
+    title: z.string().min(1).max(255).optional(),
+    description: z.string().max(5000).optional(),
+    parentGoalId: uuid.nullish(),
+    status: goalStatus.optional(),
+    progressPercent: z.number().int().min(0).max(100).optional(),
+    ...goalMetricFields,
+    shareWithManager: z.boolean().optional(),
+    targetDate: isoDate.nullish(),
+  })
+  .superRefine(metricAllOrNone);
+
+export const createGoalUpdateSchema = z
+  .object({
+    progressPercent: z.number().int().min(0).max(100).optional(),
+    metricCurrentValue: z.number().finite().optional(),
+    status: goalStatus.optional(),
+    note: z.string().max(5000).default(""),
+  })
+  .refine(
+    (u) =>
+      u.progressPercent !== undefined ||
+      u.metricCurrentValue !== undefined ||
+      u.status !== undefined ||
+      u.note.length > 0,
+    { message: "a check-in must include progress, metric, status, or a note" },
+  );
+
+export const goalListQuerySchema = z.object({
+  level: goalLevel.optional(),
+  cycleId: uuid.optional(),
+  teamId: uuid.optional(),
+  ownerId: uuid.optional(),
+  parentGoalId: uuid.optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const goalLadderQuerySchema = z.object({
+  cycleId: uuid.optional(),
+});
+
+export const applySuggestionSchema = z.object({
+  progressPercent: z.number().int().min(0).max(100).optional(),
+  metricCurrentValue: z.number().finite().optional(),
+  status: goalStatus.optional(),
+  note: z.string().max(5000).optional(),
+});
+
+export const suggestionListQuerySchema = z.object({
+  status: z.enum(["pending", "applied", "dismissed"]).optional(),
+});
+
+export const managerReviewEscalationSchema = z.object({
+  action: z.enum(["investigate", "dismiss"]),
+  note: z.string().max(5000).optional(),
+});
+
 // ── Params ─────────────────────────────────────────────
 
 export const idParamSchema = z.object({
@@ -397,6 +623,10 @@ export const idParamSchema = z.object({
 
 export const qidParamSchema = z.object({
   qid: uuid,
+});
+
+export const teamIdParamSchema = z.object({
+  teamId: uuid,
 });
 
 export const sessionItemParamSchema = z.object({

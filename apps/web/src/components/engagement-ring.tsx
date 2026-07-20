@@ -17,12 +17,26 @@ export function EngagementRing({
   const center = size / 2;
 
   const getColor = () => {
-    if (score >= 80) return { stroke: "#064E3B", bg: "rgba(6, 78, 59, 0.08)" };
-    if (score >= 60) return { stroke: "#D97706", bg: "rgba(217, 119, 6, 0.08)" };
-    return { stroke: "#DC2626", bg: "rgba(220, 38, 38, 0.08)" };
+    if (score >= 80)
+      return {
+        stroke: "#064E3B",
+        bg: "rgba(6, 78, 59, 0.08)",
+        statusText: "healthy",
+      };
+    if (score >= 60)
+      return {
+        stroke: "#D97706",
+        bg: "rgba(217, 119, 6, 0.08)",
+        statusText: "needs attention",
+      };
+    return {
+      stroke: "#DC2626",
+      bg: "rgba(220, 38, 38, 0.08)",
+      statusText: "at risk",
+    };
   };
 
-  const { stroke, bg } = getColor();
+  const { stroke, bg, statusText } = getColor();
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -32,6 +46,7 @@ export function EngagementRing({
           height={size}
           viewBox={`0 0 ${size} ${size}`}
           className="-rotate-90"
+          aria-hidden="true"
         >
           {/* Track */}
           <circle
@@ -80,6 +95,9 @@ export function EngagementRing({
             style={{ color: stroke }}
           >
             {score}
+          </span>
+          <span className="sr-only">
+            {label} score {score} out of 100 — {statusText}
           </span>
         </div>
       </div>

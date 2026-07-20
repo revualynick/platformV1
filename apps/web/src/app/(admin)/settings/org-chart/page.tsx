@@ -4,6 +4,8 @@ import { orgPeople, orgThreads } from "@/lib/mock-data";
 import type { OrgRole } from "@/lib/mock-data";
 import { getDb } from "@/lib/db";
 import { getFullOrgGraph } from "@revualy/db/queries";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 import { TeamOrgChart } from "@/app/(manager)/team/org-chart/team-org-chart";
 
 // Map DB/mock role strings to OrgRole values
@@ -31,6 +33,7 @@ export default async function AdminOrgChartPage() {
 
   let nodes: RawNode[];
   let edges: RawEdge[];
+  let loadFailed = false;
 
   if (isDemo) {
     nodes = orgPeople.map((p) => ({
@@ -69,9 +72,11 @@ export default async function AdminOrgChartPage() {
       const graph = await getFullOrgGraph(getDb());
       nodes = graph.nodes;
       edges = graph.edges;
-    } catch {
+    } catch (err) {
+      logPageError("admin-org-chart", err);
       nodes = [];
       edges = [];
+      loadFailed = true;
     }
   }
 
@@ -153,8 +158,29 @@ export default async function AdminOrgChartPage() {
         })}
       </div>
 
+      {/* Legend — matches the chart's actual encodings */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-stone-500">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full bg-forest" />
+          person — avatar color = role tier
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-px w-6 border-t-2 border-stone-800" />
+          reporting line
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-px w-6"
+            style={{ borderTop: "2px dashed #C4654A" }}
+          />
+          relationship thread — color = tag, dash length = strength
+        </span>
+      </div>
+
       {/* Chart */}
-      {people.length > 0 && root ? (
+      {loadFailed && !isDemo ? (
+        <DataUnavailable what="the organization chart" />
+      ) : people.length > 0 && root ? (
         <TeamOrgChart
           people={people}
           threads={threads}

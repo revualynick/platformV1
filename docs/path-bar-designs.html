@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Path Bar — 4 Design Alternatives</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { display: ['Playfair Display', 'serif'], body: ['Outfit', 'sans-serif'] },
+      colors: {
+        forest: { DEFAULT: '#2D5A3D', light: '#3A7A52' },
+        terracotta: { DEFAULT: '#C4703F' },
+        cream: '#FAF8F5',
+      },
+    },
+  },
+};
+</script>
+<style>
+  body { font-family: 'Outfit', sans-serif; }
+  .font-display { font-family: 'Playfair Display', serif; }
+</style>
+</head>
+<body class="bg-cream p-8 lg:p-12">
+
+<div class="mx-auto max-w-5xl">
+  <h1 class="mb-2 font-display text-3xl font-semibold tracking-tight text-stone-900">
+    Path Bar Design Alternatives
+  </h1>
+  <p class="mb-10 text-sm text-stone-500">
+    4 breadcrumb designs — Codex (A, B) and Claude (C, D). Each shown with a short and long path.
+  </p>
+
+  <!-- ═══════ DESIGN A ═══════ -->
+  <section class="mb-12 rounded-2xl border border-stone-200/60 bg-white p-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.04)">
+    <div class="mb-1 flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-semibold text-stone-900">Design A</h2>
+      <span class="text-sm text-stone-400">Glass Chips + Active Emphasis</span>
+    </div>
+    <p class="mb-6 max-w-2xl text-sm text-stone-500">
+      Each segment becomes a soft chip with subtle depth. Current page gets a forest-tinted highlight. Home icon anchors the left. Chips lift on hover.
+    </p>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Short path</span>
+    <div class="mb-4 rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-2 overflow-x-auto rounded-2xl border border-stone-200/60 bg-white/60 p-2 backdrop-blur-sm">
+          <li class="shrink-0">
+            <a href="#" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200/70 bg-white/70 text-stone-500 transition-all hover:-translate-y-0.5 hover:border-forest/40 hover:text-forest">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+            </a>
+          </li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">Settings</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">Campaigns</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><span class="inline-flex h-9 items-center rounded-xl border border-forest/20 bg-forest/[0.07] px-3 text-sm font-medium tracking-tight text-forest shadow-sm truncate">Q1 Sprint Reviews</span></li>
+        </ol>
+      </nav>
+    </div>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Long path (5 segments)</span>
+    <div class="rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-2 overflow-x-auto rounded-2xl border border-stone-200/60 bg-white/60 p-2 backdrop-blur-sm">
+          <li class="shrink-0">
+            <a href="#" class="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-200/70 bg-white/70 text-stone-500 transition-all hover:-translate-y-0.5 hover:border-forest/40 hover:text-forest">
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+            </a>
+          </li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">Team</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">Members</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">Jamie Chen</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><a href="#" class="inline-flex h-9 items-center rounded-xl border border-stone-200/70 bg-white/70 px-3 text-sm text-stone-600 transition-all hover:-translate-y-0.5 hover:border-terracotta/30 hover:text-terracotta truncate">1:1 Sessions</a></li>
+          <li class="shrink-0 text-stone-300"><svg viewBox="0 0 20 20" class="h-4 w-4" fill="currentColor"><path d="M7 4l6 6-6 6"/></svg></li>
+          <li><span class="inline-flex h-9 items-center rounded-xl border border-forest/20 bg-forest/[0.07] px-3 text-sm font-medium tracking-tight text-forest shadow-sm truncate">Feb 15</span></li>
+        </ol>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ═══════ DESIGN B ═══════ -->
+  <section class="mb-12 rounded-2xl border border-stone-200/60 bg-white p-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.04)">
+    <div class="mb-1 flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-semibold text-stone-900">Design B</h2>
+      <span class="text-sm text-stone-400">Editorial Rail + Dot Connectors</span>
+    </div>
+    <p class="mb-6 max-w-2xl text-sm text-stone-500">
+      Architectural and minimal. Gradient rail with dot separators, uppercase root pill, and a Playfair Display final segment for editorial feel.
+    </p>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Short path</span>
+    <div class="mb-4 rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <div class="rounded-2xl border border-stone-200/60 bg-gradient-to-r from-white via-stone-50/50 to-stone-50/70 p-4">
+          <ol class="flex min-w-0 items-center gap-3">
+            <li class="shrink-0">
+              <a href="#" class="inline-flex items-center gap-2 rounded-full border border-stone-200/70 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-[0.08em] text-stone-600 transition-colors hover:border-forest/40 hover:text-forest">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+                <span class="max-w-28 truncate">Settings</span>
+              </a>
+            </li>
+            <li class="h-1.5 w-1.5 shrink-0 rounded-full bg-stone-300"></li>
+            <li class="flex items-center gap-3 min-w-0">
+              <a href="#" class="max-w-32 truncate text-sm text-stone-500 transition-colors hover:text-terracotta">Campaigns</a>
+            </li>
+            <li class="h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta"></li>
+            <li class="min-w-0 flex-1">
+              <span class="block truncate font-display text-lg leading-none text-stone-900">Q1 Sprint Reviews</span>
+            </li>
+          </ol>
+        </div>
+      </nav>
+    </div>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Long path (5 segments)</span>
+    <div class="rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <div class="rounded-2xl border border-stone-200/60 bg-gradient-to-r from-white via-stone-50/50 to-stone-50/70 p-4">
+          <ol class="flex min-w-0 items-center gap-3">
+            <li class="shrink-0">
+              <a href="#" class="inline-flex items-center gap-2 rounded-full border border-stone-200/70 bg-white px-3 py-1.5 text-xs font-medium uppercase tracking-[0.08em] text-stone-600 transition-colors hover:border-forest/40 hover:text-forest">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>
+                <span class="max-w-28 truncate">Team</span>
+              </a>
+            </li>
+            <li class="h-1.5 w-1.5 shrink-0 rounded-full bg-stone-300"></li>
+            <li class="flex items-center gap-3 min-w-0">
+              <a href="#" class="max-w-32 truncate text-sm text-stone-500 transition-colors hover:text-terracotta">Members</a>
+              <span class="h-1 w-1 rounded-full bg-stone-300"></span>
+              <a href="#" class="max-w-32 truncate text-sm text-stone-500 transition-colors hover:text-terracotta">Jamie Chen</a>
+              <span class="h-1 w-1 rounded-full bg-stone-300"></span>
+              <a href="#" class="max-w-32 truncate text-sm text-stone-500 transition-colors hover:text-terracotta">1:1 Sessions</a>
+            </li>
+            <li class="h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta"></li>
+            <li class="min-w-0 flex-1">
+              <span class="block truncate font-display text-lg leading-none text-stone-900">Feb 15</span>
+            </li>
+          </ol>
+        </div>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ═══════ DESIGN C ═══════ -->
+  <section class="mb-12 rounded-2xl border border-stone-200/60 bg-white p-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.04)">
+    <div class="mb-1 flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-semibold text-stone-900">Design C</h2>
+      <span class="text-sm text-stone-400">Stepped Gradient Path</span>
+    </div>
+    <p class="mb-6 max-w-2xl text-sm text-stone-500">
+      Chevron separators with progressive opacity — earlier segments fade, later ones strengthen. Current page gets a forest pill highlight.
+    </p>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Short path</span>
+    <div class="mb-4 rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-1">
+          <li class="flex items-center gap-1"><a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.35">Settings</a></li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.675">Campaigns</a>
+          </li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <span class="rounded-lg bg-forest/[0.08] px-2.5 py-1 text-[13px] font-semibold text-forest">Q1 Sprint Reviews</span>
+          </li>
+        </ol>
+      </nav>
+    </div>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Long path (5 segments)</span>
+    <div class="rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-1">
+          <li class="flex items-center gap-1"><a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.35">Team</a></li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.5125">Members</a>
+          </li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.675">Jamie Chen</a>
+          </li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <a href="#" class="rounded-lg px-2.5 py-1 text-[13px] text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900" style="opacity:0.8375">1:1 Sessions</a>
+          </li>
+          <li class="flex items-center gap-1">
+            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-stone-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+            <span class="rounded-lg bg-forest/[0.08] px-2.5 py-1 text-[13px] font-semibold text-forest">Feb 15</span>
+          </li>
+        </ol>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ═══════ DESIGN D ═══════ -->
+  <section class="mb-12 rounded-2xl border border-stone-200/60 bg-white p-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.04)">
+    <div class="mb-1 flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-semibold text-stone-900">Design D</h2>
+      <span class="text-sm text-stone-400">Underline Trail</span>
+    </div>
+    <p class="mb-6 max-w-2xl text-sm text-stone-500">
+      Ultra-minimal with horizontal line connectors between segments. Active segment has a solid forest underline. Ancestors reveal underlines on hover.
+    </p>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Short path</span>
+    <div class="mb-4 rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-0.5">
+          <li class="flex items-center gap-0.5">
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              Settings
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              Campaigns
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <span class="relative pb-1 text-[13px] font-medium text-stone-800">
+              Q1 Sprint Reviews
+              <span class="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-forest"></span>
+            </span>
+          </li>
+        </ol>
+      </nav>
+    </div>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Long path (5 segments)</span>
+    <div class="rounded-xl bg-stone-50/50 p-4">
+      <nav class="w-full">
+        <ol class="flex items-center gap-0.5">
+          <li class="flex items-center gap-0.5">
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              Team
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              Members
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              Jamie Chen
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <a href="#" class="group relative pb-1 text-[13px] text-stone-400 transition-colors hover:text-stone-700">
+              1:1 Sessions
+              <span class="absolute bottom-0 left-0 h-[2px] w-0 rounded-full bg-stone-300 transition-all group-hover:w-full"></span>
+            </a>
+          </li>
+          <li class="flex items-center gap-0.5">
+            <span class="mx-1.5 h-px w-4 bg-stone-200 shrink-0"></span>
+            <span class="relative pb-1 text-[13px] font-medium text-stone-800">
+              Feb 15
+              <span class="absolute bottom-0 left-0 h-[2px] w-full rounded-full bg-forest"></span>
+            </span>
+          </li>
+        </ol>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ═══════ CURRENT (for comparison) ═══════ -->
+  <section class="mb-12 rounded-2xl border border-dashed border-stone-300 bg-white p-6" style="box-shadow: 0 1px 3px rgba(0,0,0,0.04)">
+    <div class="mb-1 flex items-baseline gap-3">
+      <h2 class="font-display text-xl font-semibold text-stone-900">Current</h2>
+      <span class="text-sm text-stone-400">Slash-separated text (what's committed now)</span>
+    </div>
+    <p class="mb-6 max-w-2xl text-sm text-stone-500">
+      For comparison — the existing implementation with simple slash separators at 13px.
+    </p>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Short path</span>
+    <div class="mb-4 rounded-xl bg-stone-50/50 p-4">
+      <nav class="text-[13px]">
+        <ol class="flex items-center gap-1.5">
+          <li class="flex items-center gap-1.5"><a href="#" class="text-stone-400 transition-colors hover:text-forest">Settings</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><a href="#" class="text-stone-400 transition-colors hover:text-forest">Campaigns</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><span class="font-medium text-stone-700">Q1 Sprint Reviews</span></li>
+        </ol>
+      </nav>
+    </div>
+
+    <span class="mb-2 block text-[11px] font-medium uppercase tracking-wider text-stone-400">Long path (5 segments)</span>
+    <div class="rounded-xl bg-stone-50/50 p-4">
+      <nav class="text-[13px]">
+        <ol class="flex items-center gap-1.5">
+          <li class="flex items-center gap-1.5"><a href="#" class="text-stone-400 transition-colors hover:text-forest">Team</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><a href="#" class="text-stone-400 transition-colors hover:text-forest">Members</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><a href="#" class="text-stone-400 transition-colors hover:text-forest">Jamie Chen</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><a href="#" class="text-stone-400 transition-colors hover:text-forest">1:1 Sessions</a></li>
+          <li class="flex items-center gap-1.5"><span class="text-stone-300">/</span><span class="font-medium text-stone-700">Feb 15</span></li>
+        </ol>
+      </nav>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { sendKudos } from "@/app/(employee)/dashboard/kudos/actions";
+import { Modal } from "./modal";
 
 interface User {
   id: string;
@@ -44,42 +45,26 @@ export function SendKudosModal({
     });
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         onClick={() => setOpen(true)}
         className="mt-3 rounded-xl bg-forest px-5 py-2.5 text-sm font-medium text-white hover:bg-forest-light shadow-[0_8px_20px_rgba(61,24,55,0.25)]"
       >
         Send Kudos
       </button>
-    );
-  }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-        onClick={() => !isPending && setOpen(false)}
-      />
-
-      {/* Modal */}
-      <div className="relative w-full max-w-md rounded-2xl border border-stone-200/60 bg-surface p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="font-display text-lg font-semibold text-stone-900">
-            Send Kudos
-          </h3>
-          <button
-            onClick={() => !isPending && setOpen(false)}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
-          >
-            ✕
-          </button>
-        </div>
-
+      <Modal
+        open={open}
+        onClose={() => !isPending && setOpen(false)}
+        title="Send Kudos"
+      >
         {success ? (
           <div className="py-8 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-forest/10 text-xl text-forest">
+            <div
+              aria-hidden="true"
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-forest/10 text-xl text-forest"
+            >
               ✓
             </div>
             <p className="text-sm font-medium text-stone-700">Kudos sent!</p>
@@ -160,7 +145,7 @@ export function SendKudosModal({
             </div>
           </form>
         )}
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }

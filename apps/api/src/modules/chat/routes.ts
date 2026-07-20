@@ -26,8 +26,16 @@ async function handleWebhook(
   if (verification.challenge) return { status: 200, body: { challenge: verification.challenge } };
 
   const message = await adapter.normalizeInbound(parsedBody);
+  // Truncate oversized messages but tell the orchestrator, so the bot
+  // can acknowledge the cut instead of silently dropping content.
+  let truncated = false;
   if (message && message.text.length > 2000) {
     message.text = message.text.slice(0, 2000);
+    truncated = true;
+    app.log.warn(
+      { messageId: message.id, platform },
+      "Inbound message truncated to 2000 chars",
+    );
   }
   if (message && !conversationQueue) {
     return { status: 503, body: { error: "Message queue not initialized" } };
@@ -36,8 +44,14 @@ async function handleWebhook(
     await conversationQueue.add("reply", {
       type: "reply",
       orgId,
-      conversationId: message.threadId || message.platformChannelId || message.id,
+      // Fall back to channel+user so two people in a shared channel can
+      // never be merged into one conversation.
+      conversationId:
+        message.threadId ||
+        `${message.platformChannelId}:${message.platformUserId}` ||
+        message.id,
       userMessage: message.text,
+      truncated,
       platform,
       platformUserId: message.platformUserId,
       platformChannelId: message.platformChannelId,

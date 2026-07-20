@@ -4,6 +4,8 @@ import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
 import { getReflections as queryReflections, getReflectionStats as queryReflectionStats } from "@revualy/db/queries";
 import { selfReflections as mockReflections } from "@/lib/mock-data";
+import { DataUnavailable } from "@/components/data-unavailable";
+import { logPageError } from "@/lib/page-errors";
 
 const moodStyles: Record<string, { emoji: string; bg: string; text: string }> = {
   energized: { emoji: "\u26A1", bg: "bg-positive/10", text: "text-positive" },
@@ -95,6 +97,22 @@ export default async function ReflectionsPage() {
     queryReflections(getDb(), userId, 12),
     queryReflectionStats(getDb(), userId),
   ]);
+  if (reflectionsResult.status === "rejected") logPageError("reflections", reflectionsResult.reason);
+  if (statsResult.status === "rejected") logPageError("reflections", statsResult.reason);
+
+  if (reflectionsResult.status === "rejected" && !isDemo) {
+    return (
+      <div className="max-w-5xl">
+        <div className="mb-10">
+          <p className="text-sm font-medium text-stone-400">Self-awareness</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-stone-900">
+            Reflections
+          </h1>
+        </div>
+        <DataUnavailable what="your reflections" />
+      </div>
+    );
+  }
 
   if (
     reflectionsResult.status === "fulfilled" &&
@@ -253,8 +271,11 @@ export default async function ReflectionsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] uppercase tracking-wider text-stone-300">
-                    {reflection.promptTheme}
+                  <span
+                    className="text-[10px] uppercase tracking-wider text-stone-300"
+                    title="This week's reflection topic"
+                  >
+                    Topic: {reflection.promptTheme ?? "General"}
                   </span>
                   {score != null && (
                     <span

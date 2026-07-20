@@ -7,3 +7,4 @@ export * from "./sessions.js";
 export * from "./reflections.js";
 export * from "./integrations.js";
 export * from "./misc.js";
+export * from "./goals.js";
