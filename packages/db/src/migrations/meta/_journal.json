@@ -225,6 +225,20 @@
       "when": 1771167965765,
       "tag": "0031_conversation_questionnaire_and_relationship_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790193279082,
+      "tag": "0032_chat_identity_and_inbound_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790193279083,
+      "tag": "0033_conversation_turn_state",
+      "breakpoints": true
     }
   ]
 }

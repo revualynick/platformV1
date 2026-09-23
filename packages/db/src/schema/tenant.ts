@@ -14,7 +14,10 @@ import {
   unique,
   primaryKey,
   customType,
+  uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { encryptField, decryptField } from "@revualy/shared/server";
 
 /**
@@ -99,12 +102,31 @@ export const userPlatformIdentities = pgTable(
     platformUserId: varchar("platform_user_id", { length: 255 }).notNull(),
     platformWorkspaceId: varchar("platform_workspace_id", {
       length: 255,
-    }).notNull(),
-    displayName: varchar("display_name", { length: 255 }).notNull(),
+    }).notNull().default(""),
+    displayName: varchar("display_name", { length: 255 }).notNull().default(""),
+    // How to DM them: Slack user id, Google Chat space name (spaces/...),
+    // Teams conversation id. Required once status is "reachable".
+    dmAddress: varchar("dm_address", { length: 255 }),
+    status: varchar("status", { length: 20 })
+      .$type<"linked" | "reachable">()
+      .notNull()
+      .default("linked"),
+    linkSource: varchar("link_source", { length: 20 })
+      .$type<"auto" | "admin" | "manager" | "self">()
+      .notNull()
+      .default("admin"),
+    linkedByUserId: uuid("linked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    // Manual links must be confirmed by the person before feedback flows.
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
+  // CHECK constraints (status, link_source, reachable needs dm_address) live
+  // in migration 0032.
   (table) => [
     unique("uq_user_platform").on(table.userId, table.platform),
     unique("uq_platform_user_id").on(table.platform, table.platformUserId),
@@ -112,6 +134,78 @@ export const userPlatformIdentities = pgTable(
       table.platform,
       table.platformUserId,
     ),
+  ],
+);
+
+/** Audit trail of chat account link changes. actorUserId null = system. */
+export const identityLinkEvents = pgTable(
+  "identity_link_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: varchar("platform", { length: 50 }).notNull(),
+    platformUserId: varchar("platform_user_id", { length: 255 }).notNull(),
+    action: varchar("action", { length: 20 })
+      .$type<"link" | "unlink" | "confirm" | "reject" | "reachable" | "unreachable">()
+      .notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_identity_link_events_user").on(table.userId, table.createdAt.desc()),
+  ],
+);
+
+export type InboundOutcome =
+  | "conversation_reply"
+  | "late_addition"
+  | "identity_confirmation"
+  | "keyword"
+  | "paused"
+  | "unknown_sender"
+  | "no_open_conversation";
+
+/**
+ * Inbound ledger: every chat message is stored here by the webhook before it
+ * is queued (content encrypted), deduplicated on the platform message id.
+ * The worker resolves it and records the outcome. See migration 0032.
+ */
+export const inboundMessages = pgTable(
+  "inbound_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platform: varchar("platform", { length: 50 }).notNull(),
+    platformMessageId: varchar("platform_message_id", { length: 255 }).notNull(),
+    platformUserId: varchar("platform_user_id", { length: 255 }).notNull(),
+    platformChannelId: varchar("platform_channel_id", { length: 255 }).notNull(),
+    threadId: varchar("thread_id", { length: 255 }),
+    content: encryptedText("inbound_messages", "content").notNull().default(""),
+    truncated: boolean("truncated").notNull().default(false),
+    status: varchar("status", { length: 20 })
+      .$type<"pending" | "processed">()
+      .notNull()
+      .default("pending"),
+    outcome: varchar("outcome", { length: 30 }).$type<InboundOutcome>(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    conversationId: uuid("conversation_id").references(() => conversations.id, {
+      onDelete: "set null",
+    }),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("uq_inbound_platform_message").on(table.platform, table.platformMessageId),
+    index("idx_inbound_pending").on(table.receivedAt).where(sql`status = 'pending'`),
+    index("idx_inbound_received").on(table.receivedAt),
+    index("idx_inbound_unknown_sender")
+      .on(table.platform, table.platformUserId)
+      .where(sql`outcome = 'unknown_sender'`),
   ],
 );
 
@@ -173,8 +267,37 @@ export const conversations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Turn state (migration 0033): conversation state lives here, not Redis.
+    selectedThemeIds: jsonb("selected_theme_ids").$type<string[]>().notNull().default([]),
+    currentThemeIndex: integer("current_theme_index").notNull().default(0),
+    phase: varchar("phase", { length: 20 })
+      .$type<"opening" | "exploring" | "follow_up" | "closing">()
+      .notNull()
+      .default("opening"),
+    followUpCount: integer("follow_up_count").notNull().default(0),
+    threadId: varchar("thread_id", { length: 255 }),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Optimistic concurrency: commit a turn only if `turn` is unchanged.
+    turn: integer("turn").notNull().default(0),
+    // Makes scheduled initiation idempotent (unique when set).
+    // AnyPgColumn breaks the type cycle (interaction_schedule also references
+    // conversations).
+    scheduleEntryId: uuid("schedule_entry_id").references((): AnyPgColumn => interactionSchedule.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
+    uniqueIndex("uq_conversations_schedule_entry")
+      .on(table.scheduleEntryId)
+      .where(sql`schedule_entry_id IS NOT NULL`),
+    index("idx_conversations_open_by_reviewer")
+      .on(table.reviewerId, table.createdAt.desc())
+      .where(sql`status IN ('initiated', 'in_progress')`),
+    index("idx_conversations_open_activity")
+      .on(table.lastActivityAt)
+      .where(sql`status IN ('initiated', 'in_progress')`),
     index("idx_conversations_reviewer_id").on(table.reviewerId),
     index("idx_conversations_subject_id").on(table.subjectId),
     index("idx_conversations_status").on(table.status),
@@ -196,8 +319,16 @@ export const conversationMessages = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Outbox (migration 0033): set when the platform accepted the message.
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   },
   (table) => [
+    uniqueIndex("uq_conv_msg_platform_id")
+      .on(table.conversationId, table.platformMessageId)
+      .where(sql`platform_message_id IS NOT NULL`),
+    index("idx_conversation_messages_undelivered")
+      .on(table.createdAt)
+      .where(sql`role = 'assistant' AND delivered_at IS NULL`),
     index("idx_conversation_messages_conversation_id").on(table.conversationId),
     index("idx_conversation_messages_conv_created").on(table.conversationId, table.createdAt),
   ],
@@ -1044,6 +1175,9 @@ export const orgSettings = pgTable("org_settings", {
 
 // ── Integrations ──────────────────────────────────────
 
+// One chat platform per tenant: migration 0032 adds a partial unique index
+// (uq_integrations_one_chat_platform) allowing at most one connected row
+// among slack / google_chat / teams. Not expressible in Drizzle.
 export const integrations = pgTable(
   "integrations",
   {

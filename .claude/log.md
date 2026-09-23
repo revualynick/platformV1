@@ -251,3 +251,11 @@
 - Tests: field-crypto (15, incl. rotation, tamper, AAD, legacy formats, CI speed budget) + encryption.integration (4, real Postgres). 166 API tests, 16/16 typecheck, web production build passes
 - Found: only 0000 drizzle snapshot exists (all later migrations hand-written), so `drizzle-kit generate` is unusable; step 3 migrations must be hand-written. Web build fails if the shell has NODE_ENV=development (from .env); build with NODE_ENV unset
 - Existing rows remain plaintext until the step 7 backfill
+
+## 2026-09-23: Step 3 schema done (migrations 0032, 0033)
+- 0032: identity columns (dm_address, status, link_source, linked_by, confirmed_at) + CHECKs; identity_link_events audit; inbound_messages ledger (replaces planned unrouted table: webhook stores first, dedupe on platform msg id, outcome recorded); one connected chat platform via partial unique index
+- 0033: conversation turn state (theme ids/index, phase, follow-ups, thread, last_activity_at, turn version), schedule_entry_id unique (idempotent initiation), open/sweeper indexes, delivered_at outbox (existing assistant msgs backfilled)
+- Drizzle schema updated (AnyPgColumn breaks the conversations/interaction_schedule type cycle); new schema-sync integration test selects every table (proved it catches a misnamed column)
+- Verified all 34 migrations apply to an empty DB and 68 integration tests pass on it; 220 API tests total, typecheck clean
+- Local env issue: Postgres data is a Colima bind mount (./docker-data) giving intermittent "Permission denied" on new relation files; a retry worked. Consider a named Docker volume
+- Deferred: DB-enforced one-open-conversation-per-reviewer until demo stops reusing one reviewer (step 5)
