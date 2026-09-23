@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -29,6 +30,7 @@ const COLOUR_STYLES: Record<string, { bg: string; text: string }> = {
 };
 
 export default async function TeamProfilesPage() {
+  await requireManagerPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
 

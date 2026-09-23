@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -63,6 +64,7 @@ async function loadMembers(userId: string, isDemo: boolean) {
 }
 
 export default async function TeamMembersPage() {
+  await requireManagerPage();
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");

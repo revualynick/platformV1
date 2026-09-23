@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { authUsers, type TenantDb } from "@revualy/db";
+import { eq, inArray } from "drizzle-orm";
+import { authUsers, authSessions, type TenantDb } from "@revualy/db";
 
 /**
  * Sync Revualy user fields to the authUsers table.
@@ -28,4 +28,25 @@ export async function syncAuthUser(
       err,
     );
   }
+}
+
+/**
+ * Delete every web session belonging to a Revualy user, so deactivation
+ * takes effect immediately instead of when the session expires. Unlike
+ * syncAuthUser this throws: callers must not report success if access
+ * was not actually revoked. Accepts a transaction.
+ */
+export async function revokeSessionsForUser(
+  db: Pick<TenantDb, "select" | "delete">,
+  tenantUserId: string,
+): Promise<number> {
+  const authIds = db
+    .select({ id: authUsers.id })
+    .from(authUsers)
+    .where(eq(authUsers.tenantUserId, tenantUserId));
+  const deleted = await db
+    .delete(authSessions)
+    .where(inArray(authSessions.userId, authIds))
+    .returning({ token: authSessions.sessionToken });
+  return deleted.length;
 }

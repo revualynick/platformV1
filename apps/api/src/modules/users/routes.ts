@@ -3,7 +3,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { users, engagementScores } from "@revualy/db";
 import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema, createUserSchema, bulkCreateUsersSchema } from "../../lib/validation.js";
 import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
-import { syncAuthUser } from "../../lib/auth-sync.js";
+import { syncAuthUser, revokeSessionsForUser } from "../../lib/auth-sync.js";
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -271,11 +271,17 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const [updated] = await db
-      .update(users)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
+    // Deactivate and end every web session together, so a leaver loses
+    // access now rather than when their session expires.
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(users)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      await revokeSessionsForUser(tx, id);
+      return row;
+    });
 
     return reply.send(updated);
   });

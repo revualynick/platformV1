@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { PathNameProvider } from "@/lib/path-context";
 import { getOneOnOneSessions, getOneOnOneSession, getUser, getUsers, getWsToken } from "@/lib/api";
@@ -64,6 +65,7 @@ export default async function ManagerOneOnOnePage({
 }: {
   params: Promise<{ userId: string }>;
 }) {
+  await requireManagerPage();
   const { userId } = await params;
   const session = await auth();
   const isDemo = isDemoSession(session);

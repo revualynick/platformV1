@@ -35,20 +35,8 @@ const ROLE_HIERARCHY: Record<Role, number> = {
  */
 export function requireRole(minRole: Role): preHandlerHookHandler {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const { db, userId } = request.tenant;
-
-    if (!userId) {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-
-    const [user] = await db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, userId));
-
-    if (!user) {
-      return reply.code(401).send({ error: "User not found" });
-    }
+    const user = await loadActiveCaller(request, reply);
+    if (!user) return reply;
 
     const userLevel = ROLE_HIERARCHY[user.role as Role] ?? -1;
     const requiredLevel = ROLE_HIERARCHY[minRole];
@@ -61,15 +49,52 @@ export function requireRole(minRole: Role): preHandlerHookHandler {
 
 /**
  * Fastify preHandler that requires the user to be authenticated
- * (any role is acceptable).
+ * (any role is acceptable) and still active.
  */
 export const requireAuth: preHandlerHookHandler = async (request, reply) => {
-  const { userId } = request.tenant;
-
-  if (!userId) {
-    return reply.code(401).send({ error: "Authentication required" });
-  }
+  const user = await loadActiveCaller(request, reply);
+  if (!user) return reply;
 };
+
+/** True for roles with full-org visibility. */
+export function isAdminRole(role: string | null | undefined): boolean {
+  return role === "admin" || role === "super_admin";
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve the caller from the DB (a single primary-key lookup) and reject
+ * missing, malformed or deactivated users. Deactivation must cut access
+ * immediately, not when the web session happens to expire. Sends the error
+ * reply itself and returns null when the caller is not allowed through.
+ */
+async function loadActiveCaller(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<{ role: string } | null> {
+  const { db, userId } = request.tenant;
+
+  if (!userId || !UUID_RE.test(userId)) {
+    reply.code(401).send({ error: "Authentication required" });
+    return null;
+  }
+
+  const [user] = await db
+    .select({ role: users.role, isActive: users.isActive })
+    .from(users)
+    .where(eq(users.id, userId));
+
+  if (!user) {
+    reply.code(401).send({ error: "User not found" });
+    return null;
+  }
+  if (!user.isActive) {
+    reply.code(403).send({ error: "Account deactivated" });
+    return null;
+  }
+  return user;
+}
 
 /**
  * Look up a user's role from the DB (source of truth, never headers).
@@ -108,7 +133,7 @@ export async function assertCanAccessUser(
   if (callerId === targetUserId) return;
 
   const role = await getUserRole(request, callerId);
-  if (role === "admin" || role === "super_admin") return;
+  if (isAdminRole(role)) return;
 
   const tree = await getReportingTree(db, callerId);
   if (!tree.has(targetUserId)) {
@@ -131,7 +156,7 @@ export async function assertCanAccessUsers(
   const callerId = getAuthenticatedUserId(request);
 
   const role = await getUserRole(request, callerId);
-  if (role === "admin" || role === "super_admin") return;
+  if (isAdminRole(role)) return;
 
   const tree = await getReportingTree(db, callerId);
   for (const id of targetUserIds) {

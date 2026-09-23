@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getUsers } from "@/lib/api";
@@ -65,6 +66,7 @@ const roleCapabilities: Array<{ role: string; badge: string; capabilities: strin
 ];
 
 export default async function AccessPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
   const { users: allUsers, loadFailed } = await loadUsers(isDemo);

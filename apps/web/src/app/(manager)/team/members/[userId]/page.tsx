@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -732,6 +733,7 @@ export default async function EmployeeDetailPage({
 }: {
   params: Promise<{ userId: string }>;
 }) {
+  await requireManagerPage();
   const { userId } = await params;
   const session = await auth();
   const isDemo = isDemoSession(session);

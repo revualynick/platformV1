@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -13,6 +14,7 @@ import { TeamOrgChart } from "./team-org-chart";
 const MANAGER_ID = "p2";
 
 export default async function OrgChartPage() {
+  await requireManagerPage();
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");

@@ -231,3 +231,15 @@
 ## 2026-09-23: Execution order agreed approach
 - Added "Execution order" to docs/c3-plan.md: 0 baseline commit + local DB + request GChat install; 1 security fixes; 2 encryption foundation; 3 schema; 4 GChat adapter + harness; 5 routing/turn engine; 6 lifecycle + speed; 7 encrypt existing data; 8 beta gate; then M2, M3, leftovers
 - Next: Nick to confirm step 0 (commit baseline) and start the Workspace install request
+
+## 2026-09-23: Step 0 baseline done
+- Branch `beta-hardening` created; 6 logical commits of all prior uncommitted work + today's fixes/docs (typecheck 16/16, 129 tests green before commit)
+- e2e screenshots (13 MB) gitignored; `.claude/skills/railway-*` left uncommitted (Nick's call)
+- Colima had a stale "disk in use" lock; `colima stop --force` fixed it; Postgres + Redis healthy; migrations 0030/0031 verified applied in the real DB
+- Outstanding for Nick: ask beta Workspace admin to install the Google Chat app
+
+## 2026-09-23: Step 1 pre-beta security fixes done
+- H1 deactivated users (API guards, session revocation, sign-in/provision/test-login refusal), H2 per-user rate limit + TRUST_PROXY + per-email auth limits, H3 page guards on 23 pages, M1 user-bound expiring OAuth state, M2 self-reflections hidden from admin, M6 super_admin fixed at 5 sites
+- New tests: oauth-state, rate-limit-key, security.integration (real Postgres, self-skipping); 147 API tests, 16/16 typecheck
+- Not runtime-tested: H3 page guards (typecheck only). Local Redis needs a password the test setup lacks (NOAUTH noise, harmless)
+- Next: step 2, encryption foundation (Phase E part 1)

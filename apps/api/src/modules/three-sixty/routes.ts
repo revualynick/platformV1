@@ -5,7 +5,7 @@ import {
   threeSixtyResponses,
   users,
 } from "@revualy/db";
-import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId, isAdminRole } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
@@ -281,7 +281,7 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
           .select({ role: users.role })
           .from(users)
           .where(eq(users.id, userId));
-        if (!user || user.role !== "admin") {
+        if (!user || !isAdminRole(user.role)) {
           return reply.code(403).send({ error: "Insufficient permissions" });
         }
       }

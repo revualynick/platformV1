@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -62,6 +63,7 @@ async function loadQuestionnaires(userId: string, isDemo: boolean) {
 }
 
 export default async function QuestionsPage() {
+  await requireManagerPage();
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");

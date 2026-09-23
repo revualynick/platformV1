@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { eq, sql } from "drizzle-orm";
 import { users, orgSettings } from "@revualy/db";
 import crypto from "node:crypto";
@@ -16,9 +16,34 @@ function verifyInternalSecret(secret: string | undefined): boolean {
 }
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  // Stricter rate limit for auth endpoints (10 req/min per IP)
-  const authRateLimit = {
-    config: { rateLimit: { max: 10, timeWindow: "1 minute", keyGenerator: (request: import("fastify").FastifyRequest) => request.ip } },
+  // Stricter per-email limit (10 req/min). These routes are only called by
+  // the Next.js server, so an IP key would make every sign-in in the org
+  // share one bucket; keying on the email limits guessing per account.
+  const emailKey = (email: unknown, request: FastifyRequest) =>
+    typeof email === "string" && email
+      ? `auth:${email.toLowerCase()}`
+      : `ip:${request.ip}`;
+  const lookupRateLimit = {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: "1 minute",
+        keyGenerator: (request: FastifyRequest) =>
+          emailKey((request.query as { email?: unknown })?.email, request),
+      },
+    },
+  };
+  // Body is only parsed by preHandler, so this limiter runs there.
+  const provisionRateLimit = {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: "1 minute",
+        hook: "preHandler" as const,
+        keyGenerator: (request: FastifyRequest) =>
+          emailKey((request.body as { email?: unknown })?.email, request),
+      },
+    },
   };
 
   /**
@@ -26,7 +51,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * Internal-only: called by NextAuth during sign-in to resolve a Revualy user.
    * Protected by a shared secret (not exposed to browsers).
    */
-  app.get("/lookup", authRateLimit, async (request, reply) => {
+  app.get("/lookup", lookupRateLimit, async (request, reply) => {
     if (!verifyInternalSecret(request.headers["x-internal-secret"] as string | undefined)) {
       return reply.code(403).send({ error: "Forbidden" });
     }
@@ -46,13 +71,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         role: users.role,
         teamId: users.teamId,
         onboardingCompleted: users.onboardingCompleted,
+        isActive: users.isActive,
       })
       .from(users)
-      .where(eq(users.email, email));
+      .where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
 
     if (!user) {
       return reply.code(404).send({ error: "User not found" });
     }
+    // Returned (not 404) so the sign-in callback can refuse deactivated
+    // users outright instead of falling through to auto-provisioning.
 
     return reply.send({ ...user, orgId });
   });
@@ -63,7 +91,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * Called by NextAuth signIn callback when the user doesn't exist yet.
    * Returns the newly created user (or existing user if race condition).
    */
-  app.post("/provision", authRateLimit, async (request, reply) => {
+  app.post("/provision", provisionRateLimit, async (request, reply) => {
     if (!verifyInternalSecret(request.headers["x-internal-secret"] as string | undefined)) {
       return reply.code(403).send({ error: "Forbidden" });
     }
@@ -86,11 +114,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         role: users.role,
         teamId: users.teamId,
         onboardingCompleted: users.onboardingCompleted,
+        isActive: users.isActive,
       })
       .from(users)
-      .where(eq(users.email, email));
+      .where(sql`lower(${users.email}) = ${email}`);
 
     if (existing) {
+      if (!existing.isActive) {
+        return reply.code(403).send({ error: "Account deactivated" });
+      }
       return reply.send({ ...existing, orgId });
     }
 

@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -322,6 +323,7 @@ function GoalsSkeleton() {
 }
 
 export default async function TeamGoalsPage() {
+  await requireManagerPage();
   const session = await auth();
   const isDemo = process.env.DEMO_MODE === "true" && (!session || isDemoSession(session));
   const userId = session?.user?.id;

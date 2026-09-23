@@ -1,7 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, ne, desc } from "drizzle-orm";
 import { conversations, conversationMessages } from "@revualy/db";
 import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { parseBody, idParamSchema } from "../../lib/validation.js";
+
+// Self-reflections are private to the employee (the UI promises "only you
+// and your AI coach can see these"), so admin debug views never expose them.
+const PRIVATE_INTERACTION = "self_reflection";
 
 export const conversationRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -10,7 +15,7 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /conversations/:id — Get conversation with messages (admin only)
   app.get("/:id", { preHandler: requireRole("admin") }, async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
 
     const [conversation] = await db
@@ -18,7 +23,9 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
       .from(conversations)
       .where(eq(conversations.id, id));
 
-    if (!conversation) return reply.code(404).send({ error: "Conversation not found" });
+    if (!conversation || conversation.interactionType === PRIVATE_INTERACTION) {
+      return reply.code(404).send({ error: "Conversation not found" });
+    }
 
     const messages = await db
       .select()
@@ -31,7 +38,7 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /conversations/:id/close — Force-close a conversation (admin only)
   app.post("/:id/close", { preHandler: requireRole("admin") }, async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
 
     const [updated] = await db
@@ -62,12 +69,13 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
     }
 
-    const conditions = status ? [eq(conversations.status, status)] : [];
+    const conditions = [ne(conversations.interactionType, PRIVATE_INTERACTION)];
+    if (status) conditions.push(eq(conversations.status, status));
 
     const results = await db
       .select()
       .from(conversations)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(desc(conversations.createdAt))
       .limit(safeLimit);
 

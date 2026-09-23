@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { getOrgConfig, type CoreValueRow } from "@/lib/api";
 import {
   coreValues as mockCoreValues,
@@ -24,6 +25,7 @@ async function loadValues(isDemo: boolean): Promise<
 }
 
 export default async function ValuesPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
   const demoValuesScores = isDemo ? valuesScores : [];

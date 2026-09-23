@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { PathNameProvider } from "@/lib/path-context";
 import { getOneOnOneSession, getUser, getUsers, getWsToken } from "@/lib/api";
@@ -65,6 +66,7 @@ export default async function ManagerSessionDetailPage({
 }: {
   params: Promise<{ userId: string; sessionId: string }>;
 }) {
+  await requireManagerPage();
   const { userId, sessionId } = await params;
   const session = await auth();
   const isDemo = isDemoSession(session);

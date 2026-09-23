@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { mockCampaigns } from "@/lib/mock-data";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -17,6 +18,7 @@ async function loadCampaigns(isDemo: boolean): Promise<CampaignRow[]> {
 }
 
 export default async function CampaignsPage() {
+  await requireAdminPage();
   const session = await auth();
   const campaigns = await loadCampaigns(isDemoSession(session));
 

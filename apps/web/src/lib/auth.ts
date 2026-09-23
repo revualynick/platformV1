@@ -50,6 +50,7 @@ interface RevualyUser {
   teamId: string | null;
   orgId: string;
   onboardingCompleted: boolean;
+  isActive?: boolean;
 }
 
 /** Look up a Revualy user by email via the API */
@@ -208,6 +209,10 @@ const nextAuth = NextAuth({
 
       // Look up existing user, or auto-provision a new one
       let revualyUser = await lookupUserByEmail(user.email);
+      // Deactivated users must not get a new session.
+      if (revualyUser && revualyUser.isActive === false) {
+        return false;
+      }
       if (!revualyUser) {
         revualyUser = await provisionUser(user.email, user.name ?? user.email.split("@")[0]);
         if (!revualyUser) {

@@ -52,6 +52,38 @@ function isDemoPublicRoute(url: string): boolean {
   return false;
 }
 
+/**
+ * Constant-time check of the x-internal-secret header. Safe to call from
+ * onRequest hooks (no DB, no tenant context needed).
+ */
+export function hasValidInternalSecret(secret: string | undefined): boolean {
+  if (!INTERNAL_SECRET || !secret) return false;
+  const expected = crypto.createHmac("sha256", INTERNAL_SECRET).update("revualy").digest();
+  const actual = crypto.createHmac("sha256", secret).update("revualy").digest();
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+/**
+ * Rate-limit key. Runs in onRequest, before the tenant context exists.
+ * Almost all traffic arrives from the Next.js server's single IP, so keying
+ * on IP made the whole organisation share one bucket. Authenticated
+ * requests are keyed per user, but only when the internal secret is valid,
+ * so a spoofed x-user-id cannot be used to spread load across buckets.
+ */
+export function rateLimitKey(request: FastifyRequest): string {
+  const userId = request.headers["x-user-id"];
+  const secret = request.headers["x-internal-secret"];
+  if (
+    typeof userId === "string" &&
+    userId &&
+    typeof secret === "string" &&
+    hasValidInternalSecret(secret)
+  ) {
+    return `user:${userId}`;
+  }
+  return `ip:${request.ip}`;
+}
+
 export function resolveTenant(request: FastifyRequest): TenantContext {
   const requestUrl = request.url.split("?")[0]; // strip query params
 

@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -115,6 +116,7 @@ async function loadLeaderboardData(userId: string, isDemo: boolean) {
 }
 
 export default async function LeaderboardPage() {
+  await requireManagerPage();
   const session = await auth();
   const userId = session?.user?.id;
 

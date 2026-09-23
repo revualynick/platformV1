@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { orgPeople, orgThreads } from "@/lib/mock-data";
@@ -25,6 +26,7 @@ function mapRole(role: string): OrgRole {
 }
 
 export default async function AdminOrgChartPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
 

@@ -1,3 +1,4 @@
+import { requireManagerPage } from "@/lib/page-guards";
 import { Suspense, cache } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -338,6 +339,7 @@ async function FlaggedSection({
 // ── Page ───────────────────────────────────────────────
 
 export default async function TeamDashboard() {
+  await requireManagerPage();
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) redirect("/login");

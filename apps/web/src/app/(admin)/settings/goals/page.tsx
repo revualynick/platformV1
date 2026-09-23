@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -242,6 +243,7 @@ async function AdminGoalsContent({ isDemo }: { isDemo: boolean }) {
 }
 
 export default async function AdminGoalsPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = process.env.DEMO_MODE === "true" && (!session || isDemoSession(session));
   if (!session?.user?.id && !isDemo) redirect("/login");

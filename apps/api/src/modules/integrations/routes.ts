@@ -9,38 +9,10 @@ import {
   exchangeCode,
   GOOGLE_DRIVE_SCOPE,
 } from "../../lib/google-calendar.js";
+import { signOAuthState, verifyOAuthState } from "../../lib/oauth-state.js";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3001";
 const STATE_SECRET = process.env.INTERNAL_API_SECRET ?? crypto.randomUUID();
-
-// State format: nonce.returnToB64.sig — returnTo rides along signed so
-// the callback can send the user back to whichever page started the flow.
-function signState(nonce: string, returnTo: string): string {
-  const returnToB64 = Buffer.from(returnTo).toString("base64url");
-  const sig = crypto
-    .createHmac("sha256", STATE_SECRET)
-    .update(`${nonce}.${returnToB64}`)
-    .digest("hex");
-  return `${nonce}.${returnToB64}.${sig}`;
-}
-
-function verifyState(state: string): { valid: boolean; returnTo: string } {
-  const parts = state.split(".");
-  if (parts.length !== 3) return { valid: false, returnTo: "" };
-  const [nonce, returnToB64, sig] = parts;
-  const expected = crypto
-    .createHmac("sha256", STATE_SECRET)
-    .update(`${nonce}.${returnToB64}`)
-    .digest("hex");
-  const valid =
-    sig.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-  if (!valid) return { valid: false, returnTo: "" };
-  const returnTo = Buffer.from(returnToB64, "base64url").toString();
-  // Only same-app relative paths — never an open redirect
-  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "";
-  return { valid: true, returnTo: safeReturnTo };
-}
 
 const DEFAULT_RETURN_TO = "/settings/integrations";
 
@@ -49,10 +21,9 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /integrations/google/authorize — Redirect to Google OAuth
   app.get("/google/authorize", async (request, reply) => {
-    getAuthenticatedUserId(request);
+    const userId = getAuthenticatedUserId(request);
     const { returnTo } = request.query as { returnTo?: string };
-    const nonce = crypto.randomUUID();
-    const state = signState(nonce, returnTo ?? DEFAULT_RETURN_TO);
+    const state = signOAuthState(STATE_SECRET, userId, returnTo ?? DEFAULT_RETURN_TO);
     const url = getAuthUrl(state);
     return reply.redirect(url);
   });
@@ -65,14 +36,16 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
       return reply.redirect(`${APP_URL}${DEFAULT_RETURN_TO}?error=missing_params`);
     }
 
-    const stateResult = verifyState(state);
+    // The state must have been issued to this same signed-in user and not
+    // be expired; otherwise a forwarded callback link could connect this
+    // account to someone else's Google account.
+    const userId = getAuthenticatedUserId(request);
+    const stateResult = verifyOAuthState(STATE_SECRET, state, userId);
     if (!stateResult.valid) {
+      request.log.warn({ reason: stateResult.reason }, "Rejected Google OAuth state");
       return reply.redirect(`${APP_URL}${DEFAULT_RETURN_TO}?error=invalid_state`);
     }
     const returnTo = stateResult.returnTo || DEFAULT_RETURN_TO;
-
-    // Use authenticated userId from session — never trust OAuth state as identity
-    const userId = getAuthenticatedUserId(request);
     const { db } = request.tenant;
 
     try {

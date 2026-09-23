@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq, and, desc } from "drizzle-orm";
 import { escalations, escalationNotes, users } from "@revualy/db";
 import { getReportingTree } from "@revualy/db/queries";
-import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId, isAdminRole } from "../../lib/rbac.js";
 import {
   parseBody,
   idParamSchema,
@@ -44,7 +44,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
       }
 
       // Admins can file against anyone
-      if (caller.role !== "admin") {
+      if (!isAdminRole(caller.role)) {
         // Managers can file against their direct reports
         const isDirectReport = subject.managerId === userId;
         // Team members can file against each other
@@ -136,7 +136,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
         .select({ role: users.role })
         .from(users)
         .where(eq(users.id, userId));
-      if (!user || user.role !== "admin") {
+      if (!user || !isAdminRole(user.role)) {
         return reply.code(403).send({ error: "Insufficient permissions" });
       }
     }
@@ -291,7 +291,7 @@ export const escalationRoutes: FastifyPluginAsync = async (app) => {
           .select({ role: users.role })
           .from(users)
           .where(eq(users.id, userId));
-        if (!user || user.role !== "admin") {
+        if (!user || !isAdminRole(user.role)) {
           return reply.code(403).send({ error: "Insufficient permissions" });
         }
       }

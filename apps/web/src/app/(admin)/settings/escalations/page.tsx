@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { escalationDetails } from "@/lib/mock-data";
 import { severityStyles, escalationStatusStyles as statusStyles } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
@@ -54,6 +55,7 @@ async function loadEscalations(
 }
 
 export default async function EscalationsPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
   const { items, loadFailed } = await loadEscalations(isDemo);

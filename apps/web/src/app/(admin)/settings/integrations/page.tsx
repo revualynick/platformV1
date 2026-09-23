@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { integrations as mockIntegrations } from "@/lib/mock-data";
 import { integrationStatusStyles as statusStyles, platformIcons } from "@/lib/style-constants";
 import { auth } from "@/lib/auth";
@@ -21,6 +22,7 @@ const platformDescriptions: Record<string, string> = {
 };
 
 export default async function IntegrationsPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
 

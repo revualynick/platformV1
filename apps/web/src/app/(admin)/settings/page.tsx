@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/lib/db";
@@ -412,6 +413,7 @@ async function MainContent({
 // ── Page ───────────────────────────────────────────────
 
 export default async function AdminSettings() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
 

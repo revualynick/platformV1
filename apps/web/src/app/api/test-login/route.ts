@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
       email: users.email,
       role: users.role,
       teamId: users.teamId,
+      isActive: users.isActive,
     })
     .from(users)
     .where(eq(users.email, email));
@@ -77,6 +78,10 @@ export async function GET(request: NextRequest) {
       { error: `No seeded user with email ${email}` },
       { status: 404 },
     );
+  }
+
+  if (!bizUser.isActive) {
+    return NextResponse.json({ error: "User is deactivated" }, { status: 403 });
   }
 
   // Upsert the matching auth_user row (linked by tenant_user_id).
@@ -121,7 +126,12 @@ export async function GET(request: NextRequest) {
     expires,
   });
 
-  const redirectTo = url.searchParams.get("redirect");
+  // Same-origin relative paths only, never an open redirect.
+  const rawRedirect = url.searchParams.get("redirect");
+  const redirectTo =
+    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
+      ? rawRedirect
+      : null;
   const response = redirectTo
     ? NextResponse.redirect(new URL(redirectTo, url.origin))
     : NextResponse.json({
@@ -129,11 +139,13 @@ export async function GET(request: NextRequest) {
         loggedInAs: { email: bizUser.email, role: bizUser.role, id: bizUser.id },
       });
 
-  response.cookies.set(SESSION_COOKIE, sessionToken, {
+  // NextAuth reads the __Secure- prefixed cookie name over HTTPS.
+  const isHttps = url.protocol === "https:";
+  response.cookies.set(isHttps ? `__Secure-${SESSION_COOKIE}` : SESSION_COOKIE, sessionToken, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: false, // dev over http
+    secure: isHttps,
     expires,
   });
 

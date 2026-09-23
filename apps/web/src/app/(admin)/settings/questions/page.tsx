@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { getQuestionnaires, getOrgConfig } from "@/lib/api";
 import {
   questionnaires as mockQuestionnaires,
@@ -73,6 +74,7 @@ const aiStatusStyles: Record<string, { bg: string; text: string; label: string }
 };
 
 export default async function QuestionsPage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
   const questionnaires = await loadQuestionnaires(isDemo);

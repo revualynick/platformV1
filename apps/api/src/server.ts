@@ -32,7 +32,7 @@ import { exportRoutes } from "./modules/export/routes.js";
 import { assessmentRoutes } from "./modules/assessments/routes.js";
 import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
-import { tenantPlugin } from "./lib/tenant-context.js";
+import { tenantPlugin, rateLimitKey } from "./lib/tenant-context.js";
 import { createQueues, createWorkers, initStateRedis, closeStateRedis, getStateRedis } from "./workers/index.js";
 import { RedisAsyncStore } from "./lib/redis-async-store.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
@@ -56,6 +56,10 @@ const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
 export async function buildApp() {
   const app = Fastify({
+    // Behind Railway's proxy request.ip is the proxy unless we trust the
+    // forwarded header. Set TRUST_PROXY to the hop count (1 on Railway);
+    // leave unset locally so X-Forwarded-For cannot be spoofed.
+    trustProxy: Number(process.env.TRUST_PROXY) || false,
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
     },
@@ -79,8 +83,7 @@ export async function buildApp() {
   await app.register(rateLimit, {
     max: 100,
     timeWindow: "1 minute",
-    keyGenerator: (request) =>
-      request.tenant?.userId ?? request.ip,
+    keyGenerator: rateLimitKey,
     // Chat platforms deliver webhooks from shared IP pools, so IP-keyed
     // limiting would let one busy workspace throttle another. Webhooks
     // are already authenticated by per-platform signature verification.

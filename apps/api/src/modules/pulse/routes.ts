@@ -5,7 +5,7 @@ import {
   pulseCheckConfig,
   users,
 } from "@revualy/db";
-import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
+import { requireAuth, requireRole, getAuthenticatedUserId, isAdminRole } from "../../lib/rbac.js";
 import {
   parseBody,
   updatePulseCheckConfigSchema,
@@ -61,7 +61,7 @@ export const pulseRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(401).send({ error: "User not found" });
         }
 
-        if (caller.role !== "admin") {
+        if (!isAdminRole(caller.role)) {
           // Check if caller is the manager of the target user
           const [target] = await db
             .select({ managerId: users.managerId })

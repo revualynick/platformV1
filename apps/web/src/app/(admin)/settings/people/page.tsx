@@ -1,3 +1,4 @@
+import { requireAdminPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
@@ -31,6 +32,7 @@ const roleBadgeStyles: Record<string, string> = {
 };
 
 export default async function PeoplePage() {
+  await requireAdminPage();
   const session = await auth();
   const isDemo = isDemoSession(session);
   const users = await loadUsers(isDemo);
