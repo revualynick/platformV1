@@ -250,3 +250,35 @@ A four-lens review (backend, frontend, employee UX, manager/admin UX) was fully 
 - **Self-explanation**: `lib/glossary.ts` + `InfoHint` define every metric once; `DismissibleCard` powers the employee orientation, manager check-in-suggestion explainer (with live Google-connection status), and the admin setup checklist; the bot now opens with a deterministic intro (purpose, duration, static privacy line) and closes with "what happens next".
 - **Wired previously-dead UI**: manager Flagged Investigate/Dismiss (new `POST /escalations/:id/review`, reporting-tree scoped) and admin escalation transitions (existing PATCH) with confirmation dialogs; assessment invite is a real email (endpoint + notification worker + template).
 - **Decisions recorded**: weekly digest boundaries are UTC (documented in workers); export caps documented in responses; webhooks exempt from IP rate limiting (signature-verified); accessibility pass added dialog semantics/focus traps/aria labels.
+
+### Review findings (2026-09-23)
+Whole-codebase review of the uncommitted work. Full notes in `.claude/log.md`.
+
+**Fixed:**
+- [x] Chat webhooks 401'd: `tenantPlugin` required `x-internal-secret` on `/webhooks/*`, which platforms never send. Now exempt (like `/ws/`); adapter signature verification is the gate. Covered by smoke tests.
+- [x] BullMQ 5 rejected colon-joined custom job ids (`initiate`, `weekly-digest`, `team-insights`, `nudge`), so scheduling, digests, insights and nudges never enqueued. Now built via `lib/job-ids.ts` `buildJobId()`. Covered by `job-ids.test.ts`.
+
+**Open:**
+- [ ] `schedule_nudges` only finds users with an engagement row this week, so zero-activity users are never nudged
+- [ ] `engagement_scores.streak` has no writer outside seed; leaderboard and digest always see 0
+- [ ] `uq_user_relationship_pair` makes duplicate or re-created (soft-deleted) relationships 500 on all four create routes; needs upsert/reactivate or 409
+- [ ] Self-reflection analysis failure returns `success: false` but the worker never retries; reflections also skip flag detection (needs a deliberate safeguarding decision)
+- [ ] 360 completion runs the LLM aggregation inside a DB transaction; `analyzing` status never visible
+- [ ] Team-insight month keys use local-time `Date` then `toISOString()` (wrong outside UTC)
+- [ ] Member detail page allows direct reports only; API allows full tree + admins
+- [ ] `test-login` open redirect via `redirect` param, `secure: false` cookie, key accepted in query string
+
+**Deep review (same day):** see `docs/review-2026-09-23-deep.md`. Open: C3 chat replies never reach their conversation (Redis key mismatch), H1 deactivated users keep access, H2 rate limiter keyed on web-server IP, H3 admin pages rely on layout-only auth, H4 Slack bot self-messages, H5 Google Chat JWT verification, plus M1–M6.
+
+### Decision: chat identity + routing (2026-09-23, fixes review C3)
+- **One chat platform per tenant** (Google Chat OR Slack OR Teams). Replaces `SCHEDULER_PLATFORM` env; only one `integrations` row may be connected.
+- **Google Chat:** identity is automatic from the user's Google account (`users/{id}` = `authAccounts.providerAccountId`, `users/{email}` alias also valid). No admin mapping. To confirm on the beta Workspace: DM space discovery (`findDirectMessage`) after domain-wide admin install.
+- **Slack / Teams:** admin- or manager-driven linking. Directory pull (Slack `users.list` + `users:read.email`; Teams Graph/roster), email-based suggestions, bulk confirm, manual exceptions, unknown-sender queue. Per-person status unlinked → linked → reachable (Teams needs a conversation reference from app install).
+- **Safeguard:** manually linked accounts get an identity-confirmation DM before any feedback conversation is sent.
+- **Routing:** inbound platformUserId → `user_platform_identities` → userId → the user's single open conversation (one open conversation per person at a time).
+- **Beta platform: Google Chat** (confirmed). Adapter must handle `ADDED_TO_SPACE` to capture the DM space name (currently only `MESSAGE` is normalised).
+- **Store everything (Nick):** no inbound message is ever silently dropped. Late replies and afterthoughts attach to the user's most recent conversation; user-initiated messages are stored and answered; `help` and `stop` handled explicitly; unmatched events counted.
+- **Expiry is a state, not limbo:** unanswered conversations move to `incomplete`, partial answers are analysed and marked partial (kept out of engagement scoring noise).
+- **Per-theme outcome** (answered / weak / unanswered) recorded, as the foundation for the planned re-presentation feature: weak or unanswered themes get re-asked in a later conversation with different wording. Also fix `decideNextAction` judging replies without seeing the question.
+- **Resolved (Nick):** managers can link (scoped to their reporting tree); Google Chat app not yet installed on the beta Workspace, so M1 is proved locally with signed event fixtures; the re-presentation engine is in C3 scope.
+- **Implementation plan:** `docs/c3-plan.md` (M1 Google Chat beta path, M2 re-presentation, M3 Slack/Teams linking).
