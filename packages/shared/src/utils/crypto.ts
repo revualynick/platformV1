@@ -73,3 +73,8 @@ function resolveKey(keyHex?: string): Buffer {
   }
   return Buffer.from(hex, "hex");
 }
+
+/** Cryptographically-random UUID v4. Node-only (uses node:crypto). */
+export function generateId(): string {
+  return crypto.randomUUID();
+}

@@ -1,10 +1,8 @@
-import { randomUUID } from "node:crypto";
-
+// NOTE: keep this barrel free of `node:crypto` (and any other Node-only
+// imports). It is re-exported from the package root, which client components
+// pull into the browser bundle. Node-only helpers (crypto, generateId) live in
+// ./crypto.js and are exposed via the "@revualy/shared/server" subpath instead.
 export * from "./goals.js";
-
-export function generateId(): string {
-  return randomUUID();
-}
 
 export function toISOString(date: Date = new Date()): string {
   return date.toISOString();

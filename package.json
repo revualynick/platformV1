@@ -10,12 +10,17 @@
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },
   "packageManager": "pnpm@10.29.3",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "msgpackr-extract", "sharp"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract",
+      "sharp"
+    ]
   },
   "engines": {
     "node": ">=20.0.0"

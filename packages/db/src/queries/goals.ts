@@ -298,8 +298,21 @@ export async function getGoalDetails(
 
   if (goal.level === "personal" && goal.ownerId !== viewerId) {
     if (!goal.shareWithManager) return null;
-    const tree = await getReportingTree(db, viewerId);
-    if (!tree.has(goal.ownerId)) return null;
+    // Only the goal owner's *direct* manager may see a shared personal goal,
+    // not every node in the manager's reporting tree.
+    const [owner] = await db
+      .select({ managerId: users.managerId })
+      .from(users)
+      .where(eq(users.id, goal.ownerId));
+    if (!owner) return null;
+    const viewerIsDirectManager = owner.managerId === viewerId;
+    const [viewer] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, viewerId));
+    const viewerIsAdmin =
+      viewer?.role === "admin" || viewer?.role === "super_admin";
+    if (!viewerIsDirectManager && !viewerIsAdmin) return null;
   }
 
   const [children, updates] = await Promise.all([

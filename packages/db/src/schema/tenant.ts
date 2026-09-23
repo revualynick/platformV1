@@ -126,6 +126,11 @@ export const conversations = pgTable(
       .notNull()
       .references(() => users.id),
     interactionType: varchar("interaction_type", { length: 50 }).notNull(),
+    // Persisted so an in-progress conversation can be reconstructed from the DB
+    // after Redis state loss (nullable: legacy rows + non-questionnaire flows).
+    questionnaireId: uuid("questionnaire_id").references(() => questionnaires.id, {
+      onDelete: "set null",
+    }),
     platform: varchar("platform", { length: 50 }).notNull(),
     platformChannelId: varchar("platform_channel_id", { length: 255 }).notNull(),
     status: varchar("status", { length: 50 }).notNull().default("scheduled"),
@@ -182,7 +187,7 @@ export const feedbackEntries = pgTable(
       .notNull()
       .references(() => users.id),
     interactionType: varchar("interaction_type", { length: 50 }).notNull(),
-    rawContent: text("raw_content").notNull(), // encrypt via pgcrypto
+    rawContent: text("raw_content").notNull(), // TODO: encrypt at rest (pgcrypto or app-layer AES) — not yet implemented
     aiSummary: text("ai_summary").notNull().default(""),
     sentiment: varchar("sentiment", { length: 20 }).notNull().default("neutral"),
     engagementScore: real("engagement_score").notNull().default(0),
@@ -378,6 +383,9 @@ export const userRelationships = pgTable(
     index("idx_user_relationships_from_user_id").on(table.fromUserId),
     index("idx_user_relationships_to_user_id").on(table.toUserId),
     index("idx_user_relationships_is_active").on(table.isActive),
+    // Enables DB-level dedup (ON CONFLICT DO NOTHING) for calendar-inferred
+    // relationships so concurrent syncs can't create duplicate directional rows.
+    unique("uq_user_relationship_pair").on(table.fromUserId, table.toUserId),
   ],
 );
 
@@ -588,7 +596,7 @@ export const notificationPreferences = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
-    type: varchar("type", { length: 50 }).notNull(), // weekly_digest | flag_alert | nudge | leaderboard_update
+    type: varchar("type", { length: 50 }).notNull(), // weekly_digest | flag_alert | nudge
     enabled: boolean("enabled").notNull().default(true),
     channel: varchar("channel", { length: 20 }).notNull().default("email"), // email | in_app (future)
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -742,8 +750,6 @@ export const selfReflections = pgTable(
     index("idx_self_reflections_week_starting").on(table.weekStarting),
   ],
 );
-
-// ── Calendar Events ────────────────────────────────────
 
 // ── Manager Notes ─────────────────────────────────────
 
@@ -1215,6 +1221,7 @@ export const profileDevelopmentGoals = pgTable(
 // Admin-defined time periods (e.g. "Q3 2026") that org/team/individual
 // goals belong to. Personal goals live outside cycles. "Current cycle"
 // is computed from the date range — no isActive flag to maintain.
+// DB enforces end_date > start_date via chk_goal_cycles_date_order (migration 0030).
 
 export const goalCycles = pgTable(
   "goal_cycles",

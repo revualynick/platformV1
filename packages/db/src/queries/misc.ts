@@ -19,7 +19,6 @@ const NOTIFICATION_TYPES = [
   "weekly_digest",
   "flag_alert",
   "nudge",
-  "leaderboard_update",
 ] as const;
 
 export async function getNotificationPreferences(

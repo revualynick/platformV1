@@ -76,3 +76,47 @@ export async function getLeaderboard(db: TenantDb, weekStart: string) {
     interactionsCompleted: row.interactionsCompleted,
   }));
 }
+
+/**
+ * Weekly leaderboard history for a set of team members: the most recent
+ * `weeks` completed weeks (excluding `currentWeek`), each ranked by average
+ * quality score. Powers the "Previous Weeks" panel with real data.
+ */
+export async function getTeamLeaderboardHistory(
+  db: TenantDb,
+  userIds: string[],
+  currentWeek: string,
+  weeks = 4,
+): Promise<Array<{ week: string; data: Array<{ rank: number; name: string; score: number }> }>> {
+  if (userIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      weekStarting: engagementScores.weekStarting,
+      name: users.name,
+      score: engagementScores.averageQualityScore,
+    })
+    .from(engagementScores)
+    .innerJoin(users, eq(engagementScores.userId, users.id))
+    .where(
+      and(
+        inArray(engagementScores.userId, userIds),
+        sql`${engagementScores.weekStarting} < ${currentWeek}`,
+      ),
+    )
+    .orderBy(desc(engagementScores.weekStarting), desc(engagementScores.averageQualityScore));
+
+  // Group by week (already sorted desc), keep the most recent `weeks`.
+  const byWeek = new Map<string, Array<{ rank: number; name: string; score: number }>>();
+  for (const r of rows) {
+    const list = byWeek.get(r.weekStarting) ?? [];
+    if (list.length < 5) {
+      list.push({ rank: list.length + 1, name: r.name, score: r.score });
+    }
+    byWeek.set(r.weekStarting, list);
+  }
+
+  return [...byWeek.entries()]
+    .slice(0, weeks)
+    .map(([week, data]) => ({ week, data }));
+}
