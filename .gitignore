@@ -39,3 +39,10 @@ docker-data/
 
 # Misc
 *.tsbuildinfo
+e2e/test-results/
+e2e/playwright-report/
+e2e/results.json
+scripts/.chat-sim-state.json
+test-results/
+e2e/shots/
+e2e/shots-mobile/
