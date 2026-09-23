@@ -278,3 +278,9 @@
 - Reflections: extraction failures retried; person's own answers never overwritten either way round
 - Nudges include idle people with correct per-person targets; relationship re-create reactivates; completed-only 360s; 360 uses LLM and no longer holds a transaction during the call; unmanaged team admin-only
 - 21 new tests; 273 total, 16/16 typecheck, no leaked fixtures. Next: step 5 (routing + turn engine)
+
+## 2026-09-23: Step 5 started, PAUSED at Nick's request (session limit)
+- Committed: migration 0034 (conversation_messages.seq; ordering by created_at is unsafe because now() is fixed at transaction start); analysis pipeline re-runnable (upsert entry, replace value scores, one escalation per entry). 256 API tests green, 16/16 typecheck
+- Draft engine saved at docs/wip/step5-conversation-engine-draft.ts.txt (not compiled or wired)
+- Resume notes (exact remaining TODO list) in docs/c3-plan.md under step 5
+- Local env: Colima + docker compose must be running for integration tests; local Redis needs a password the tests lack (NOAUTH noise, harmless)

@@ -239,6 +239,13 @@
       "when": 1790193279083,
       "tag": "0033_conversation_turn_state",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790195361184,
+      "tag": "0034_conversation_message_seq",
+      "breakpoints": true
     }
   ]
 }

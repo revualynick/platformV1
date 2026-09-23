@@ -219,17 +219,26 @@ export async function runAnalysisPipeline(
         wordCount: engagementResult.wordCount,
         hasSpecificExamples: engagementResult.hasExamples,
       })
-      .onConflictDoNothing({ target: feedbackEntries.conversationId })
+      // Re-analysis (a late addition to a closed conversation) refreshes
+      // the entry rather than being skipped, so the extra answer counts.
+      .onConflictDoUpdate({
+        target: feedbackEntries.conversationId,
+        set: {
+          rawContent,
+          aiSummary: safeSummary,
+          sentiment: sentimentResult,
+          engagementScore: engagementResult.score,
+          wordCount: engagementResult.wordCount,
+          hasSpecificExamples: engagementResult.hasExamples,
+        },
+      })
       .returning();
 
     const feedbackEntry = rows[0];
-    if (!feedbackEntry) {
-      // Already processed — skip
-      return;
-    }
-
     feedbackEntryId = feedbackEntry.id;
 
+    // Value scores reflect the latest analysis only.
+    await tx.delete(feedbackValueScores).where(eq(feedbackValueScores.feedbackEntryId, feedbackEntry.id));
     if (valuesResult.length > 0) {
       await tx.insert(feedbackValueScores).values(
         valuesResult.map((v) => ({
@@ -241,7 +250,16 @@ export async function runAnalysisPipeline(
       );
     }
 
-    if (flagResult.shouldFlag) {
+    // One escalation (and one alert) per feedback entry, however many times
+    // it is re-analysed.
+    const [existingEscalation] = flagResult.shouldFlag
+      ? await tx
+          .select({ id: escalations.id })
+          .from(escalations)
+          .where(eq(escalations.feedbackEntryId, feedbackEntry.id))
+          .limit(1)
+      : [];
+    if (flagResult.shouldFlag && !existingEscalation) {
       // subjectId is REQUIRED: getFlaggedItemsForReports filters escalations by
       // subject_id, so an escalation without it is invisible to the manager.
       const escRows = await tx

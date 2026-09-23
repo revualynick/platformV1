@@ -15,6 +15,7 @@ import {
   primaryKey,
   customType,
   uniqueIndex,
+  bigint,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -321,6 +322,9 @@ export const conversationMessages = pgTable(
       .defaultNow(),
     // Outbox (migration 0033): set when the platform accepted the message.
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    // Insertion order (migration 0034). Always order messages by seq, never
+    // created_at, which is fixed at transaction start.
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity(),
   },
   (table) => [
     uniqueIndex("uq_conv_msg_platform_id")
@@ -329,6 +333,7 @@ export const conversationMessages = pgTable(
     index("idx_conversation_messages_undelivered")
       .on(table.createdAt)
       .where(sql`role = 'assistant' AND delivered_at IS NULL`),
+    index("idx_conversation_messages_conv_seq").on(table.conversationId, table.seq),
     index("idx_conversation_messages_conversation_id").on(table.conversationId),
     index("idx_conversation_messages_conv_created").on(table.conversationId, table.createdAt),
   ],
