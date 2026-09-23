@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, or, isNull, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, inArray, gte, lt } from "drizzle-orm";
 import {
   users,
   questionnaires,
@@ -443,17 +443,31 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const monthStarting = monthStart.toISOString().split("T")[0];
 
+    // Previous month — used to compute sentimentTrend
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthStarting = prevMonthStart.toISOString().split("T")[0];
+
+    const [prevDigest] = await db
+      .select({ data: feedbackDigests.data })
+      .from(feedbackDigests)
+      .where(
+        and(
+          eq(feedbackDigests.managerId, userId),
+          eq(feedbackDigests.monthStarting, prevMonthStarting),
+        ),
+      );
+
     // Fetch feedback entries for direct reports this month (as subjects)
-    const entries = await db
+    const monthEntries = await db
       .select()
       .from(feedbackEntries)
-      .where(inArray(feedbackEntries.subjectId, reportIds));
-
-    // Filter to this month in JS (Drizzle date comparison is cleaner this way)
-    const monthEntries = entries.filter((e) => {
-      const created = new Date(e.createdAt);
-      return created >= monthStart && created < monthEnd;
-    });
+      .where(
+        and(
+          inArray(feedbackEntries.subjectId, reportIds),
+          gte(feedbackEntries.createdAt, monthStart),
+          lt(feedbackEntries.createdAt, monthEnd),
+        ),
+      );
 
     // Get value scores for these entries
     const entryIds = monthEntries.map((e) => e.id);
@@ -472,6 +486,15 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
       .where(eq(coreValues.isActive, true));
     const valueNameMap = new Map(allValues.map((v) => [v.id, v.name]));
 
+    // Build previous-month sentiment lookup (per user) for trend computation
+    const prevSentimentByUser = new Map<string, number>();
+    if (prevDigest) {
+      const prevData = prevDigest.data as { memberSummaries: Array<{ userId: string; avgSentiment: number }> };
+      for (const m of prevData.memberSummaries ?? []) {
+        prevSentimentByUser.set(m.userId, m.avgSentiment);
+      }
+    }
+
     // Build per-employee summaries
     const memberSummaries = directReports.map((report) => {
       const reportEntries = monthEntries.filter((e) => e.subjectId === report.id);
@@ -487,6 +510,15 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
         feedbackCount > 0
           ? sentimentScores.reduce((a, b) => a + b, 0) / feedbackCount
           : 0.5;
+
+      // Sentiment trend: compare current vs previous month (±0.05 threshold = stable)
+      const prevSentiment = prevSentimentByUser.get(report.id);
+      let sentimentTrend: "improving" | "stable" | "declining" = "stable";
+      if (prevSentiment !== undefined) {
+        const delta = avgSentiment - prevSentiment;
+        if (delta > 0.05) sentimentTrend = "improving";
+        else if (delta < -0.05) sentimentTrend = "declining";
+      }
 
       // Top themes from value scores
       const reportEntryIds = new Set(reportEntries.map((e) => e.id));
@@ -514,7 +546,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
         name: report.name,
         feedbackCount,
         avgSentiment: Math.round(avgSentiment * 100) / 100,
-        sentimentTrend: "stable" as const, // TODO: compare with previous month
+        sentimentTrend,
         topThemes,
         languageQuality: Math.round(languageQuality * 100) / 100,
       };

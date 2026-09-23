@@ -4,6 +4,7 @@ import {
   profileSnapshots,
   profileDevelopmentGoals,
   users,
+  teams,
 } from "@revualy/db";
 import {
   parseBody,
@@ -21,6 +22,8 @@ import {
   requireAuth,
   requireRole,
   getAuthenticatedUserId,
+  assertCanAccessUser,
+  assertCanAccessUsers,
 } from "../../lib/rbac.js";
 import type { Queue } from "bullmq";
 import { getReportingTree } from "@revualy/db/queries";
@@ -91,6 +94,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
+      await assertCanAccessUser(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileQuerySchema, request.query);
 
@@ -137,6 +141,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
+      await assertCanAccessUser(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -164,6 +169,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
+      await assertCanAccessUser(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -220,6 +226,24 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       const { db } = request.tenant;
       const query = parseBody(teamProfileQuerySchema, request.query);
 
+      // Team-ownership is the primary gate: the caller must oversee the team's
+      // manager (be them, an ancestor manager, or an admin). Relying only on the
+      // per-member tree check below would leak a whole team's profiles to any
+      // manager who merely shares a single skip-level report with that team.
+      const [team] = await db
+        .select({ managerId: teams.managerId })
+        .from(teams)
+        .where(eq(teams.id, teamId));
+      if (!team) {
+        return reply.code(404).send({ error: "Team not found" });
+      }
+      if (team.managerId) {
+        await assertCanAccessUser(request, team.managerId);
+      } else {
+        // Unmanaged team: fall back to requiring admin-level access.
+        await assertCanAccessUsers(request, []);
+      }
+
       // Get team members
       const teamMembers = await db
         .select({ id: users.id, name: users.name })
@@ -231,6 +255,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const memberIds = teamMembers.map((m) => m.id);
+
+      // Defence-in-depth: also confirm every returned member is in the caller's
+      // tree (catches data inconsistencies where a member's teamId != manager).
+      await assertCanAccessUsers(request, memberIds);
 
       // Get latest profile snapshot per member for the requested framework
       const allSnapshots = await db
@@ -346,6 +374,17 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       const { db } = request.tenant;
       const body = parseBody(updateDevelopmentGoalSchema, request.body);
 
+      const [goal] = await db
+        .select()
+        .from(profileDevelopmentGoals)
+        .where(eq(profileDevelopmentGoals.id, id));
+
+      if (!goal) {
+        return reply.code(404).send({ error: "Goal not found" });
+      }
+
+      await assertCanAccessUser(request, goal.userId);
+
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       if (body.status !== undefined) updates.status = body.status;
       if (body.notes !== undefined) updates.notes = body.notes;
@@ -356,6 +395,8 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         .where(eq(profileDevelopmentGoals.id, id))
         .returning();
 
+      // The row can vanish between the pre-fetch and the UPDATE (concurrent
+      // delete); without this guard reply.send(undefined) would 200 with no body.
       if (!updated) {
         return reply.code(404).send({ error: "Goal not found" });
       }

@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray, or } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   calendarEvents,
@@ -75,29 +75,57 @@ export async function syncCalendarForUser(
     }
   }
 
-  // Create relationships for co-attendees with >= 2 shared meetings
+  // Create relationships for co-attendees with >= 2 shared meetings.
+  // Batch the existence check into a single query (replaces N sequential
+  // per-pair queries) to avoid N+1 DB round-trips.
+  const qualifiedPairs = [...coAttendeeCounts.entries()].filter(([, c]) => c >= 2);
   let relationshipsCreated = 0;
-  for (const [otherId, count] of coAttendeeCounts) {
-    if (count < 2) continue;
 
-    // Check if relationship already exists
-    const existing = await db
-      .select()
+  if (qualifiedPairs.length > 0) {
+    // Fix 3: scope the existence check to only the candidate other-user IDs
+    // so the query is bounded by this batch rather than the whole org.
+    const otherIds = qualifiedPairs.map(([id]) => id);
+    const existingRels = await db
+      .select({
+        fromUserId: userRelationships.fromUserId,
+        toUserId: userRelationships.toUserId,
+      })
       .from(userRelationships)
       .where(
-        sql`((${userRelationships.fromUserId} = ${userId} AND ${userRelationships.toUserId} = ${otherId}) OR (${userRelationships.fromUserId} = ${otherId} AND ${userRelationships.toUserId} = ${userId}))`,
+        or(
+          inArray(userRelationships.fromUserId, otherIds),
+          inArray(userRelationships.toUserId, otherIds),
+        ),
       );
 
-    if (existing.length === 0) {
-      await db.insert(userRelationships).values({
-        fromUserId: userId,
-        toUserId: otherId,
-        label: "Calendar-inferred connection",
-        tags: ["calendar"],
-        strength: Math.min(1, count / 10),
-        source: "calendar",
-      });
-      relationshipsCreated++;
+    const existingSet = new Set(
+      existingRels.map((r) =>
+        [r.fromUserId, r.toUserId].sort().join("|"),
+      ),
+    );
+
+    for (const [otherId, count] of qualifiedPairs) {
+      const pairKey = [userId, otherId].sort().join("|");
+      if (existingSet.has(pairKey)) continue;
+
+      // In-run dedup via existingSet above; the uq_user_relationship_pair
+      // constraint (migration 0031) backstops concurrent syncs landing on the
+      // same directional pair — onConflictDoNothing makes those inserts no-ops.
+      const inserted = await db
+        .insert(userRelationships)
+        .values({
+          fromUserId: userId,
+          toUserId: otherId,
+          label: "Calendar-inferred connection",
+          tags: ["calendar"],
+          strength: Math.min(1, count / 10),
+          source: "calendar",
+        })
+        .onConflictDoNothing({
+          target: [userRelationships.fromUserId, userRelationships.toUserId],
+        })
+        .returning({ id: userRelationships.id });
+      if (inserted.length > 0) relationshipsCreated++;
     }
   }
 

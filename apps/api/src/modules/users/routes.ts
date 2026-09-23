@@ -37,7 +37,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /users — Create a single user (admin only)
   app.post("/", { preHandler: requireRole("admin") }, async (request, reply) => {
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
     const body = parseBody(createUserSchema, request.body);
 
     // Only super_admin can create admin or super_admin users
@@ -66,7 +66,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
 
   // POST /users/bulk — Bulk user import (admin only)
   app.post("/bulk", { preHandler: requireRole("admin") }, async (request, reply) => {
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
     const body = parseBody(bulkCreateUsersSchema, request.body);
 
     // Only super_admin can create admin or super_admin users in bulk

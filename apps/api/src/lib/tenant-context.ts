@@ -96,9 +96,12 @@ export const tenantPlugin = fp(async function tenantPlugin(app: FastifyInstance)
   app.decorateRequest("tenant");
 
   app.addHook("preHandler", async (request) => {
-    // Health check and WS routes bypass internal secret validation
+    // Health check, WS and chat webhook routes bypass internal secret validation.
+    // Webhooks come straight from Slack/Google Chat/Teams, which never send
+    // x-internal-secret; each adapter verifies the platform's own signature
+    // in verifyWebhook() instead.
     const url = request.url.split("?")[0];
-    if (url === "/health" || url.startsWith("/ws/")) {
+    if (url === "/health" || url.startsWith("/ws/") || url.startsWith("/webhooks/")) {
       request.tenant = {
         orgId: process.env.ORG_ID ?? "dev-org",
         db: getTenantDb(process.env.ORG_ID ?? "dev-org", DATABASE_URL),

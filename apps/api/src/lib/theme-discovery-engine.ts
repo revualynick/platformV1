@@ -1,4 +1,5 @@
 import { gte, eq } from "drizzle-orm";
+import { z } from "zod";
 import type { TenantDb } from "@revualy/db";
 import { feedbackEntries, coreValues } from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
@@ -12,14 +13,16 @@ export interface DiscoveredTheme {
   sampleEvidence: string[];
 }
 
-interface RawLLMTheme {
-  name: string;
-  description: string;
-  frequency: number;
-  confidence: number;
-  related_core_value?: string;
-  sample_evidence: string[];
-}
+const rawLLMThemeSchema = z.object({
+  name: z.string().default(""),
+  description: z.string().default(""),
+  frequency: z.number().default(0),
+  confidence: z.number().default(0),
+  related_core_value: z.string().optional(),
+  sample_evidence: z.array(z.string()).default([]),
+});
+
+type RawLLMTheme = z.infer<typeof rawLLMThemeSchema>;
 
 const BATCH_SIZE = 20;
 const MAX_THEMES = 15;
@@ -150,8 +153,13 @@ ${numbered}`,
   });
 
   try {
-    const parsed = JSON.parse(response.content) as RawLLMTheme[];
-    if (!Array.isArray(parsed)) return [];
+    const raw: unknown = JSON.parse(response.content);
+    if (!Array.isArray(raw)) return [];
+    const parsed: RawLLMTheme[] = raw
+      .map((item) => rawLLMThemeSchema.safeParse(item))
+      .filter((r): r is z.SafeParseSuccess<RawLLMTheme> => r.success)
+      .map((r) => r.data);
+    if (parsed.length === 0) return [];
 
     return parsed.map((t) => ({
       name: String(t.name ?? "").slice(0, 200),

@@ -222,31 +222,34 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      // Set status to analyzing while we aggregate
-      await db
-        .update(threeSixtyReviews)
-        .set({ status: "analyzing", updatedAt: new Date() })
-        .where(eq(threeSixtyReviews.id, id));
-
-      // Run aggregation
-      const aggregation = await aggregateThreeSixtyReview(db, id);
-
       const completedCount = responses.filter(
         (r) => r.status === "completed",
       ).length;
 
-      // Update review with aggregated data
-      const [updated] = await db
-        .update(threeSixtyReviews)
-        .set({
-          status: "completed",
-          aggregatedData: aggregation,
-          completedReviewerCount: completedCount,
-          completedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(threeSixtyReviews.id, id))
-        .returning();
+      const updated = await db.transaction(async (tx) => {
+        // Set status to analyzing while we aggregate
+        await tx
+          .update(threeSixtyReviews)
+          .set({ status: "analyzing", updatedAt: new Date() })
+          .where(eq(threeSixtyReviews.id, id));
+
+        // Run aggregation (uses db, not tx — reads only, safe outside tx boundary)
+        const aggregation = await aggregateThreeSixtyReview(db, id);
+
+        const [result] = await tx
+          .update(threeSixtyReviews)
+          .set({
+            status: "completed",
+            aggregatedData: aggregation,
+            completedReviewerCount: completedCount,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(threeSixtyReviews.id, id))
+          .returning();
+
+        return result;
+      });
 
       return reply.send(updated);
     },

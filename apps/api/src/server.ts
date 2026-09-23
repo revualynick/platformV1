@@ -6,6 +6,8 @@ import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
 import { authRoutes } from "./modules/auth/routes.js";
 import { chatRoutes, setConversationQueue } from "./modules/chat/routes.js";
+import { devRoutes, setSimulatorDeps } from "./modules/dev/routes.js";
+import { InternalSimulatorAdapter } from "./lib/internal-simulator-adapter.js";
 import { feedbackRoutes } from "./modules/feedback/routes.js";
 import { usersRoutes } from "./modules/users/routes.js";
 import { orgRoutes } from "./modules/org/routes.js";
@@ -31,7 +33,8 @@ import { assessmentRoutes } from "./modules/assessments/routes.js";
 import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin } from "./lib/tenant-context.js";
-import { createQueues, createWorkers, initStateRedis, closeStateRedis } from "./workers/index.js";
+import { createQueues, createWorkers, initStateRedis, closeStateRedis, getStateRedis } from "./workers/index.js";
+import { RedisAsyncStore } from "./lib/redis-async-store.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
 import { runMigrations } from "@revualy/db/migrate";
 import { AdapterRegistry } from "@revualy/chat-core";
@@ -137,6 +140,7 @@ export async function buildApp() {
   await app.register(profileRoutes, { prefix: "/api/v1/profiles" });
   await app.register(demoRoutes, { prefix: "/api/v1/demo" });
   await app.register(goalsRoutes, { prefix: "/api/v1/goals" });
+  await app.register(devRoutes, { prefix: "/api/v1/dev" });
 
   // WebSocket routes
   registerOneOnOneWs(app, REDIS_URL);
@@ -231,9 +235,11 @@ async function start() {
     if (!process.env.TEAMS_APP_PASSWORD) {
       app.log.warn("TEAMS_APP_ID is set but TEAMS_APP_PASSWORD is missing — Teams adapter not registered");
     } else {
+      // Use the shared state Redis so conversation refs survive process restarts.
       adapters.register(new TeamsAdapter({
         appId: process.env.TEAMS_APP_ID,
         appPassword: process.env.TEAMS_APP_PASSWORD,
+        store: new RedisAsyncStore(getStateRedis()),
       }));
       app.log.info("Teams adapter registered");
     }
@@ -247,6 +253,17 @@ async function start() {
     }
   }
 
+  // Internal chat-simulation harness (dev only — the /dev routes are inert
+  // unless TEST_LOGIN_ENABLED=true, and still require the TEST_LOGIN_KEY).
+  const simulator = new InternalSimulatorAdapter();
+  adapters.register(simulator);
+  setSimulatorDeps({
+    llm,
+    adapters,
+    analysisQueue: queues.analysisQueue,
+    simulator,
+  });
+
   // Expose on app so route handlers can access app.llm / app.adapters
   app.decorate("llm", llm);
   app.decorate("adapters", adapters);
@@ -258,25 +275,41 @@ async function start() {
     queues,
   });
 
-  app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification, profile-signals)");
+  app.log.info("BullMQ workers started (conversation, analysis, scheduler, notification, calendar-sync, profile-signals, check-in)");
 
   // ── Repeatable cron jobs ───────────────────────────────
   // Per-tenant deployment: single org per instance.
   const cronOrgId = process.env.ORG_ID ?? "dev-org";
 
   // Clean up stale repeatable jobs before re-adding
-  for (const queue of [queues.notificationQueue, queues.calendarSyncQueue, queues.profileSignalsQueue, queues.checkInQueue]) {
+  for (const queue of [queues.schedulerQueue, queues.notificationQueue, queues.calendarSyncQueue, queues.profileSignalsQueue, queues.checkInQueue]) {
     const repeatableJobs = await queue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await queue.removeRepeatableByKey(job.key);
     }
   }
 
+  // Interaction scheduler: weekdays at 10:00 AM UTC — initiates peer_review /
+  // self_reflection conversations for the day. SCHEDULER_PLATFORM controls the
+  // outbound chat platform (default "slack").
+  await queues.schedulerQueue.add(
+    "scheduling-pass",
+    { orgId: cronOrgId, platform: (process.env.SCHEDULER_PLATFORM ?? "slack") },
+    { repeat: { pattern: "0 10 * * 1-5" }, jobId: "scheduling-pass-cron" },
+  );
+
   // Weekly digest: Monday 9:00 AM UTC
   await queues.notificationQueue.add(
     "schedule_weekly_digests",
     { type: "schedule_weekly_digests", orgId: cronOrgId },
     { repeat: { pattern: "0 9 * * 1" }, jobId: "weekly-digest-cron" },
+  );
+
+  // Nudge reminders: Wednesday and Friday 9:00 AM UTC — remind users behind their weekly target
+  await queues.notificationQueue.add(
+    "schedule_nudges",
+    { type: "schedule_nudges", orgId: cronOrgId },
+    { repeat: { pattern: "0 9 * * 3,5" }, jobId: "nudge-cron" },
   );
 
   // Calendar sync: every 15 minutes

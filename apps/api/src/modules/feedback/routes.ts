@@ -7,10 +7,13 @@ import {
   users,
 } from "@revualy/db";
 import { parseBody, idParamSchema } from "../../lib/validation.js";
-import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { requireAuth, requireRole, assertCanAccessUser } from "../../lib/rbac.js";
 import { z } from "zod";
 
 const feedbackLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
+const exportQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+});
 
 export const feedbackRoutes: FastifyPluginAsync = async (app) => {
   // All feedback routes require authentication
@@ -19,36 +22,10 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
   // GET /users/:id/feedback — RBAC-filtered feedback for a user
   app.get("/users/:id/feedback", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
-    const { db, userId } = request.tenant;
+    const { db } = request.tenant;
 
-    if (!userId) {
-      return reply.code(401).send({ error: "Authentication required" });
-    }
-
-    // RBAC: employees see own feedback only, managers see their reports', admins see all
-    if (id !== userId) {
-      const [caller] = await db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId));
-
-      if (!caller || caller.role === "employee") {
-        return reply.code(403).send({ error: "You can only view your own feedback" });
-      }
-
-      // Managers must have a direct management relationship to the subject
-      if (caller.role === "manager") {
-        const [subject] = await db
-          .select({ managerId: users.managerId })
-          .from(users)
-          .where(eq(users.id, id));
-
-        if (!subject || subject.managerId !== userId) {
-          return reply.code(403).send({ error: "You can only view feedback for your direct reports" });
-        }
-      }
-      // Admins pass through
-    }
+    // assertCanAccessUser allows: self, admin/super_admin, or user in caller's reporting tree
+    await assertCanAccessUser(request, id);
 
     const { limit } = feedbackLimitSchema.parse(request.query);
     const entries = await db
@@ -178,8 +155,7 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     // Exports page at 1000 entries — fetch one extra to signal more,
     // callers pass ?offset= to continue.
     const EXPORT_PAGE_SIZE = 1000;
-    const { offset: rawOffset } = request.query as { offset?: string };
-    const offset = Math.max(0, parseInt(rawOffset ?? "0", 10) || 0);
+    const { offset } = exportQuerySchema.parse(request.query);
 
     const entries = await db
       .select()

@@ -132,7 +132,7 @@ export const updateRelationshipSchema = z.object({
 // ── Notifications ─────────────────────────────────────
 
 export const updateNotificationPrefSchema = z.object({
-  type: z.enum(["weekly_digest", "flag_alert", "nudge", "leaderboard_update"]),
+  type: z.enum(["weekly_digest", "flag_alert", "nudge", "assessment_invite"]),
   enabled: z.boolean(),
   channel: z.enum(["email"]).optional(),
 });

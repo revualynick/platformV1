@@ -74,6 +74,7 @@ export const pulseRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // TODO(review): accept optional ?triggerType= query param to filter by type beyond "sentiment_decline"
       const rows = await db
         .select()
         .from(pulseCheckTriggers)

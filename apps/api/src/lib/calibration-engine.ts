@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, lt, sql } from "drizzle-orm";
+import { eq, and, gte, lt, sql, inArray } from "drizzle-orm";
 import {
   feedbackEntries,
   users,
@@ -127,12 +127,7 @@ export async function generateCalibrationReport(
     const escalationRows = await db
       .select({ feedbackEntryId: escalations.feedbackEntryId })
       .from(escalations)
-      .where(
-        sql`${escalations.feedbackEntryId} IN (${sql.join(
-          feedbackIds.map((id) => sql`${id}::uuid`),
-          sql`, `,
-        )})`,
-      );
+      .where(inArray(escalations.feedbackEntryId, feedbackIds));
     escalationFeedbackIds = new Set(
       escalationRows
         .map((r) => r.feedbackEntryId)

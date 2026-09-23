@@ -9,9 +9,16 @@ import {
   feedbackValueScores,
   coreValues,
   escalations,
+  selfReflections,
+  users,
 } from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
 import { evaluatePulseCheckTrigger } from "./pulse-check-monitor.js";
+import { extractReflectionData } from "./reflection-extractor.js";
+import {
+  recomputeWeeklyEngagement,
+  weekMondayUTC,
+} from "./engagement-aggregation.js";
 
 const flagResultSchema = z.object({
   shouldFlag: z.boolean().default(false),
@@ -55,6 +62,7 @@ export async function runAnalysisPipeline(
   logger: Pick<Console, "error" | "warn" | "info"> = console,
   orgId?: string,
   profileSignalsQueue?: Queue,
+  notificationQueue?: Queue,
 ): Promise<AnalysisPipelineResult> {
   // 1. Fetch conversation + messages in parallel
   const [[conversation], messages] = await Promise.all([
@@ -79,6 +87,46 @@ export async function runAnalysisPipeline(
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 
+  // Self-reflection is private + self-directed: it belongs in `self_reflections`
+  // (what the Reflections page reads), NOT in `feedback_entries` (peer feedback,
+  // which would both hide it from the Reflections page and pollute the subject's
+  // received-feedback views). Extract structured reflection data and upsert it.
+  if (conversation.interactionType === "self_reflection") {
+    const week = weekMondayUTC(conversation.createdAt ?? new Date());
+    try {
+      const llmMessages = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const extracted = await extractReflectionData(llm, llmMessages);
+      const fields = {
+        status: "completed" as const,
+        conversationId,
+        mood: extracted.mood,
+        highlights: extracted.highlights ?? null,
+        challenges: extracted.challenges ?? null,
+        goalForNextWeek: extracted.goalForNextWeek ?? null,
+        engagementScore: extracted.engagementScore ?? null,
+        completedAt: new Date(),
+      };
+      await db
+        .insert(selfReflections)
+        .values({ userId: conversation.subjectId, weekStarting: week, ...fields })
+        .onConflictDoUpdate({
+          target: [selfReflections.userId, selfReflections.weekStarting],
+          set: fields,
+        });
+      await recomputeWeeklyEngagement(db, conversation.subjectId, week);
+    } catch (err) {
+      logger.error(
+        `[Analysis] self_reflection extraction failed for ${conversationId}:`,
+        err,
+      );
+      return { success: false, failedSteps: ["reflection"], feedbackEntryId: null };
+    }
+    return { success: true, failedSteps: [], feedbackEntryId: null };
+  }
+
   // 2. Fetch org's core values for mapping
   const orgValues = await db
     .select()
@@ -87,14 +135,12 @@ export async function runAnalysisPipeline(
     .limit(20);
 
   // 3. Run analysis steps in parallel with graceful degradation
-  const safeContent = rawContent;
-
   const results = await Promise.allSettled([
-    analyzeSentiment(llm, safeContent),
-    scoreEngagement(llm, safeContent, userMessages.length, logger),
-    generateSummary(llm, safeContent, conversation.interactionType),
-    detectFlags(llm, safeContent),
-    orgValues.length > 0 ? mapCoreValues(llm, safeContent, orgValues) : Promise.resolve([]),
+    analyzeSentiment(llm, rawContent),
+    scoreEngagement(llm, rawContent, userMessages.length, logger),
+    generateSummary(llm, rawContent, conversation.interactionType),
+    detectFlags(llm, rawContent),
+    orgValues.length > 0 ? mapCoreValues(llm, rawContent, orgValues) : Promise.resolve([]),
   ]);
 
   // Extract results with safe defaults for any failures
@@ -134,6 +180,7 @@ export async function runAnalysisPipeline(
 
   // 4-6. Write feedback entry, value scores, and escalation in a transaction
   let feedbackEntryId: string | null = null;
+  let escalationId: string | null = null;
   await db.transaction(async (tx) => {
     const rows = await tx
       .insert(feedbackEntries)
@@ -172,12 +219,22 @@ export async function runAnalysisPipeline(
     }
 
     if (flagResult.shouldFlag) {
-      await tx.insert(escalations).values({
-        feedbackEntryId: feedbackEntry.id,
-        severity: mapFlagSeverity(flagResult.severity),
-        reason: safeReason,
-        flaggedContent: safeFlaggedContent,
-      }).onConflictDoNothing();
+      // subjectId is REQUIRED: getFlaggedItemsForReports filters escalations by
+      // subject_id, so an escalation without it is invisible to the manager.
+      const escRows = await tx
+        .insert(escalations)
+        .values({
+          feedbackEntryId: feedbackEntry.id,
+          subjectId: conversation.subjectId,
+          type: "ai_flag",
+          severity: mapFlagSeverity(flagResult.severity),
+          reason: safeReason,
+          description: safeReason,
+          flaggedContent: safeFlaggedContent,
+        })
+        .onConflictDoNothing()
+        .returning({ id: escalations.id });
+      escalationId = escRows[0]?.id ?? null;
     }
   });
 
@@ -185,6 +242,46 @@ export async function runAnalysisPipeline(
   // (and BullMQ retries), but deliberately non-fatal — a queue hiccup
   // must not fail an otherwise-complete analysis.
   if (feedbackEntryId) {
+    // Refresh the reviewer's weekly engagement so the ring / trend / leaderboard
+    // / digest reflect this conversation (nothing else writes engagement_scores).
+    try {
+      await recomputeWeeklyEngagement(db, conversation.reviewerId);
+    } catch (err) {
+      logger.error(`[Engagement] recompute failed for ${conversation.reviewerId}:`, err);
+    }
+
+    // Alert the subject's direct manager when the AI flagged this feedback.
+    if (flagResult.shouldFlag && escalationId && notificationQueue) {
+      try {
+        const [subject] = await db
+          .select({ name: users.name, managerId: users.managerId })
+          .from(users)
+          .where(eq(users.id, conversation.subjectId));
+        if (subject?.managerId) {
+          const [manager] = await db
+            .select({ name: users.name, email: users.email })
+            .from(users)
+            .where(eq(users.id, subject.managerId));
+          if (manager?.email) {
+            await notificationQueue.add("flag_alert", {
+              type: "flag_alert",
+              orgId: orgId ?? "",
+              managerId: subject.managerId,
+              managerEmail: manager.email,
+              managerName: manager.name ?? "Manager",
+              subjectName: subject.name ?? "a team member",
+              severity: mapFlagSeverity(flagResult.severity),
+              reason: safeReason,
+              flaggedContent: safeFlaggedContent,
+              escalationId,
+            });
+          }
+        }
+      } catch (err) {
+        logger.error(`[FlagAlert] enqueue failed for ${escalationId}:`, err);
+      }
+    }
+
     if (profileSignalsQueue) {
       try {
         await profileSignalsQueue.add("extract_signals", {

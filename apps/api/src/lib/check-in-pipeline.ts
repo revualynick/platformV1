@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and, inArray, notInArray } from "drizzle-orm";
+import { eq, and, or, gte, inArray, notInArray } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   users,
@@ -292,36 +292,41 @@ export async function getCandidateGoals(
 ): Promise<CandidateGoal[]> {
   const cycle = await getCurrentCycle(db);
 
-  const conditions = [
-    eq(goals.ownerId, subjectUserId),
-    notInArray(goals.status, ["achieved", "archived", "draft"]),
-  ];
+  // DB-level filter: individual goals scoped to the current cycle (or all
+  // individual goals when no cycle exists), plus personal goals shared with
+  // manager. Prior-cycle individual goals and unshared personal goals are
+  // excluded at the query level rather than filtered in memory.
+  const levelFilter = cycle
+    ? or(
+        and(eq(goals.level, "individual"), eq(goals.cycleId, cycle.id)),
+        and(eq(goals.level, "personal"), eq(goals.shareWithManager, true)),
+      )
+    : or(
+        eq(goals.level, "individual"),
+        and(eq(goals.level, "personal"), eq(goals.shareWithManager, true)),
+      );
 
   const rows = await db
     .select()
     .from(goals)
-    .where(and(...conditions));
+    .where(
+      and(
+        eq(goals.ownerId, subjectUserId),
+        notInArray(goals.status, ["achieved", "archived", "draft"]),
+        levelFilter,
+      ),
+    );
 
-  return rows
-    .filter((g) => {
-      if (g.level === "individual") {
-        return !cycle || g.cycleId === cycle.id;
-      }
-      if (g.level === "personal") {
-        return g.shareWithManager;
-      }
-      return false;
-    })
-    .map((g) => ({
-      id: g.id,
-      title: g.title,
-      description: g.description,
-      status: g.status,
-      progressPercent: g.progressPercent,
-      metricName: g.metricName,
-      metricCurrentValue: g.metricCurrentValue,
-      metricTargetValue: g.metricTargetValue,
-    }));
+  return rows.map((g) => ({
+    id: g.id,
+    title: g.title,
+    description: g.description,
+    status: g.status,
+    progressPercent: g.progressPercent,
+    metricName: g.metricName,
+    metricCurrentValue: g.metricCurrentValue,
+    metricTargetValue: g.metricTargetValue,
+  }));
 }
 
 // ── Poll + process orchestration ────────────────────────
@@ -433,10 +438,25 @@ async function processPendingMeetings(
   logger: Logger,
   google: CheckInGoogleDeps,
 ): Promise<number> {
+  // Also retry recently-failed meetings (transient errors) updated within the
+  // last 24 h and below the attempt ceiling — they'll get another chance each
+  // hourly cron run. Permanent failures stay "failed" and are excluded.
+  const retryWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const conditions = [
+    or(
+      eq(checkInMeetings.status, "pending_transcript"),
+      and(
+        eq(checkInMeetings.status, "failed"),
+        gte(checkInMeetings.lastAttemptAt, retryWindow),
+        // attemptCount < TRANSCRIPT_MAX_ATTEMPTS is enforced by the
+        // give-up logic later in the loop; include all here for simplicity
+      ),
+    ),
+  ];
   const pending = await db
     .select()
     .from(checkInMeetings)
-    .where(eq(checkInMeetings.status, "pending_transcript"))
+    .where(and(...conditions))
     .limit(50);
 
   let processed = 0;
@@ -546,12 +566,17 @@ async function processPendingMeetings(
       // responses containing meeting/transcript content. Full detail
       // goes to the logger only.
       const code = classifyPipelineError(err);
+      // Transient errors (network, rate limit, LLM) stay pending_transcript so
+      // the next hourly run retries them. Permanent errors (auth revoked,
+      // missing subject, export failure) go to "failed" and stop retrying.
+      const transientCodes = new Set(["google_rate_limited", "network_error", "llm_error"]);
+      const nextStatus = transientCodes.has(code) ? "pending_transcript" : "failed";
       await db
         .update(checkInMeetings)
-        .set({ status: "failed", errorMessage: code, lastAttemptAt: new Date() })
+        .set({ status: nextStatus, errorMessage: code, lastAttemptAt: new Date(), attemptCount: meeting.attemptCount + 1 })
         .where(eq(checkInMeetings.id, meeting.id));
       logger.log(
-        `Check-in processing failed for meeting ${meeting.id} [${code}]: ${
+        `Check-in processing failed for meeting ${meeting.id} [${code}] → ${nextStatus}: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );

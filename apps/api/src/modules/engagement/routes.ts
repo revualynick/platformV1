@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, desc, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { engagementScores, users } from "@revualy/db";
-import { requireAuth, requireRole } from "../../lib/rbac.js";
+import { requireAuth, requireRole, assertCanAccessUsers } from "../../lib/rbac.js";
 import { z } from "zod";
 
 const leaderboardQuerySchema = z.object({ week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
@@ -12,8 +12,9 @@ const bulkEngagementQuerySchema = z.object({
 export const engagementRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
 
-  // GET /leaderboard — Weekly leaderboard
-  app.get("/leaderboard", async (request, reply) => {
+  // GET /leaderboard — Weekly leaderboard (manager+ only)
+  // TODO(review): could be scoped to reporting tree for managers vs full org for admins
+  app.get("/leaderboard", { preHandler: requireRole("manager") }, async (request, reply) => {
     const { db } = request.tenant;
     const querySchema = leaderboardQuerySchema;
     const { week } = querySchema.parse(request.query);
@@ -78,6 +79,8 @@ export const engagementRoutes: FastifyPluginAsync = async (app) => {
       if (userIds.length === 0 || userIds.length > 100) {
         return reply.code(400).send({ error: "Provide 1-100 userIds" });
       }
+
+      await assertCanAccessUsers(request, userIds);
 
       // Latest score per user via DISTINCT ON
       const rows = await db

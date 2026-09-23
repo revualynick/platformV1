@@ -7,6 +7,8 @@ import {
   users,
   conversations,
   feedbackEntries,
+  feedbackValueScores,
+  coreValues,
   kudos,
   engagementScores,
   escalations,
@@ -14,8 +16,9 @@ import {
   calendarTokens,
   behavioralSignals,
   profileSnapshots,
+  feedbackDigests,
 } from "@revualy/db";
-import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, lt, desc, inArray, sql } from "drizzle-orm";
 import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
@@ -26,6 +29,7 @@ import {
 } from "../lib/conversation-orchestrator.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
+import { buildJobId } from "../lib/job-ids.js";
 import { sendEmail } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
@@ -49,6 +53,10 @@ const initiateJobSchema = z.object({
   platform: z.enum(["slack", "google_chat", "teams", "internal"]),
   channelId: z.string().optional(),
   questionnaireId: z.string(),
+  // Preserved through Zod so dedup logic can reference the originating schedule
+  // entry. TODO: pass to initiateConversation once the orchestrator persists it
+  // on the conversations row, enabling true idempotent re-delivery guards.
+  scheduleEntryId: z.string().optional(),
 });
 
 const replyJobSchema = z.object({
@@ -332,7 +340,7 @@ export function createWorkers(config: WorkerConfig) {
         process.env.DATABASE_URL ?? "",
       );
 
-      await runAnalysisPipeline(db, llm, conversationId, console, orgId, queues.profileSignalsQueue);
+      await runAnalysisPipeline(db, llm, conversationId, console, orgId, queues.profileSignalsQueue, queues.notificationQueue);
     },
     { connection, concurrency: 3, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
@@ -391,10 +399,43 @@ export function createWorkers(config: WorkerConfig) {
                 userId: user.id,
                 email: user.email,
               },
-              opts: { jobId: `weekly-digest:${orgId}:${user.id}:${weekKey}` },
+              opts: { jobId: buildJobId("weekly-digest", orgId, user.id, weekKey) },
             })),
           );
           job.log(`Dispatched ${activeUsers.length} weekly digest jobs`);
+
+          // Also fan out team-insights generation for each manager
+          const managers = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(
+              and(
+                eq(users.isActive, true),
+                eq(users.onboardingCompleted, true),
+                eq(users.role, "manager"),
+              ),
+            );
+
+          if (managers.length > 0) {
+            // monthStarting for the just-completed period (previous month on Monday = last month)
+            const now = new Date();
+            const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonthStarting = prevMonth.toISOString().slice(0, 10);
+
+            await queues.notificationQueue.addBulk(
+              managers.map((m) => ({
+                name: "generate_team_insights",
+                data: {
+                  type: "generate_team_insights",
+                  orgId,
+                  managerId: m.id,
+                  monthStarting: prevMonthStarting,
+                },
+                opts: { jobId: buildJobId("team-insights", orgId, m.id, prevMonthStarting) },
+              })),
+            );
+            job.log(`Dispatched ${managers.length} team-insights generation jobs`);
+          }
           break;
         }
 
@@ -432,7 +473,7 @@ export function createWorkers(config: WorkerConfig) {
           const [user] = await db.select().from(users).where(eq(users.id, data.userId));
           if (!user) break;
 
-          const [feedbackReceived, feedbackGiven, kudosRows, engRows] = await Promise.all([
+          const [feedbackReceived, feedbackGiven, kudosRows, engRows, topValueRows] = await Promise.all([
             db.select().from(feedbackEntries).where(
               and(eq(feedbackEntries.subjectId, data.userId), gte(feedbackEntries.createdAt, weekAgo)),
             ),
@@ -444,6 +485,16 @@ export function createWorkers(config: WorkerConfig) {
             ),
             db.select().from(engagementScores).where(eq(engagementScores.userId, data.userId))
               .orderBy(desc(engagementScores.weekStarting)).limit(1),
+            // Highest-scoring core value received by this user in the digest week
+            db
+              .select({ name: coreValues.name, totalScore: sql<number>`sum(${feedbackValueScores.score})` })
+              .from(feedbackValueScores)
+              .innerJoin(feedbackEntries, eq(feedbackValueScores.feedbackEntryId, feedbackEntries.id))
+              .innerJoin(coreValues, eq(feedbackValueScores.coreValueId, coreValues.id))
+              .where(and(eq(feedbackEntries.subjectId, data.userId), gte(feedbackEntries.createdAt, weekAgo)))
+              .groupBy(coreValues.id, coreValues.name)
+              .orderBy(desc(sql<number>`sum(${feedbackValueScores.score})`))
+              .limit(1),
           ]);
 
           const digestData: WeeklyDigestData = {
@@ -454,7 +505,7 @@ export function createWorkers(config: WorkerConfig) {
             feedbackGiven: feedbackGiven.length,
             engagementScore: engRows[0]?.averageQualityScore ?? 0,
             kudosReceived: kudosRows.length,
-            topValue: null, // Would require value scores join — simplified
+            topValue: topValueRows[0]?.name ?? null,
             streak: engRows[0]?.streak ?? 0,
           };
 
@@ -554,6 +605,256 @@ export function createWorkers(config: WorkerConfig) {
           break;
         }
 
+        case "generate_team_insights": {
+          // Generate (or refresh) a feedback_digests row for a manager for the given month.
+          // Idempotent: upserts keyed by (managerId, monthStarting).
+          const { orgId, managerId, monthStarting } = job.data as {
+            orgId: string;
+            managerId: string;
+            monthStarting: string; // "YYYY-MM-DD" (1st of month)
+          };
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+          const directReports = await db
+            .select({ id: users.id, name: users.name, teamId: users.teamId })
+            .from(users)
+            .where(and(eq(users.managerId, managerId), eq(users.isActive, true)));
+
+          if (directReports.length === 0) {
+            job.log(`Manager ${managerId} has no direct reports — skipping team insights`);
+            break;
+          }
+
+          const reportIds = directReports.map((r) => r.id);
+
+          const monthStart = new Date(monthStarting);
+          const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+
+          // Previous-month digest for sentiment trend
+          const prevMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+          const prevMonthStarting = prevMonthStart.toISOString().slice(0, 10);
+
+          const [prevDigest] = await db
+            .select({ data: feedbackDigests.data })
+            .from(feedbackDigests)
+            .where(
+              and(
+                eq(feedbackDigests.managerId, managerId),
+                eq(feedbackDigests.monthStarting, prevMonthStarting),
+              ),
+            );
+
+          const monthEntries = await db
+            .select()
+            .from(feedbackEntries)
+            .where(
+              and(
+                inArray(feedbackEntries.subjectId, reportIds),
+                gte(feedbackEntries.createdAt, monthStart),
+                lt(feedbackEntries.createdAt, monthEnd),
+              ),
+            );
+
+          const entryIds = monthEntries.map((e) => e.id);
+          let valueScores: Array<typeof feedbackValueScores.$inferSelect> = [];
+          if (entryIds.length > 0) {
+            valueScores = await db
+              .select()
+              .from(feedbackValueScores)
+              .where(inArray(feedbackValueScores.feedbackEntryId, entryIds));
+          }
+
+          const allValues = await db
+            .select()
+            .from(coreValues)
+            .where(eq(coreValues.isActive, true));
+          const valueNameMap = new Map(allValues.map((v) => [v.id, v.name]));
+
+          const prevSentimentByUser = new Map<string, number>();
+          if (prevDigest) {
+            const prevData = prevDigest.data as { memberSummaries: Array<{ userId: string; avgSentiment: number }> };
+            for (const m of prevData.memberSummaries ?? []) {
+              prevSentimentByUser.set(m.userId, m.avgSentiment);
+            }
+          }
+
+          const memberSummaries = directReports.map((report) => {
+            const reportEntries = monthEntries.filter((e) => e.subjectId === report.id);
+            const feedbackCount = reportEntries.length;
+            const sentimentScores = reportEntries.map((e) => {
+              if (e.sentiment === "positive") return 1;
+              if (e.sentiment === "negative") return 0;
+              return 0.5;
+            });
+            const avgSentiment =
+              feedbackCount > 0
+                ? sentimentScores.reduce((a: number, b) => a + b, 0) / feedbackCount
+                : 0.5;
+            const prevSentiment = prevSentimentByUser.get(report.id);
+            let sentimentTrend: "improving" | "stable" | "declining" = "stable";
+            if (prevSentiment !== undefined) {
+              const delta = avgSentiment - prevSentiment;
+              if (delta > 0.05) sentimentTrend = "improving";
+              else if (delta < -0.05) sentimentTrend = "declining";
+            }
+            const reportEntryIds = new Set(reportEntries.map((e) => e.id));
+            const reportValueScores = valueScores.filter((vs) => reportEntryIds.has(vs.feedbackEntryId));
+            const themeCount = new Map<string, number>();
+            for (const vs of reportValueScores) {
+              const name = valueNameMap.get(vs.coreValueId) ?? "Unknown";
+              themeCount.set(name, (themeCount.get(name) ?? 0) + 1);
+            }
+            const topThemes = [...themeCount.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 5)
+              .map(([name]) => name);
+            const languageQuality =
+              feedbackCount > 0
+                ? reportEntries.filter((e) => e.hasSpecificExamples).length / feedbackCount
+                : 0;
+            return {
+              userId: report.id,
+              name: report.name,
+              feedbackCount,
+              avgSentiment: Math.round(avgSentiment * 100) / 100,
+              sentimentTrend,
+              topThemes,
+              languageQuality: Math.round(languageQuality * 100) / 100,
+            };
+          });
+
+          const allMonthSentiments = monthEntries.map((e) => {
+            if (e.sentiment === "positive") return 1;
+            if (e.sentiment === "negative") return 0;
+            return 0.5;
+          });
+          const overallSentiment =
+            allMonthSentiments.length > 0
+              ? allMonthSentiments.reduce((a: number, b) => a + b, 0) / allMonthSentiments.length
+              : 0.5;
+          const reportsWithFeedback = memberSummaries.filter((m) => m.feedbackCount > 0).length;
+          const participationRate = directReports.length > 0 ? reportsWithFeedback / directReports.length : 0;
+
+          const themeFrequency: Record<string, number> = {};
+          for (const vs of valueScores) {
+            const name = valueNameMap.get(vs.coreValueId) ?? "Unknown";
+            themeFrequency[name] = (themeFrequency[name] ?? 0) + 1;
+          }
+          const topValues = Object.entries(themeFrequency)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name]) => name);
+
+          const constructiveCount = monthEntries.filter((e) => e.hasSpecificExamples).length;
+          const vague = monthEntries.length - constructiveCount;
+          const teamId = directReports[0]?.teamId ?? null;
+
+          const data = {
+            memberSummaries,
+            teamHealth: {
+              overallSentiment: Math.round(overallSentiment * 100) / 100,
+              participationRate: Math.round(participationRate * 100) / 100,
+              topValues,
+              themeFrequency,
+              languagePatterns: { constructive: constructiveCount, vague },
+            },
+            feedbackEntryIds: monthEntries.map((e) => e.id),
+          };
+
+          // Upsert keyed by (managerId, monthStarting)
+          const [existing] = await db
+            .select({ id: feedbackDigests.id })
+            .from(feedbackDigests)
+            .where(
+              and(
+                eq(feedbackDigests.managerId, managerId),
+                eq(feedbackDigests.monthStarting, monthStarting),
+              ),
+            );
+
+          if (existing) {
+            await db
+              .update(feedbackDigests)
+              .set({ data, updatedAt: new Date() })
+              .where(eq(feedbackDigests.id, existing.id));
+            job.log(`Updated team insights for manager ${managerId} / ${monthStarting}`);
+          } else {
+            await db.insert(feedbackDigests).values({
+              teamId,
+              managerId,
+              monthStarting,
+              data,
+            });
+            job.log(`Created team insights for manager ${managerId} / ${monthStarting}`);
+          }
+          break;
+        }
+
+        case "schedule_nudges": {
+          // Dispatcher: find active users behind their weekly interaction target and nudge them
+          const { orgId } = job.data as { orgId: string };
+          const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+          // Current week start (Monday 00:00 UTC)
+          const now = new Date();
+          const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon…6=Sat
+          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const weekStart = new Date(now);
+          weekStart.setUTCDate(now.getUTCDate() - daysFromMonday);
+          weekStart.setUTCHours(0, 0, 0, 0);
+          const weekStartDate = weekStart.toISOString().slice(0, 10);
+
+          // Find active, onboarded users with an engagement row for this week where they are behind target
+          const behindUsers = await db
+            .select({
+              id: users.id,
+              name: users.name,
+              email: users.email,
+              interactionsCompleted: engagementScores.interactionsCompleted,
+              interactionsTarget: engagementScores.interactionsTarget,
+            })
+            .from(users)
+            .innerJoin(
+              engagementScores,
+              and(
+                eq(engagementScores.userId, users.id),
+                eq(engagementScores.weekStarting, weekStartDate),
+              ),
+            )
+            .where(
+              and(
+                eq(users.isActive, true),
+                eq(users.onboardingCompleted, true),
+                sql`${engagementScores.interactionsCompleted} < ${engagementScores.interactionsTarget}`,
+              ),
+            );
+
+          if (behindUsers.length === 0) {
+            job.log("No users behind target this week — skipping nudges");
+            break;
+          }
+
+          const nudgeDay = now.toISOString().slice(0, 10);
+
+          await queues.notificationQueue.addBulk(
+            behindUsers.map((u) => ({
+              name: "nudge",
+              data: {
+                type: "nudge",
+                orgId,
+                userId: u.id,
+                email: u.email,
+                userName: u.name,
+                interactionsPending: u.interactionsTarget - u.interactionsCompleted,
+                targetThisWeek: u.interactionsTarget,
+              },
+              opts: { jobId: buildJobId("nudge", orgId, u.id, weekStartDate, nudgeDay) },
+            })),
+          );
+          job.log(`Dispatched ${behindUsers.length} nudge jobs`);
+          break;
+        }
+
         case "assessment_invite": {
           const data = job.data as {
             orgId: string;
@@ -594,12 +895,13 @@ export function createWorkers(config: WorkerConfig) {
           break;
         }
 
-        case "leaderboard_update":
-          // TODO Phase 5: Compute and publish leaderboard
-          break;
-
         default:
-          throw new Error(`Unknown notification job type: ${type}`);
+          // Unknown/removed job types (e.g. legacy `leaderboard_update` rows
+          // enqueued before that feature was dropped) are acknowledged as a
+          // no-op rather than thrown, so they don't crash the worker or wedge
+          // the queue with permanently-failing jobs.
+          job.log(`Ignoring unknown notification job type: ${type}`);
+          break;
       }
     },
     { connection, lockDuration: 60_000, lockRenewTime: 20_000 },
@@ -727,6 +1029,27 @@ export function createWorkers(config: WorkerConfig) {
 
           const periodStart = thirtyDaysAgo.toISOString().slice(0, 10);
           const periodEnd = new Date().toISOString().slice(0, 10);
+
+          // Idempotency: skip if a behavioral snapshot for this user+framework
+          // was already created today (no unique constraint exists on the table).
+          const today = periodEnd; // same value — end of the 30-day window
+          const [existingSnapshot] = await db
+            .select({ id: profileSnapshots.id })
+            .from(profileSnapshots)
+            .where(
+              and(
+                eq(profileSnapshots.userId, userId),
+                eq(profileSnapshots.framework, framework),
+                eq(profileSnapshots.source, "behavioral"),
+                gte(profileSnapshots.createdAt, new Date(`${today}T00:00:00Z`)),
+              ),
+            )
+            .limit(1);
+
+          if (existingSnapshot) {
+            job.log(`Snapshot already exists for user ${userId} / framework ${framework} today — skipping`);
+            break;
+          }
 
           await db.insert(profileSnapshots).values({
             userId,

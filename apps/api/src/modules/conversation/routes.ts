@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { conversations, conversationMessages } from "@revualy/db";
 import { requireAuth, requireRole } from "../../lib/rbac.js";
 
@@ -57,16 +57,17 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
 
     // Validate status enum
     const validStatuses = ["initiated", "in_progress", "closed"] as const;
-    let query = db.select().from(conversations);
 
-    if (status) {
-      if (!validStatuses.includes(status as (typeof validStatuses)[number])) {
-        return reply.code(400).send({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
-      }
-      query = query.where(eq(conversations.status, status)) as typeof query;
+    if (status && !validStatuses.includes(status as (typeof validStatuses)[number])) {
+      return reply.code(400).send({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
     }
 
-    const results = await query
+    const conditions = status ? [eq(conversations.status, status)] : [];
+
+    const results = await db
+      .select()
+      .from(conversations)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(conversations.createdAt))
       .limit(safeLimit);
 

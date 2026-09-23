@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../server.js";
 import type { FastifyInstance } from "fastify";
+import { AdapterRegistry } from "@revualy/chat-core";
 
 /**
  * Smoke tests — verify the app boots and critical paths respond.
@@ -12,6 +13,9 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   app = await buildApp();
+  // start() normally decorates adapters; an empty registry lets webhook
+  // routes run through to the "adapter not configured" branch.
+  app.decorate("adapters", new AdapterRegistry());
   await app.ready();
 });
 
@@ -59,4 +63,19 @@ describe("smoke", () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  // Chat platforms never send x-internal-secret, so webhook routes must not
+  // be gated by it (they were 401ing every inbound event). With no adapter
+  // registered, reaching the handler yields 503 rather than 401.
+  it.each(["slack", "gchat", "teams"])(
+    "POST /webhooks/%s/events is not blocked by the internal-secret check",
+    async (platform) => {
+      const res = await app.inject({
+        method: "POST",
+        url: `/webhooks/${platform}/events`,
+        payload: { type: "url_verification", challenge: "x" },
+      });
+      expect(res.statusCode).toBe(503);
+    },
+  );
 });

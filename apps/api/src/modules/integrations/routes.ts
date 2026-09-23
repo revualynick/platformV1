@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and } from "drizzle-orm";
 import { calendarTokens } from "@revualy/db";
-import { encrypt } from "@revualy/shared";
+import { encrypt } from "@revualy/shared/server";
 import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   getAuthUrl,
@@ -150,8 +150,7 @@ export const integrationsRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  // Outlook — deferred to Phase 5
   app.get("/outlook/callback", async (request, reply) => {
-    return reply.code(501).send({ error: "Outlook integration coming in Phase 5" });
+    return reply.code(501).send({ error: "Not implemented" });
   });
 };

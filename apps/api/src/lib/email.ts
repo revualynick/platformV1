@@ -27,8 +27,14 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
   const client = getResend();
 
   if (!client) {
-    console.log(`[email-stub] To: ${opts.to} | Subject: ${opts.subject}`);
-    console.log(`[email-stub] Body preview: ${opts.html.slice(0, 200)}...`);
+    // No Resend key — log at debug level without PII (recipient address / body).
+    // Fastify logger is not available in this utility module; use process.stderr
+    // at debug level so PII does not appear in production stdout logs.
+    if ((process.env.LOG_LEVEL ?? "info") === "debug") {
+      process.stderr.write(
+        `[email-stub] Subject: ${opts.subject} (recipient and body omitted)\n`,
+      );
+    }
     return;
   }
 

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, or, desc, inArray } from "drizzle-orm";
 import { kudos, users } from "@revualy/db";
-import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
+import { requireAuth, getAuthenticatedUserId, assertCanAccessUser } from "../../lib/rbac.js";
 import {
   parseBody,
   createKudosSchema,
@@ -19,12 +19,9 @@ export const kudosRoutes: FastifyPluginAsync = async (app) => {
     const callerId = getAuthenticatedUserId(request);
     const userId = query.userId ?? callerId;
 
-    // Scope check: employees can only view their own kudos
+    // Scope check: tree-scoped via assertCanAccessUser (self, admin, or reporting-tree member)
     if (userId !== callerId) {
-      const [caller] = await db.select({ role: users.role }).from(users).where(eq(users.id, callerId));
-      if (!caller || (caller.role !== "manager" && caller.role !== "admin")) {
-        return reply.code(403).send({ error: "Forbidden" });
-      }
+      await assertCanAccessUser(request, userId);
     }
 
     // Fetch kudos for this user (given or received), newest first

@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { eq, and } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import { calendarTokens } from "@revualy/db";
-import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared";
+import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared/server";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "";
@@ -75,8 +75,15 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
 
   const { credentials } = await client.refreshAccessToken();
 
+  if (!credentials.access_token) {
+    throw Object.assign(
+      new Error("Google token refresh returned no access_token"),
+      { code: "GOOGLE_REFRESH_MISSING_TOKEN" },
+    );
+  }
+
   return {
-    accessToken: credentials.access_token!,
+    accessToken: credentials.access_token,
     expiresAt: new Date(credentials.expiry_date ?? Date.now() + 3600 * 1000),
   };
 }

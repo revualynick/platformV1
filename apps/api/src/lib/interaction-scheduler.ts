@@ -8,9 +8,11 @@ import {
   engagementScores,
   userRelationships,
   questionnaires,
+  userPlatformIdentities,
 } from "@revualy/db";
 import type { InteractionType, ChatPlatform } from "@revualy/shared";
 import { findBestSlot } from "./availability.js";
+import { buildJobId } from "./job-ids.js";
 
 /**
  * Run the daily scheduling pass for an org.
@@ -125,6 +127,28 @@ export async function runSchedulingPass(
       prefs?.preferredInteractionTime ?? "10:00",
     );
 
+    // Look up the user's platform channel id (DM channel / conversation id
+    // registered when they installed the bot). If none is found we cannot
+    // send a message, so we skip rather than enqueue a job that would fail
+    // silently with an empty channelId.
+    const [identity] = await db
+      .select({ platformUserId: userPlatformIdentities.platformUserId })
+      .from(userPlatformIdentities)
+      .where(
+        and(
+          eq(userPlatformIdentities.userId, user.id),
+          eq(userPlatformIdentities.platform, defaultPlatform),
+        ),
+      );
+
+    if (!identity?.platformUserId) {
+      console.warn(
+        `[Scheduler] Skipping user ${user.id}: no platform identity found for ${defaultPlatform}`,
+      );
+      skipped++;
+      continue;
+    }
+
     // Create schedule entry
     const [entry] = await db
       .insert(interactionSchedule)
@@ -148,10 +172,11 @@ export async function runSchedulingPass(
         subjectId,
         interactionType,
         platform: defaultPlatform,
+        channelId: identity.platformUserId,
         questionnaireId: questionnaire.id,
         scheduleEntryId: entry.id,
       },
-      { delay, jobId: `initiate:${entry.id}` },
+      { delay, jobId: buildJobId("initiate", entry.id) },
     );
 
     scheduled++;
@@ -274,6 +299,58 @@ function selectQuestionnaire(
 
 // ── Send time calculation ────────────────────────────────
 
+/**
+ * Returns the zone's UTC offset in ms for a given instant using only Intl APIs,
+ * making it fully independent of the Node process's local timezone (Fix 1).
+ *
+ * Strategy: format the instant in the target zone to get its wall-clock
+ * year/month/day/hour/minute/second, reinterpret those components as a UTC
+ * timestamp, then diff against the original instant. That delta is the offset.
+ */
+function zoneOffsetMs(instant: Date, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = Object.fromEntries(
+    dtf.formatToParts(instant)
+      .filter((p) => p.type !== "literal")
+      .map((p) => [p.type, p.value]),
+  );
+  const asUtc = Date.UTC(
+    +parts.year,
+    +parts.month - 1,
+    +parts.day,
+    +parts.hour,
+    +parts.minute,
+    +parts.second,
+  );
+  return asUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+/** Extract wall-clock date parts for a given instant in the target timezone. */
+function zoneParts(instant: Date, timeZone: string) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = Object.fromEntries(
+    dtf.formatToParts(instant)
+      .filter((p) => p.type !== "literal")
+      .map((p) => [p.type, p.value]),
+  );
+  return { year: +parts.year, month: +parts.month - 1, day: +parts.day };
+}
+
 async function calculateSendTime(
   db: TenantDb,
   userId: string,
@@ -293,17 +370,54 @@ async function calculateSendTime(
     // Calendar data unavailable — fall through to preferred time
   }
 
-  // Fallback: use preferred time + jitter
-  const [hours, minutes] = preferredTime.split(":").map(Number);
+  // Fix 2: guard against malformed preferredTime (e.g. "10" → minutes=NaN).
+  const parts = preferredTime.split(":");
+  let hours = Number(parts[0]);
+  let minutes = Number(parts[1]);
+  if (
+    Number.isNaN(hours) || Number.isNaN(minutes) ||
+    hours < 0 || hours > 23 || minutes < 0 || minutes > 59
+  ) {
+    console.warn(
+      `[Scheduler] Invalid preferredTime "${preferredTime}" for user — defaulting to 10:00`,
+    );
+    hours = 10;
+    minutes = 0;
+  }
 
-  // Simple timezone offset calculation
-  // In production, use a proper timezone library (date-fns-tz, luxon)
-  const sendAt = new Date(now);
-  sendAt.setUTCHours(hours, minutes, 0, 0);
+  const tz = userTimezone && userTimezone.length > 0 ? userTimezone : "UTC";
 
-  // If the preferred time already passed today, schedule for tomorrow
-  if (sendAt <= now) {
-    sendAt.setUTCDate(sendAt.getUTCDate() + 1);
+  // Fix 1: convert preferredTime (wall-clock in the user's zone) to a UTC instant
+  // using Intl APIs only — independent of the Node process's local timezone.
+  // We read today's calendar date in the zone, build the desired wall-clock
+  // instant as a fake-UTC timestamp, then subtract the zone's offset to get
+  // the true UTC send time. If that instant is already past, we advance by
+  // one calendar day *in the zone* (re-derive parts from now+24 h) rather
+  // than blindly adding 86 400 s, which would be wrong across DST boundaries.
+  let sendAt: Date;
+  try {
+    const offset = zoneOffsetMs(now, tz);
+    const { year, month, day } = zoneParts(now, tz);
+    // Wall-clock instant for today's preferred time, treated as if UTC
+    const wallClockAsUtc = Date.UTC(year, month, day, hours, minutes, 0);
+    // Subtract offset to get the true UTC instant
+    sendAt = new Date(wallClockAsUtc - offset);
+
+    if (sendAt <= now) {
+      // Advance by one calendar day in the zone
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const tomorrowOffset = zoneOffsetMs(tomorrow, tz);
+      const { year: ty, month: tm, day: td } = zoneParts(tomorrow, tz);
+      const tomorrowWall = Date.UTC(ty, tm, td, hours, minutes, 0);
+      sendAt = new Date(tomorrowWall - tomorrowOffset);
+    }
+  } catch {
+    // Invalid timezone string — fall back to treating preferredTime as UTC.
+    sendAt = new Date(now);
+    sendAt.setUTCHours(hours, minutes, 0, 0);
+    if (sendAt <= now) {
+      sendAt.setUTCDate(sendAt.getUTCDate() + 1);
+    }
   }
 
   // Add slight jitter (0-15 min) so not everyone gets pinged at the same second

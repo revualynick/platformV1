@@ -1,4 +1,4 @@
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, and, desc, gte, notInArray } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   oneOnOneSessions,
@@ -78,11 +78,11 @@ export async function generateAgenda(
         and(
           eq(feedbackEntries.subjectId, employeeId),
           gte(escalations.createdAt, thirtyDaysAgo),
+          notInArray(escalations.status, ["resolved", "dismissed"]),
         ),
       )
       .limit(2);
 
-    // Only include unresolved (resolvedAt is null)
     for (const flag of flagged) {
       items.push({
         text: `Discuss flagged feedback: ${flag.reason}`,

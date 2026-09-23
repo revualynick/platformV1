@@ -154,11 +154,13 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
   app.get("/questionnaires", async (request, reply) => {
     const { db } = request.tenant;
 
-    const allQ = await db.select().from(questionnaires);
+    // TODO(review): paginate if questionnaire counts grow large
+    const allQ = await db.select().from(questionnaires).limit(500);
     const allThemes = await db
       .select()
       .from(questionnaireThemes)
-      .orderBy(questionnaireThemes.sortOrder);
+      .orderBy(questionnaireThemes.sortOrder)
+      .limit(5000);
 
     const themesByQ = new Map<string, typeof allThemes>();
     allThemes.forEach((t) => {
@@ -323,7 +325,8 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     const allRels = await db
       .select()
       .from(userRelationships)
-      .where(eq(userRelationships.isActive, true));
+      .where(eq(userRelationships.isActive, true))
+      .limit(5000);
     return reply.send({ data: allRels });
   });
 
