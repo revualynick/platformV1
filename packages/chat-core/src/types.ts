@@ -10,7 +10,38 @@ export interface InboundMessage {
   threadId: string | null;
   timestamp: Date;
   rawPayload: unknown;
+  /** Sender details when the platform includes them (used for auto-linking). */
+  sender?: {
+    email?: string;
+    displayName?: string;
+  };
+  /** True when the message arrived in a one-to-one DM with the bot. */
+  isDirectMessage?: boolean;
 }
+
+/**
+ * Everything an adapter can surface from a webhook: a message, or a
+ * lifecycle change that affects whether we can reach someone.
+ */
+export type ChatEvent =
+  | { kind: "message"; message: InboundMessage }
+  | {
+      /** The bot was added to a DM (by the user or an admin install). */
+      kind: "installed";
+      platform: ChatPlatform;
+      platformUserId: string;
+      email?: string;
+      displayName?: string;
+      /** Where to send DMs from now on (e.g. a Google Chat space name). */
+      dmAddress: string;
+    }
+  | {
+      /** The bot was removed from the DM; the person is no longer reachable. */
+      kind: "uninstalled";
+      platform: ChatPlatform;
+      platformUserId: string;
+      dmAddress: string;
+    };
 
 export interface OutboundMessage {
   platform: ChatPlatform;

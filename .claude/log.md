@@ -259,3 +259,10 @@
 - Verified all 34 migrations apply to an empty DB and 68 integration tests pass on it; 220 API tests total, typecheck clean
 - Local env issue: Postgres data is a Colima bind mount (./docker-data) giving intermittent "Permission denied" on new relation files; a retry worked. Consider a named Docker volume
 - Deferred: DB-enforced one-open-conversation-per-reviewer until demo stops reusing one reviewer (step 5)
+
+## 2026-09-23: Step 4 Google Chat adapter + harness done
+- Researched Google Chat verification/payloads via web-firewall; recorded facts + unconfirmed items in docs/c3-plan.md. Researcher's endpoint-URL issuer claim conflicted with Google's verifyIdToken sample; implemented as OIDC (accounts.google.com + email chat@system), flagged for real-Workspace confirmation
+- Adapter: jose token verification (project number via X.509 certs, endpoint URL via OIDC), legacy token opt-in only, normalizeEvent (install/uninstall/message, add-on rejected), bot filter, findDirectMessage; testing subpath with signer, event builders, fake client
+- API: chat-identity service (auto-link by email then Google account id, reachability, audit), webhook handles lifecycle + sync welcome, scheduler uses DM address + trust + discovery + paused, getActivePlatform
+- Bug found by full-suite run: auto-link race returned "conflict" for the same account; fixed, test hardened (fails 3/3 without fix, passes 5/5 with)
+- 252 tests (17 adapter + 235 API), 16/16 typecheck. Needs real Workspace: issuer in endpoint-URL mode, email in events, users/{id} == Google account id, admin-install DMs

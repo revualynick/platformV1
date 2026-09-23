@@ -37,7 +37,7 @@ Verification levels: **Verified** = reproduced or confirmed against library sour
 - `normalizeInbound` skips events with `subtype` or no `user`, but messages posted by a Slack app bot typically arrive with `bot_id` and can carry a `user`. Once C3 is fixed this risks the bot replying to itself.
 - **Fix:** also ignore events with `bot_id`, or where `user` equals the bot's own user id.
 
-### H5. Google Chat verification probably rejects every real event (Plausible)
+### H5. Google Chat verification probably rejects every real event (Plausible) **FIXED 2026-09-23** (pending real-Workspace confirmation of the endpoint-URL issuer)
 - `verifyWebhook` compares the `Authorization: Bearer` value, and a body `token`, against a static verification token.
 - Google Chat HTTP endpoints send a Google-signed JWT as the bearer (issuer `chat@system.gserviceaccount.com`, audience = project number). A static compare will never match it; the body token is the legacy mechanism.
 - **Fix:** verify the JWT against Google's certs (issuer + audience). Confirm against a real Workspace before relying on either path.
@@ -72,3 +72,7 @@ API route guards (every module has `requireAuth`/`requireRole` or explicit check
 - M6: `isAdminRole()` used at five call sites that excluded super_admin.
 - Also: test-login open redirect and cookie name/secure flag over HTTPS.
 - Tests: `oauth-state.test.ts` (5), `rate-limit-key.test.ts` (3), `security.integration.test.ts` (10, real Postgres, self-skips without a DB). 147 API tests, 16/16 typecheck.
+
+**Step 4 (2026-09-23), Google Chat adapter:**
+- H5: bearer verified as Google's signed token (`jose`): project-number mode against chat@system X.509 certs, endpoint-URL mode as a Google OIDC token that must carry email chat@system (verified). Legacy shared token only with `GCHAT_ALLOW_LEGACY_TOKEN=true`. Replay window kept.
+- Also fixed: the scheduler sent to `platformUserId` (wrong for Google Chat, which needs the DM space) and did not check reachability or link trust.

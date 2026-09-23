@@ -65,6 +65,10 @@ ENCRYPTION_KEY=<openssl rand -hex 32>
 WS_TOKEN_SECRET=<openssl rand -base64 32>
 TRUST_PROXY=1
 NODE_ENV=production
+# Google Chat tenants only:
+GCHAT_SERVICE_ACCOUNT_KEY=<service account JSON>
+GCHAT_PROJECT_ID=<project id>
+GOOGLE_CHAT_AUDIENCE=<project NUMBER, or the https webhook URL, matching the Chat API Authentication audience setting>
 ```
 
 **Encryption key (required on both services).** Feedback content, messages and notes are encrypted at rest, and both the API and the web server read them, so both refuse to start without `ENCRYPTION_KEY`. Each tenant gets its own key.

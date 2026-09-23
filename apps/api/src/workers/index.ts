@@ -30,6 +30,8 @@ import {
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { buildJobId } from "../lib/job-ids.js";
+import { getActivePlatform } from "../lib/active-platform.js";
+import { discoverGoogleChatDm } from "../lib/chat-identity.js";
 import { sendEmail } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
@@ -359,11 +361,22 @@ export function createWorkers(config: WorkerConfig) {
         process.env.DATABASE_URL ?? "",
       );
 
+      // The connected chat integration decides the platform; the job's
+      // platform (SCHEDULER_PLATFORM) is only a local-development fallback.
+      const activePlatform = (await getActivePlatform(db)) ?? platform;
+      const adapter = adapters.has(activePlatform) ? adapters.get(activePlatform) : undefined;
+      const discoverDm =
+        activePlatform === "google_chat" && adapter?.findDirectMessage
+          ? (userId: string) =>
+              discoverGoogleChatDm(db, userId, (ref) => adapter.findDirectMessage!(ref))
+          : undefined;
+
       const result = await runSchedulingPass(
         db,
         queues.conversationQueue,
         orgId,
-        platform,
+        activePlatform,
+        discoverDm,
       );
 
       job.log(`Scheduled ${result.scheduled}, skipped ${result.skipped}`);

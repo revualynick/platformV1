@@ -1,6 +1,9 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import { Queue } from "bullmq";
 import type { ChatPlatform } from "@revualy/shared";
+import type { ChatEvent } from "@revualy/chat-core";
+import type { TenantDb } from "@revualy/db";
+import { autoLinkByEmail, markUnreachable, type AutoLinkResult } from "../../lib/chat-identity.js";
 
 // Lazy-initialized conversation queue (set by server startup)
 let conversationQueue: Queue | null = null;
@@ -16,6 +19,7 @@ async function handleWebhook(
   verifyBody: unknown, // raw string for HMAC or parsed object depending on platform
   parsedBody: unknown, // always the parsed object for normalizeInbound
   orgId: string,
+  db: TenantDb,
 ) {
   if (!app.adapters.has(platform)) return { status: 503, body: { error: `${platform} adapter not configured` } };
 
@@ -25,7 +29,43 @@ async function handleWebhook(
   if (!verification.isValid) return { status: 401, body: { error: "Invalid signature" } };
   if (verification.challenge) return { status: 200, body: { challenge: verification.challenge } };
 
-  const message = await adapter.normalizeInbound(parsedBody);
+  const event: ChatEvent | null = adapter.normalizeEvent
+    ? await adapter.normalizeEvent(parsedBody)
+    : await adapter
+        .normalizeInbound(parsedBody)
+        .then((m) => (m ? { kind: "message" as const, message: m } : null));
+  if (!event) return { status: 200, body: undefined };
+
+  // Lifecycle: the bot was added to or removed from someone's DM.
+  if (event.kind === "installed") {
+    const result = await autoLinkByEmail(db, {
+      platform,
+      platformUserId: event.platformUserId,
+      email: event.email,
+      displayName: event.displayName,
+      dmAddress: event.dmAddress,
+    });
+    app.log.info({ platform, result: result.status }, "Chat app installed in DM");
+    // Google Chat shows a JSON { text } response as the bot's reply.
+    return { status: 200, body: { text: installReply(result, event.displayName) } };
+  }
+  if (event.kind === "uninstalled") {
+    await markUnreachable(db, platform, event.platformUserId);
+    return { status: 200, body: undefined };
+  }
+
+  const message = event.message;
+  // Keep identity current: links Google Chat users on first contact and
+  // records the DM address a reply arrived on. Never blocks the message.
+  if (message.isDirectMessage) {
+    await autoLinkByEmail(db, {
+      platform,
+      platformUserId: message.platformUserId,
+      email: message.sender?.email,
+      displayName: message.sender?.displayName,
+      dmAddress: message.platformChannelId,
+    }).catch((err) => app.log.error({ err, platform }, "Chat identity refresh failed"));
+  }
   // Truncate oversized messages but tell the orchestrator, so the bot
   // can acknowledge the cut instead of silently dropping content.
   let truncated = false;
@@ -62,6 +102,26 @@ async function handleWebhook(
   return { status: 200, body: undefined };
 }
 
+/**
+ * Deterministic reply when the bot is added to a DM. Never LLM-generated:
+ * it states what the bot is for, or honestly why it cannot help yet.
+ */
+function installReply(result: AutoLinkResult, displayName?: string): string {
+  const first = displayName?.split(" ")[0];
+  switch (result.status) {
+    case "linked":
+      return (
+        `Hi${first ? ` ${first}` : ""}, I'm Revualy. A couple of times a week I'll check in here ` +
+        "with a few quick questions about working with your colleagues, and now and then about your own week. " +
+        "Each check-in takes a few minutes."
+      );
+    case "conflict":
+      return "This chat account doesn't match the one already linked to your Revualy profile. Please contact your Revualy admin.";
+    default:
+      return "Hi, I couldn't find a Revualy account for you yet. Please ask your Revualy admin to add you, then message me again.";
+  }
+}
+
 export const chatRoutes: FastifyPluginAsync = async (app) => {
   // Add raw body content type parser for Slack signature verification.
   // Slack HMAC requires the exact raw body bytes, not re-serialized JSON.
@@ -96,6 +156,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       rawBody,
       body,
       orgId,
+      request.tenant.db,
     );
     return reply.code(result.status).send(result.body);
   });
@@ -110,6 +171,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       request.body,
       request.body,
       orgId,
+      request.tenant.db,
     );
     return reply.code(result.status).send(result.body);
   });
@@ -124,6 +186,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       request.body,
       request.body,
       orgId,
+      request.tenant.db,
     );
     return reply.code(result.status).send(result.body);
   });

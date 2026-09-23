@@ -4,6 +4,7 @@ import type {
   WebhookVerification,
   PlatformUser,
   AdapterConfig,
+  ChatEvent,
 } from "./types.js";
 import type { ChatPlatform } from "@revualy/shared";
 
@@ -35,6 +36,20 @@ export interface ChatAdapter {
    * Returns the platform-specific message ID.
    */
   sendMessage(message: OutboundMessage): Promise<string>;
+
+  /**
+   * Optional: normalise a verified webhook payload into a message or a
+   * lifecycle event (bot added to / removed from a DM). Adapters that do
+   * not implement it only surface messages via normalizeInbound.
+   */
+  normalizeEvent?(rawPayload: unknown): Promise<ChatEvent | null>;
+
+  /**
+   * Optional: find the existing DM address between the bot and a user,
+   * for proactive messages. Returns null if none exists yet (for example
+   * the user has not added the app).
+   */
+  findDirectMessage?(platformUserRef: string): Promise<string | null>;
 
   /**
    * Resolve a platform user ID to a PlatformUser (name, email).

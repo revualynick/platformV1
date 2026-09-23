@@ -232,15 +232,25 @@ async function start() {
   }
 
   if (process.env.GCHAT_SERVICE_ACCOUNT_KEY) {
-    if (!process.env.GCHAT_VERIFICATION_TOKEN) {
-      app.log.warn("GCHAT_SERVICE_ACCOUNT_KEY is set but GCHAT_VERIFICATION_TOKEN is missing — GChat adapter not registered");
+    // Webhooks are verified against Google's signed token for this audience
+    // (the Chat API "Authentication audience": project number or endpoint URL).
+    const audience = process.env.GOOGLE_CHAT_AUDIENCE;
+    if (!audience) {
+      app.log.error("GCHAT_SERVICE_ACCOUNT_KEY is set but GOOGLE_CHAT_AUDIENCE is missing: Google Chat adapter not registered");
     } else {
-      adapters.register(new GoogleChatAdapter({
-        serviceAccountKeyJson: process.env.GCHAT_SERVICE_ACCOUNT_KEY,
-        projectId: process.env.GCHAT_PROJECT_ID ?? "",
-        verificationToken: process.env.GCHAT_VERIFICATION_TOKEN,
-      }));
-      app.log.info("Google Chat adapter registered");
+      try {
+        adapters.register(new GoogleChatAdapter({
+          serviceAccountKeyJson: process.env.GCHAT_SERVICE_ACCOUNT_KEY,
+          projectId: process.env.GCHAT_PROJECT_ID ?? "",
+          audience,
+          // Deprecated shared token: honoured only with an explicit opt-in.
+          verificationToken: process.env.GCHAT_VERIFICATION_TOKEN,
+          allowLegacyToken: process.env.GCHAT_ALLOW_LEGACY_TOKEN === "true",
+        }));
+        app.log.info("Google Chat adapter registered");
+      } catch (err) {
+        app.log.error({ err }, "Google Chat adapter not registered: invalid configuration");
+      }
     }
   }
 

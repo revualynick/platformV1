@@ -24,6 +24,12 @@ export async function runSchedulingPass(
   conversationQueue: Queue,
   orgId: string,
   defaultPlatform: ChatPlatform,
+  /**
+   * Optional proactive reach: find a DM address for someone who is not yet
+   * reachable (Google Chat, after a domain-wide install). Returns null if
+   * none exists.
+   */
+  discoverDm?: (userId: string) => Promise<string | null>,
 ): Promise<{ scheduled: number; skipped: number }> {
   let scheduled = 0;
   let skipped = 0;
@@ -127,12 +133,23 @@ export async function runSchedulingPass(
       prefs?.preferredInteractionTime ?? "10:00",
     );
 
-    // Look up the user's platform channel id (DM channel / conversation id
-    // registered when they installed the bot). If none is found we cannot
-    // send a message, so we skip rather than enqueue a job that would fail
-    // silently with an empty channelId.
+    // Someone who said "stop" is not messaged until they say "start".
+    if ((user.preferences as { chatPaused?: boolean } | null)?.chatPaused) {
+      skipped++;
+      continue;
+    }
+
+    // Where to DM them. Only people who are reachable and whose link is
+    // trusted (auto-linked from their Google account, or confirmed by them
+    // for a manual Slack/Teams link) are messaged: a wrong manual link
+    // would send feedback questions about a colleague to the wrong person.
     const [identity] = await db
-      .select({ platformUserId: userPlatformIdentities.platformUserId })
+      .select({
+        dmAddress: userPlatformIdentities.dmAddress,
+        status: userPlatformIdentities.status,
+        linkSource: userPlatformIdentities.linkSource,
+        confirmedAt: userPlatformIdentities.confirmedAt,
+      })
       .from(userPlatformIdentities)
       .where(
         and(
@@ -141,9 +158,20 @@ export async function runSchedulingPass(
         ),
       );
 
-    if (!identity?.platformUserId) {
+    const trusted = identity && (identity.linkSource === "auto" || identity.confirmedAt !== null);
+    let dmAddress =
+      identity?.status === "reachable" && trusted ? identity.dmAddress : null;
+    if (!dmAddress && !identity && discoverDm) {
+      dmAddress = await discoverDm(user.id).catch((err) => {
+        console.warn(`[Scheduler] DM discovery failed for user ${user.id}:`, err);
+        return null;
+      });
+    }
+
+    if (!dmAddress) {
       console.warn(
-        `[Scheduler] Skipping user ${user.id}: no platform identity found for ${defaultPlatform}`,
+        `[Scheduler] Skipping user ${user.id}: not reachable on ${defaultPlatform}` +
+          (identity && !trusted ? " (link awaiting confirmation)" : ""),
       );
       skipped++;
       continue;
@@ -172,7 +200,7 @@ export async function runSchedulingPass(
         subjectId,
         interactionType,
         platform: defaultPlatform,
-        channelId: identity.platformUserId,
+        channelId: dmAddress,
         questionnaireId: questionnaire.id,
         scheduleEntryId: entry.id,
       },
