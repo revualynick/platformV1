@@ -9,7 +9,7 @@ import {
   authSessions,
   authVerificationTokens,
 } from "@revualy/db/schema";
-import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared/server";
+import { encrypt, decrypt, assertEncryptionReady } from "@revualy/shared/server";
 import { getDb } from "./db";
 
 /**
@@ -125,8 +125,8 @@ const baseAdapter = DrizzleAdapter(tenantDb, {
 // Encrypt/decrypt OAuth token fields on the account object
 const TOKEN_FIELDS = ["access_token", "refresh_token", "id_token"] as const;
 
+// Fail closed: a missing key throws rather than storing tokens in plain text.
 function encryptTokenFields<T extends Record<string, unknown>>(account: T): T {
-  if (!isEncryptionConfigured()) return account;
   const copy = { ...account };
   for (const field of TOKEN_FIELDS) {
     const val = copy[field];
@@ -138,7 +138,9 @@ function encryptTokenFields<T extends Record<string, unknown>>(account: T): T {
 }
 
 function decryptTokenFields<T extends Record<string, unknown>>(account: T): T {
-  if (!isEncryptionConfigured()) return account;
+  // Throws on a missing key, so the catch below only ever covers legacy
+  // plaintext tokens, never a misconfigured deployment.
+  assertEncryptionReady();
   const copy = { ...account };
   for (const field of TOKEN_FIELDS) {
     const val = copy[field];

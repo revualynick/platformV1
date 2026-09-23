@@ -2,7 +2,7 @@ import { google } from "googleapis";
 import { eq, and } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import { calendarTokens } from "@revualy/db";
-import { decrypt, encrypt, isEncryptionConfigured } from "@revualy/shared/server";
+import { decrypt, encrypt } from "@revualy/shared/server";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "";
@@ -108,20 +108,16 @@ export async function getFreshGoogleAccessToken(
     );
   if (!token) return null;
 
-  const decryptIfNeeded = (val: string) =>
-    isEncryptionConfigured() ? decrypt(val) : val;
-  const encryptIfNeeded = (val: string) =>
-    isEncryptionConfigured() ? encrypt(val) : val;
 
-  let accessToken = decryptIfNeeded(token.accessToken);
+  let accessToken = decrypt(token.accessToken);
   if (token.expiresAt <= new Date()) {
-    const refreshed = await refreshAccessToken(decryptIfNeeded(token.refreshToken));
+    const refreshed = await refreshAccessToken(decrypt(token.refreshToken));
     accessToken = refreshed.accessToken;
 
     await db
       .update(calendarTokens)
       .set({
-        accessToken: encryptIfNeeded(refreshed.accessToken),
+        accessToken: encrypt(refreshed.accessToken),
         expiresAt: refreshed.expiresAt,
         updatedAt: new Date(),
       })

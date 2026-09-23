@@ -37,6 +37,7 @@ import { createQueues, createWorkers, initStateRedis, closeStateRedis, getStateR
 import { RedisAsyncStore } from "./lib/redis-async-store.js";
 import { createLLMGateway, type LLMGateway } from "@revualy/ai-core";
 import { runMigrations } from "@revualy/db/migrate";
+import { assertEncryptionReady } from "@revualy/shared/server";
 import { AdapterRegistry } from "@revualy/chat-core";
 import { SlackAdapter } from "@revualy/chat-adapter-slack";
 import { GoogleChatAdapter } from "@revualy/chat-adapter-gchat";
@@ -163,6 +164,15 @@ async function start() {
   const missing = required.filter((v) => !process.env[v]);
   if (missing.length > 0) {
     console.error(`Fatal: missing required env vars: ${missing.join(", ")}`);
+    process.exit(1);
+  }
+
+  // Fail closed: feedback content is encrypted at rest, so refuse to start
+  // (in every environment) rather than fail on the first request.
+  try {
+    assertEncryptionReady();
+  } catch (err) {
+    console.error(`Fatal: ${(err as Error).message}`);
     process.exit(1);
   }
 

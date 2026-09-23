@@ -43,7 +43,7 @@ Rules: security and foundations before features; test bed before the logic it te
 
 0. **Baseline:** commit the existing uncommitted work in logical commits; get local Postgres + Redis running; ask the beta Workspace admin to install the Google Chat app (needed at step 8).
 1. **Pre-beta security fixes (S):** review H1, H2, H3, M1, M2, M6.
-2. **Encryption foundation, Phase E part 1 (S-M):** format, Drizzle encrypted types, boot-time keys, fail closed, CI crypto benchmark.
+2. **Encryption foundation, Phase E part 1 (S-M):** format, Drizzle encrypted types, boot-time keys, fail closed, CI crypto benchmark. **DONE 2026-09-23:** v1 format + keyring in `@revualy/shared`, `encryptedText()` column type on all 22 tier-1 columns (new writes encrypted now; old rows read as plaintext until step 7), tokens/config unified on v1 with legacy reads, API + web exit at startup without a key, 19 new tests incl. real-Postgres round trip and CI speed budget. Still to do: tier-2 jsonb columns and backfill (step 7), BullMQ plaintext payloads (step 5, store-then-enqueue), Redis `1on1:content` (step 7).
 3. **Schema (S):** migration 0032 (identity, link audit, unrouted messages, single active platform); 0033 (conversation state columns, `turn`, `platform_message_id`, `delivered_at`).
 4. **Google Chat adapter + harness, phase 2 (M):** JWT (H5), lifecycle events, auto-link, bot filter, signed fixtures.
 5. **Routing + turn engine, phase 3 (M-L):** identity routing, store first, supersede, atomic claim, outbox, Redis blob removed, simulator on the real path. Code review after this step.

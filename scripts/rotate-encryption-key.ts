@@ -35,6 +35,18 @@ if (!OLD_KEY_HEX || !NEW_KEY_HEX || !DATABASE_URL) {
   process.exit(1);
 }
 
+// Superseded (2026-09-23): values are now written in the v1 format
+// (`enc:v1:{keyId}:...`) which this script does not understand, so running
+// it could corrupt data. Rotate by adding a key to ENCRYPTION_KEYS instead
+// ("k2:<new>,k1:<old>"); the background re-encrypt job replaces this script
+// in C3 plan step 7.
+if (!process.argv.includes("--i-know-this-is-legacy")) {
+  console.error(
+    "rotate-encryption-key.ts is superseded by ENCRYPTION_KEYS rotation (see docs/c3-plan.md Phase E). Refusing to run.",
+  );
+  process.exit(1);
+}
+
 if (OLD_KEY_HEX === NEW_KEY_HEX) {
   console.error("OLD_ENCRYPTION_KEY and ENCRYPTION_KEY must be different");
   process.exit(1);

@@ -13,7 +13,39 @@ import {
   index,
   unique,
   primaryKey,
+  customType,
 } from "drizzle-orm/pg-core";
+import { encryptField, decryptField } from "@revualy/shared/server";
+
+/**
+ * A `text` column encrypted at rest (AES-256-GCM, see @revualy/shared
+ * crypto). Encryption happens in the ORM mapping, so every insert, update
+ * and select through Drizzle is covered in both the API and the web app,
+ * and no call site can forget. The Postgres type stays `text`, so switching
+ * a column needs no migration; legacy plaintext rows read back unchanged
+ * until the backfill rewrites them.
+ *
+ * The associated data is "table.column", so a value copied into another
+ * column will not decrypt.
+ *
+ * Limits: encrypted columns cannot be filtered, sorted, searched or indexed
+ * in SQL (every write uses a fresh IV), and raw `sql` selects bypass the
+ * mapping and return ciphertext. Empty strings are stored as-is.
+ */
+export function encryptedText(table: string, column: string) {
+  const aad = `${table}.${column}`;
+  return customType<{ data: string; driverData: string }>({
+    dataType() {
+      return "text";
+    },
+    toDriver(value) {
+      return encryptField(value, aad);
+    },
+    fromDriver(value) {
+      return decryptField(value, aad);
+    },
+  })(column);
+}
 
 /**
  * Tenant Schema — per-organization database.
@@ -159,7 +191,7 @@ export const conversationMessages = pgTable(
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
     role: varchar("role", { length: 20 }).notNull(), // system | assistant | user
-    content: text("content").notNull(),
+    content: encryptedText("conversation_messages", "content").notNull(),
     platformMessageId: varchar("platform_message_id", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -187,8 +219,8 @@ export const feedbackEntries = pgTable(
       .notNull()
       .references(() => users.id),
     interactionType: varchar("interaction_type", { length: 50 }).notNull(),
-    rawContent: text("raw_content").notNull(), // TODO: encrypt at rest (pgcrypto or app-layer AES) — not yet implemented
-    aiSummary: text("ai_summary").notNull().default(""),
+    rawContent: encryptedText("feedback_entries", "raw_content").notNull(), // encrypted at rest (AES-256-GCM)
+    aiSummary: encryptedText("feedback_entries", "ai_summary").notNull().default(""),
     sentiment: varchar("sentiment", { length: 20 }).notNull().default("neutral"),
     engagementScore: real("engagement_score").notNull().default(0),
     wordCount: integer("word_count").notNull().default(0),
@@ -220,7 +252,7 @@ export const feedbackValueScores = pgTable(
       .notNull()
       .references(() => coreValues.id),
     score: real("score").notNull().default(0),
-    evidence: text("evidence").notNull().default(""),
+    evidence: encryptedText("feedback_value_scores", "evidence").notNull().default(""),
   },
   (table) => [
     index("idx_feedback_value_scores_entry_id").on(table.feedbackEntryId),
@@ -239,7 +271,7 @@ export const kudos = pgTable(
     receiverId: uuid("receiver_id")
       .notNull()
       .references(() => users.id),
-    message: text("message").notNull(),
+    message: encryptedText("kudos", "message").notNull(),
     coreValueId: uuid("core_value_id").references(() => coreValues.id),
     source: varchar("source", { length: 20 }).notNull().default("chat"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -294,10 +326,10 @@ export const escalations = pgTable(
     type: varchar("type", { length: 50 }).notNull().default("other"), // harassment | bias | retaliation | other
     severity: varchar("severity", { length: 20 }).notNull(), // low | medium | high | critical
     status: varchar("status", { length: 20 }).notNull().default("open"), // open | investigating | resolved | dismissed
-    reason: text("reason").notNull(),
-    description: text("description").notNull().default(""),
-    flaggedContent: text("flagged_content").notNull().default(""),
-    resolution: text("resolution"),
+    reason: encryptedText("escalations", "reason").notNull(),
+    description: encryptedText("escalations", "description").notNull().default(""),
+    flaggedContent: encryptedText("escalations", "flagged_content").notNull().default(""),
+    resolution: encryptedText("escalations", "resolution"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedById: uuid("resolved_by_id").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -329,8 +361,8 @@ export const escalationNotes = pgTable(
     performedBy: uuid("performed_by")
       .notNull()
       .references(() => users.id),
-    content: text("content").notNull().default(""),
-    notes: text("notes"),
+    content: encryptedText("escalation_notes", "content").notNull().default(""),
+    notes: encryptedText("escalation_notes", "notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -658,8 +690,8 @@ export const oneOnOneSessions = pgTable(
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
-    notes: text("notes").notNull().default(""),
-    summary: text("summary").notNull().default(""),
+    notes: encryptedText("one_on_one_sessions", "notes").notNull().default(""),
+    summary: encryptedText("one_on_one_sessions", "summary").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -681,7 +713,7 @@ export const oneOnOneActionItems = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => oneOnOneSessions.id, { onDelete: "cascade" }),
-    text: text("text").notNull(),
+    text: encryptedText("one_on_one_action_items", "text").notNull(),
     assigneeId: uuid("assignee_id").references(() => users.id),
     dueDate: date("due_date"),
     completed: boolean("completed").notNull().default(false),
@@ -704,7 +736,7 @@ export const oneOnOneAgendaItems = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => oneOnOneSessions.id, { onDelete: "cascade" }),
-    text: text("text").notNull(),
+    text: encryptedText("one_on_one_agenda_items", "text").notNull(),
     source: varchar("source", { length: 20 }).notNull().default("manual"), // ai | manual
     covered: boolean("covered").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -730,9 +762,9 @@ export const selfReflections = pgTable(
     weekStarting: date("week_starting").notNull(),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     mood: varchar("mood", { length: 20 }),
-    highlights: text("highlights"),
-    challenges: text("challenges"),
-    goalForNextWeek: text("goal_for_next_week"),
+    highlights: encryptedText("self_reflections", "highlights"),
+    challenges: encryptedText("self_reflections", "challenges"),
+    goalForNextWeek: encryptedText("self_reflections", "goal_for_next_week"),
     engagementScore: integer("engagement_score"),
     promptTheme: varchar("prompt_theme", { length: 100 }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -763,7 +795,7 @@ export const managerNotes = pgTable(
     subjectId: uuid("subject_id")
       .notNull()
       .references(() => users.id),
-    content: text("content").notNull(),
+    content: encryptedText("manager_notes", "content").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1302,7 +1334,7 @@ export const goalUpdates = pgTable(
     progressPercent: integer("progress_percent"),
     metricCurrentValue: doublePrecision("metric_current_value"),
     status: varchar("status", { length: 20 }),
-    note: text("note").notNull().default(""),
+    note: encryptedText("goal_updates", "note").notNull().default(""),
     source: varchar("source", { length: 20 }).notNull().default("dashboard"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1375,8 +1407,8 @@ export const goalUpdateSuggestions = pgTable(
     suggestedMetricCurrentValue: doublePrecision(
       "suggested_metric_current_value",
     ),
-    suggestedNote: text("suggested_note").notNull().default(""),
-    evidenceQuote: text("evidence_quote").notNull().default(""),
+    suggestedNote: encryptedText("goal_update_suggestions", "suggested_note").notNull().default(""),
+    evidenceQuote: encryptedText("goal_update_suggestions", "evidence_quote").notNull().default(""),
     status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | applied | dismissed
     reviewedById: uuid("reviewed_by_id").references(() => users.id),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),

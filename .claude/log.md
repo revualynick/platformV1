@@ -243,3 +243,11 @@
 - New tests: oauth-state, rate-limit-key, security.integration (real Postgres, self-skipping); 147 API tests, 16/16 typecheck
 - Not runtime-tested: H3 page guards (typecheck only). Local Redis needs a password the test setup lacks (NOAUTH noise, harmless)
 - Next: step 2, encryption foundation (Phase E part 1)
+
+## 2026-09-23: Step 2 encryption foundation done
+- `@revualy/shared` crypto rewritten: `enc:v1:{keyId}:` format, keyring (ENCRYPTION_KEYS or legacy ENCRYPTION_KEY as k1), table.column AAD, empty strings stored as-is, legacy plaintext passthrough, both old formats still decrypt, no plaintext fallback
+- `encryptedText()` Drizzle type (in tenant.ts) on 22 tier-1 columns; Postgres type unchanged so no migration; API lib/encryption.ts, google-calendar and NextAuth token handling now fail closed
+- API start() and web instrumentation.ts exit(1) without a key (verified both by running them); deployment.md + .env.example document the key, backup and rotation; old rotation script refuses to run
+- Tests: field-crypto (15, incl. rotation, tamper, AAD, legacy formats, CI speed budget) + encryption.integration (4, real Postgres). 166 API tests, 16/16 typecheck, web production build passes
+- Found: only 0000 drizzle snapshot exists (all later migrations hand-written), so `drizzle-kit generate` is unusable; step 3 migrations must be hand-written. Web build fails if the shell has NODE_ENV=development (from .env); build with NODE_ENV unset
+- Existing rows remain plaintext until the step 7 backfill

@@ -61,8 +61,17 @@ GOOGLE_CLIENT_ID=<from Google Cloud Console>
 GOOGLE_CLIENT_SECRET=<from Google Cloud Console>
 ANTHROPIC_API_KEY=<from Anthropic Console>
 RESEND_API_KEY=<from Resend dashboard>
+ENCRYPTION_KEY=<openssl rand -hex 32>
+WS_TOKEN_SECRET=<openssl rand -base64 32>
+TRUST_PROXY=1
 NODE_ENV=production
 ```
+
+**Encryption key (required on both services).** Feedback content, messages and notes are encrypted at rest, and both the API and the web server read them, so both refuse to start without `ENCRYPTION_KEY`. Each tenant gets its own key.
+
+- **Back it up outside Railway** (password manager or vault) before any real data is written. Losing the key means the encrypted data cannot be recovered.
+- **Rotation:** set `ENCRYPTION_KEYS=k2:<new hex>,k1:<old hex>` (newest first). New writes use `k2`; values under `k1` keep decrypting. Remove `k1` only after the re-encrypt job has rewritten everything (C3 plan step 7).
+- Anyone with access to the Railway project can read both the database and the key. Treat project access accordingly.
 
 ### 4. Run Migrations
 

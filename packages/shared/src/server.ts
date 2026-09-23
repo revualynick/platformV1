@@ -5,6 +5,11 @@
 export {
   encrypt,
   decrypt,
+  encryptField,
+  decryptField,
+  isEncryptedValue,
+  assertEncryptionReady,
+  resetKeyringForTests,
   isEncryptionConfigured,
   generateId,
 } from "./utils/crypto.js";

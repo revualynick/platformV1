@@ -1,56 +1,17 @@
-import crypto from "node:crypto";
+import { encrypt, decrypt } from "@revualy/shared/server";
 
-const ALGORITHM = "aes-256-gcm";
-
-let _key: Buffer | null = null;
-
-function getKey(): Buffer {
-  if (_key) return _key;
-
-  const key = process.env.ENCRYPTION_KEY;
-  if (!key) {
-    throw new Error(
-      "ENCRYPTION_KEY env var is required (64-char hex string). Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
-    );
-  }
-
-  const buf = Buffer.from(key, "hex");
-  if (buf.length !== 32) {
-    throw new Error(`ENCRYPTION_KEY must be a 64-char hex string (32 bytes), got ${buf.length} bytes`);
-  }
-  _key = buf;
-  return _key;
-}
-
-export function encrypt(plaintext: string): string {
-  const key = getKey();
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  // Format: iv:tag:ciphertext (all base64)
-  return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
-}
-
-export function decrypt(encoded: string): string {
-  const key = getKey();
-  const [ivB64, tagB64, dataB64] = encoded.split(":");
-  if (!ivB64 || !tagB64 || !dataB64) throw new Error("Invalid encrypted format");
-  const iv = Buffer.from(ivB64, "base64");
-  const tag = Buffer.from(tagB64, "base64");
-  const data = Buffer.from(dataB64, "base64");
-  if (iv.length !== 12) throw new Error("Invalid IV length (expected 12 bytes)");
-  if (tag.length !== 16) throw new Error("Invalid auth tag length (expected 16 bytes)");
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  return decipher.update(data).toString("utf8") + decipher.final("utf8");
-}
+/**
+ * Integration config encryption. Delegates to the single implementation in
+ * @revualy/shared (v1 format with key ids); decrypt still reads this file's
+ * old iv:tag:ciphertext format until existing rows are rewritten.
+ */
+export { encrypt, decrypt };
 
 export function encryptConfig(config: Record<string, unknown>): string {
   return encrypt(JSON.stringify(config));
 }
 
 export function decryptConfig(encrypted: string): Record<string, unknown> {
-  // Let errors propagate — silent failures hide tampering/misconfiguration
+  // Let errors propagate: silent failures hide tampering or misconfiguration
   return JSON.parse(decrypt(encrypted)) as Record<string, unknown>;
 }
