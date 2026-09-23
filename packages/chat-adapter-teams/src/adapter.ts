@@ -12,9 +12,32 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import crypto from "node:crypto";
 import { buildAdaptiveCard } from "./cards.js";
 
+/**
+ * Injectable async key-value store for conversation references and user cache.
+ * Default implementation is in-memory. Inject a Redis-backed implementation
+ * (e.g. using ioredis SETEX/GET) at the app layer to survive process restarts.
+ * TODO: wire a Redis-backed AsyncStore in apps/api when creating TeamsAdapter.
+ */
+export interface AsyncStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, ttlSeconds: number): Promise<void>;
+}
+
+class InMemoryStore implements AsyncStore {
+  private data = new Map<string, string>();
+  async get(key: string): Promise<string | null> {
+    return this.data.get(key) ?? null;
+  }
+  async set(key: string, value: string, _ttlSeconds: number): Promise<void> {
+    this.data.set(key, value);
+  }
+}
+
 export interface TeamsAdapterConfig {
   appId: string;
   appPassword: string;
+  /** Optional persistent store for conversation refs + user cache (survives restart). */
+  store?: AsyncStore;
 }
 
 const ALLOWED_SERVICE_URLS = [
@@ -39,12 +62,18 @@ const MAX_CONVERSATION_REFS_SIZE = 10_000;
  * Microsoft Teams adapter.
  * Uses Bot Framework REST API + Adaptive Cards for messaging.
  */
+// TTL for conversation references in the persistent store (30 days).
+const CONV_REF_TTL_SECONDS = 30 * 24 * 60 * 60;
+// TTL for user cache entries in the persistent store (7 days).
+const USER_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 export class TeamsAdapter implements ChatAdapter {
   readonly platform: ChatPlatform = "teams";
   private appId: string;
   private appPassword: string;
   private userCache = new Map<string, { name: string; email?: string }>();
   private conversationRefs = new Map<string, ConversationReference>();
+  private store: AsyncStore;
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
   private jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
@@ -52,6 +81,7 @@ export class TeamsAdapter implements ChatAdapter {
   constructor(config: TeamsAdapterConfig) {
     this.appId = config.appId;
     this.appPassword = config.appPassword;
+    this.store = config.store ?? new InMemoryStore();
   }
 
   async verifyWebhook(
@@ -142,7 +172,27 @@ export class TeamsAdapter implements ChatAdapter {
   }
 
   async sendMessage(message: OutboundMessage): Promise<string> {
-    const ref = this.conversationRefs.get(message.channelId);
+    let ref = this.conversationRefs.get(message.channelId);
+    if (!ref) {
+      // Hydrate from persistent store (survives process restart).
+      const stored = await this.store.get(
+        `teams:convref:${message.channelId}`,
+      );
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as ConversationReference;
+          // Validate minimum required fields before trusting the cached value.
+          // A schema-drifted or corrupt entry with missing serviceUrl/conversation
+          // would cause serviceUrl.replace(...) to throw in sendMessage.
+          if (parsed && typeof parsed.serviceUrl === "string" && parsed.serviceUrl && parsed.conversation) {
+            ref = parsed;
+            this.conversationRefs.set(message.channelId, ref);
+          }
+        } catch {
+          // corrupt entry — fall through to throw below
+        }
+      }
+    }
     if (!ref) {
       throw new Error(
         `TeamsAdapter.sendMessage: no conversation reference for channel ${message.channelId}`,
@@ -211,7 +261,26 @@ export class TeamsAdapter implements ChatAdapter {
         email: cached.email,
       };
     }
-    return null;
+
+    // Attempt hydration from persistent store.
+    const stored = await this.store.get(`teams:user:${platformUserId}`);
+    if (stored) {
+      try {
+        const entry = JSON.parse(stored) as { name: string; email?: string };
+        // Validate minimum required field before using the cached value.
+        if (entry && typeof entry.name === "string" && entry.name) {
+          this.userCache.set(platformUserId, entry);
+          return { platformUserId, displayName: entry.name, email: entry.email };
+        }
+      } catch {
+        // corrupt entry — fall through
+      }
+    }
+
+    // Graceful fallback: return a minimal PlatformUser so resolution never
+    // hard-fails callers. A real display name arrives via the next inbound
+    // message from this user (cacheUserFromActivity) and will be persisted.
+    return { platformUserId, displayName: platformUserId, email: undefined };
   }
 
   async sendTypingIndicator(_channelId: string): Promise<void> {
@@ -220,9 +289,9 @@ export class TeamsAdapter implements ChatAdapter {
   }
 
   private evictIfNeeded(map: Map<string, unknown>, maxSize: number, label: string): void {
-    if (map.size <= maxSize) return;
-    const firstKey = map.keys().next().value;
-    if (firstKey !== undefined) {
+    while (map.size > maxSize) {
+      const firstKey = map.keys().next().value;
+      if (firstKey === undefined) break;
       console.warn(`[Teams] Evicting ${label} cache entry: ${firstKey}`);
       map.delete(firstKey);
     }
@@ -230,14 +299,23 @@ export class TeamsAdapter implements ChatAdapter {
 
   private cacheUserFromActivity(activity: Partial<Activity>): void {
     if (activity.from?.id && activity.from?.name) {
-      this.userCache.set(activity.from.id, {
-        name: activity.from.name,
-      });
+      const entry = { name: activity.from.name };
+      this.userCache.set(activity.from.id, entry);
       this.evictIfNeeded(
         this.userCache as Map<string, unknown>,
         MAX_USER_CACHE_SIZE,
         "user",
       );
+      // Persist so user names survive process restart.
+      this.store
+        .set(
+          `teams:user:${activity.from.id}`,
+          JSON.stringify(entry),
+          USER_CACHE_TTL_SECONDS,
+        )
+        .catch((err) =>
+          console.warn("[Teams] Failed to persist user cache:", err),
+        );
     }
   }
 
@@ -257,6 +335,16 @@ export class TeamsAdapter implements ChatAdapter {
       MAX_CONVERSATION_REFS_SIZE,
       "conversation",
     );
+    // Persist so active conversations survive process restart.
+    this.store
+      .set(
+        `teams:convref:${activity.conversation.id}`,
+        JSON.stringify(ref),
+        CONV_REF_TTL_SECONDS,
+      )
+      .catch((err) =>
+        console.warn("[Teams] Failed to persist conversation ref:", err),
+      );
   }
 
   private async getJwks(): Promise<ReturnType<typeof createRemoteJWKSet>> {

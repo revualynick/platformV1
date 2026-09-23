@@ -91,8 +91,12 @@ export class GoogleChatAdapter implements ChatAdapter {
 
   private isEventTimestampValid(payload: Record<string, unknown>): boolean {
     const eventTime = payload.eventTime as string | undefined;
-    if (!eventTime) return false;
+    // If eventTime is absent (some Google Chat event types legitimately omit it),
+    // skip the replay-window check and rely on the token comparison alone.
+    if (!eventTime) return true;
     const eventMs = new Date(eventTime).getTime();
+    // If eventTime is present but unparseable, hard-reject: an attacker could
+    // otherwise bypass the replay window by sending a non-date string.
     if (isNaN(eventMs)) return false;
     const now = Date.now();
     return Math.abs(now - eventMs) <= 5 * 60 * 1000;
@@ -171,20 +175,18 @@ export class GoogleChatAdapter implements ChatAdapter {
   }
 
   async resolveUser(platformUserId: string): Promise<PlatformUser | null> {
-    try {
-      // platformUserId from Google Chat is in "users/{userId}" format.
-      // The People API or Directory API can look up user details.
-      // For now, return the platform ID as display name since
-      // spaces.members.get requires "spaces/{space}/members/{member}" format
-      // which we don't have from just the user ID.
-      return {
-        platformUserId,
-        displayName: platformUserId.replace("users/", ""),
-        email: undefined,
-      };
-    } catch {
-      return null;
-    }
+    // TODO: call the Google Directory/People API to resolve a real display name
+    // and email from the "users/{userId}" resource path. This requires a Google
+    // Workspace admin granting the service account domain-wide delegation with
+    // the `https://www.googleapis.com/auth/directory.readonly` scope — a known
+    // gap documented in CLAUDE.md ("GChat adapter: needs Google Workspace admin
+    // setup to test end-to-end"). Until that is wired, strip the resource prefix
+    // to produce a cleaner fallback rather than returning the raw path.
+    return {
+      platformUserId,
+      displayName: platformUserId.replace(/^users\//, ""),
+      email: undefined,
+    };
   }
 
   async sendTypingIndicator(_channelId: string): Promise<void> {
