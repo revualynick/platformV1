@@ -1,6 +1,6 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql, exists } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
-import { feedbackEntries, selfReflections, engagementScores } from "@revualy/db";
+import { feedbackEntries, selfReflections, engagementScores, users, userPlatformIdentities } from "@revualy/db";
 
 /** UTC Monday 00:00 of the week containing `d`. */
 export function weekMondayUTC(d: Date = new Date()): string {
@@ -57,6 +57,7 @@ export async function recomputeWeeklyEngagement(
     ...reflections.map((r) => r.score ?? 0),
   ];
   const interactionsCompleted = authored.length + reflections.length;
+  const interactionsTarget = await weeklyTargetFor(db, userId);
   const averageQualityScore =
     scores.length > 0
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
@@ -68,15 +69,93 @@ export async function recomputeWeeklyEngagement(
       userId,
       weekStarting: week,
       interactionsCompleted,
+      interactionsTarget,
       averageQualityScore,
+      responseRate: responseRateFor(interactionsCompleted, interactionsTarget),
     })
     .onConflictDoUpdate({
       target: [engagementScores.userId, engagementScores.weekStarting],
       set: {
         interactionsCompleted,
+        interactionsTarget,
         averageQualityScore,
-        // Bounded 0..100 response rate proxy: progress toward the weekly target.
-        responseRate: sql`LEAST(100, ${interactionsCompleted} * 100 / GREATEST(${engagementScores.interactionsTarget}, 1))`,
+        responseRate: responseRateFor(interactionsCompleted, interactionsTarget),
       },
     });
+}
+
+/** Default weekly interactions; must match the scheduler's default. */
+export const DEFAULT_WEEKLY_TARGET = 2;
+
+/** The user's own weekly target (preferences), the scheduler's source of truth. */
+export function weeklyTarget(preferences: unknown): number {
+  const t = (preferences as { weeklyInteractionTarget?: unknown } | null)?.weeklyInteractionTarget;
+  return typeof t === "number" && Number.isInteger(t) && t > 0 ? t : DEFAULT_WEEKLY_TARGET;
+}
+
+async function weeklyTargetFor(db: TenantDb, userId: string): Promise<number> {
+  const [u] = await db.select({ preferences: users.preferences }).from(users).where(eq(users.id, userId));
+  return weeklyTarget(u?.preferences);
+}
+
+/** Bounded 0..100 progress toward the weekly target. */
+function responseRateFor(completed: number, target: number): number {
+  return Math.min(100, Math.floor((completed * 100) / Math.max(target, 1)));
+}
+
+export interface NudgeTarget {
+  userId: string;
+  pending: number;
+  target: number;
+}
+
+/**
+ * Who to nudge this week: active, onboarded people behind their own weekly
+ * target, including those with no activity at all (no engagement row yet,
+ * previously missed). Excludes people who paused check-ins and people the
+ * bot cannot reach on the tenant's chat platform, since the nudge asks them
+ * to answer check-ins they would never receive.
+ */
+export async function selectNudgeTargets(
+  db: TenantDb,
+  week: string,
+  platform: string,
+): Promise<NudgeTarget[]> {
+  const rows = await db
+    .select({
+      userId: users.id,
+      preferences: users.preferences,
+      completed: engagementScores.interactionsCompleted,
+    })
+    .from(users)
+    .leftJoin(
+      engagementScores,
+      and(eq(engagementScores.userId, users.id), eq(engagementScores.weekStarting, week)),
+    )
+    .where(
+      and(
+        eq(users.isActive, true),
+        eq(users.onboardingCompleted, true),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(userPlatformIdentities)
+            .where(
+              and(
+                eq(userPlatformIdentities.userId, users.id),
+                eq(userPlatformIdentities.platform, platform),
+                eq(userPlatformIdentities.status, "reachable"),
+              ),
+            ),
+        ),
+      ),
+    );
+
+  return rows
+    .filter((r) => !(r.preferences as { chatPaused?: boolean } | null)?.chatPaused)
+    .map((r) => {
+      const target = weeklyTarget(r.preferences);
+      return { userId: r.userId, target, pending: target - (r.completed ?? 0) };
+    })
+    .filter((r) => r.pending > 0);
 }

@@ -25,6 +25,7 @@ import {
   updateManagerNoteSchema,
   managerNoteQuerySchema,
 } from "../../lib/validation.js";
+import { upsertRelationship } from "../../lib/relationships.js";
 
 export const managerRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireRole("manager"));
@@ -271,17 +272,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const [created] = await db
-      .insert(userRelationships)
-      .values({
-        fromUserId: body.fromUserId,
-        toUserId: body.toUserId,
-        label: body.label ?? "",
-        tags: body.tags ?? [],
-        strength: body.strength ?? 0.5,
-        source: body.source ?? "manual",
-      })
-      .returning();
+    const created = await upsertRelationship(db, body);
 
     return reply.code(201).send(created);
   });

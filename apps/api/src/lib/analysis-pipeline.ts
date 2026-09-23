@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
@@ -14,6 +14,7 @@ import {
 } from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
 import { evaluatePulseCheckTrigger } from "./pulse-check-monitor.js";
+import { buildJobId } from "./job-ids.js";
 import { extractReflectionData } from "./reflection-extractor.js";
 import {
   recomputeWeeklyEngagement,
@@ -93,12 +94,40 @@ export async function runAnalysisPipeline(
   // received-feedback views). Extract structured reflection data and upsert it.
   if (conversation.interactionType === "self_reflection") {
     const week = weekMondayUTC(conversation.createdAt ?? new Date());
+    let extracted: Awaited<ReturnType<typeof extractReflectionData>>;
     try {
-      const llmMessages = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const extracted = await extractReflectionData(llm, llmMessages);
+      extracted = await extractReflectionData(
+        llm,
+        messages.map((m) => ({ role: m.role, content: m.content })),
+      );
+    } catch (err) {
+      // Throw rather than report failure: the worker only retries jobs that
+      // throw, and a swallowed error here lost the reflection for good.
+      logger.error(`[Analysis] self_reflection extraction failed for ${conversationId}:`, err);
+      throw err;
+    }
+
+    const [existing] = await db
+      .select({ id: selfReflections.id, status: selfReflections.status, engagementScore: selfReflections.engagementScore })
+      .from(selfReflections)
+      .where(
+        and(
+          eq(selfReflections.userId, conversation.subjectId),
+          eq(selfReflections.weekStarting, week),
+        ),
+      );
+
+    if (existing?.status === "completed") {
+      // The person already completed it themselves: their own mood and
+      // notes win. Only attach the conversation and the engagement score.
+      await db
+        .update(selfReflections)
+        .set({
+          conversationId,
+          engagementScore: existing.engagementScore ?? extracted.engagementScore ?? null,
+        })
+        .where(eq(selfReflections.id, existing.id));
+    } else {
       const fields = {
         status: "completed" as const,
         conversationId,
@@ -116,14 +145,8 @@ export async function runAnalysisPipeline(
           target: [selfReflections.userId, selfReflections.weekStarting],
           set: fields,
         });
-      await recomputeWeeklyEngagement(db, conversation.subjectId, week);
-    } catch (err) {
-      logger.error(
-        `[Analysis] self_reflection extraction failed for ${conversationId}:`,
-        err,
-      );
-      return { success: false, failedSteps: ["reflection"], feedbackEntryId: null };
     }
+    await recomputeWeeklyEngagement(db, conversation.subjectId, week);
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 
@@ -251,32 +274,16 @@ export async function runAnalysisPipeline(
     }
 
     // Alert the subject's direct manager when the AI flagged this feedback.
+    // The job carries only the escalation id: the worker reads the reason
+    // and flagged content from Postgres (encrypted at rest), so no feedback
+    // text is ever stored in Redis job data.
     if (flagResult.shouldFlag && escalationId && notificationQueue) {
       try {
-        const [subject] = await db
-          .select({ name: users.name, managerId: users.managerId })
-          .from(users)
-          .where(eq(users.id, conversation.subjectId));
-        if (subject?.managerId) {
-          const [manager] = await db
-            .select({ name: users.name, email: users.email })
-            .from(users)
-            .where(eq(users.id, subject.managerId));
-          if (manager?.email) {
-            await notificationQueue.add("flag_alert", {
-              type: "flag_alert",
-              orgId: orgId ?? "",
-              managerId: subject.managerId,
-              managerEmail: manager.email,
-              managerName: manager.name ?? "Manager",
-              subjectName: subject.name ?? "a team member",
-              severity: mapFlagSeverity(flagResult.severity),
-              reason: safeReason,
-              flaggedContent: safeFlaggedContent,
-              escalationId,
-            });
-          }
-        }
+        await notificationQueue.add(
+          "flag_alert",
+          { type: "flag_alert", orgId: orgId ?? "", escalationId },
+          { jobId: buildJobId("flag-alert", escalationId) },
+        );
       } catch (err) {
         logger.error(`[FlagAlert] enqueue failed for ${escalationId}:`, err);
       }

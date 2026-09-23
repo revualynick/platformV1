@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, notInArray } from "drizzle-orm";
 import {
   threeSixtyReviews,
   threeSixtyResponses,
@@ -226,30 +226,47 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         (r) => r.status === "completed",
       ).length;
 
-      const updated = await db.transaction(async (tx) => {
-        // Set status to analyzing while we aggregate
-        await tx
+      // Claim the review atomically so two admins cannot complete it at
+      // once. "analyzing" is committed (visible to others) while the LLM
+      // aggregation runs; that call is deliberately outside any transaction
+      // so it holds no row lock or pooled connection while it waits.
+      const [claimed] = await db
+        .update(threeSixtyReviews)
+        .set({ status: "analyzing", updatedAt: new Date() })
+        .where(
+          and(
+            eq(threeSixtyReviews.id, id),
+            notInArray(threeSixtyReviews.status, ["analyzing", "completed", "cancelled"]),
+          ),
+        )
+        .returning({ id: threeSixtyReviews.id });
+      if (!claimed) {
+        return reply.code(409).send({ error: "Review is already being completed" });
+      }
+
+      let aggregation: Awaited<ReturnType<typeof aggregateThreeSixtyReview>>;
+      try {
+        // app.llm enables LLM theme extraction (keyword fallback without it).
+        aggregation = await aggregateThreeSixtyReview(db, id, app.llm);
+      } catch (err) {
+        await db
           .update(threeSixtyReviews)
-          .set({ status: "analyzing", updatedAt: new Date() })
+          .set({ status: review.status, updatedAt: new Date() })
           .where(eq(threeSixtyReviews.id, id));
+        throw err;
+      }
 
-        // Run aggregation (uses db, not tx — reads only, safe outside tx boundary)
-        const aggregation = await aggregateThreeSixtyReview(db, id);
-
-        const [result] = await tx
-          .update(threeSixtyReviews)
-          .set({
-            status: "completed",
-            aggregatedData: aggregation,
-            completedReviewerCount: completedCount,
-            completedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(threeSixtyReviews.id, id))
-          .returning();
-
-        return result;
-      });
+      const [updated] = await db
+        .update(threeSixtyReviews)
+        .set({
+          status: "completed",
+          aggregatedData: aggregation,
+          completedReviewerCount: completedCount,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(threeSixtyReviews.id, id))
+        .returning();
 
       return reply.send(updated);
     },

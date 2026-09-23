@@ -266,3 +266,15 @@
 - API: chat-identity service (auto-link by email then Google account id, reachability, audit), webhook handles lifecycle + sync welcome, scheduler uses DM address + trust + discovery + paused, getActivePlatform
 - Bug found by full-suite run: auto-link race returned "conflict" for the same account; fixed, test hardened (fails 3/3 without fix, passes 5/5 with)
 - 252 tests (17 adapter + 235 API), 16/16 typecheck. Needs real Workspace: issuer in endpoint-URL mode, email in events, users/{id} == Google account id, admin-install DMs
+
+## 2026-09-23: Full branch review (main...beta-hardening)
+- /code-review high returned 10 findings; all verified by hand: 9 confirmed, 1 latent. Recorded as B1-B10 in docs/review-2026-09-23-deep.md
+- Highest: B1 scheduler sends a day late for UK/Europe (Friday -> Saturday), B2 flagged content plaintext in Redis job data, B3 check-in pipeline retries permanent failures and LLM errors for ever
+- Proposed: fix B1-B7 (+B9 one-liner) before step 5
+
+## 2026-09-23: All ten branch-review findings fixed (B1-B10)
+- Nick asked to fix all ten. Scheduler now times sends to the next local preferred slot, checks quiet days on the send day, pass runs 04:00 UTC daily
+- Flag-alert and nudge jobs carry ids only (no feedback text, names or emails in Redis); check-in pipeline no longer retries failed rows for ever, bounded LLM retries, stale-processing recovery
+- Reflections: extraction failures retried; person's own answers never overwritten either way round
+- Nudges include idle people with correct per-person targets; relationship re-create reactivates; completed-only 360s; 360 uses LLM and no longer holds a transaction during the call; unmanaged team admin-only
+- 21 new tests; 273 total, 16/16 typecheck, no leaked fixtures. Next: step 5 (routing + turn engine)

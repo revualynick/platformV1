@@ -307,8 +307,21 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: "Not found" });
     }
 
+    // Already completed by the analysis pipeline when the chat conversation
+    // closed: the person's own answers override the AI-extracted ones, and
+    // the extraction is not repeated.
     if (row.status === "completed") {
-      return reply.code(409).send({ error: "Reflection is already completed" });
+      const [updated] = await db
+        .update(selfReflections)
+        .set({
+          mood: body.mood,
+          ...(body.highlights !== undefined ? { highlights: body.highlights } : {}),
+          ...(body.challenges !== undefined ? { challenges: body.challenges } : {}),
+          ...(body.goalForNextWeek !== undefined ? { goalForNextWeek: body.goalForNextWeek } : {}),
+        })
+        .where(eq(selfReflections.id, id))
+        .returning();
+      return reply.send(updated);
     }
 
     // If we have a conversation, try to extract data from it

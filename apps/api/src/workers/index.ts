@@ -32,6 +32,7 @@ import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { buildJobId } from "../lib/job-ids.js";
 import { getActivePlatform } from "../lib/active-platform.js";
 import { discoverGoogleChatDm } from "../lib/chat-identity.js";
+import { selectNudgeTargets } from "../lib/engagement-aggregation.js";
 import { sendEmail } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
@@ -533,19 +534,36 @@ export function createWorkers(config: WorkerConfig) {
         }
 
         case "flag_alert": {
-          const data = job.data as {
-            orgId: string;
-            managerId: string;
-            managerEmail: string;
-            managerName: string;
-            subjectName: string;
-            severity: string;
-            reason: string;
-            flaggedContent: string;
-            escalationId: string;
-          };
-
+          // Only the escalation id travels through Redis; everything else,
+          // including the (encrypted) flagged content, is read here.
+          const data = job.data as { orgId: string; escalationId: string };
           const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+
+          const [esc] = await db
+            .select({
+              severity: escalations.severity,
+              reason: escalations.reason,
+              flaggedContent: escalations.flaggedContent,
+              subjectId: escalations.subjectId,
+            })
+            .from(escalations)
+            .where(eq(escalations.id, data.escalationId));
+          if (!esc?.subjectId) {
+            job.log(`Escalation ${data.escalationId} not found or has no subject; no alert sent`);
+            break;
+          }
+
+          const [subject] = await db
+            .select({ name: users.name, managerId: users.managerId })
+            .from(users)
+            .where(eq(users.id, esc.subjectId));
+          if (!subject?.managerId) break;
+
+          const [manager] = await db
+            .select({ name: users.name, email: users.email, isActive: users.isActive })
+            .from(users)
+            .where(eq(users.id, subject.managerId));
+          if (!manager?.email || !manager.isActive) break;
 
           // Check preference
           const [pref] = await db
@@ -553,24 +571,24 @@ export function createWorkers(config: WorkerConfig) {
             .from(notificationPreferences)
             .where(
               and(
-                eq(notificationPreferences.userId, data.managerId),
+                eq(notificationPreferences.userId, subject.managerId),
                 eq(notificationPreferences.type, "flag_alert"),
               ),
             );
           if (pref && !pref.enabled) break;
 
           const alertData: FlagAlertData = {
-            managerName: data.managerName.split(" ")[0],
-            subjectName: data.subjectName,
-            severity: data.severity,
-            reason: data.reason,
-            flaggedContent: data.flaggedContent,
+            managerName: (manager.name ?? "Manager").split(" ")[0],
+            subjectName: subject.name ?? "a team member",
+            severity: esc.severity,
+            reason: esc.reason,
+            flaggedContent: esc.flaggedContent,
             escalationId: data.escalationId,
           };
 
           await sendEmail({
-            to: data.managerEmail,
-            subject: `Flag alert: ${data.subjectName} — ${data.severity}`,
+            to: manager.email,
+            subject: `Flag alert: ${alertData.subjectName} (${esc.severity})`,
             html: flagAlertTemplate(alertData),
             unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
           });
@@ -581,13 +599,17 @@ export function createWorkers(config: WorkerConfig) {
           const data = job.data as {
             orgId: string;
             userId: string;
-            email: string;
-            userName: string;
             interactionsPending: number;
             targetThisWeek: number;
           };
 
           const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+
+          const [recipient] = await db
+            .select({ name: users.name, email: users.email, isActive: users.isActive })
+            .from(users)
+            .where(eq(users.id, data.userId));
+          if (!recipient?.email || !recipient.isActive) break;
 
           // Check preference
           const [pref] = await db
@@ -603,14 +625,14 @@ export function createWorkers(config: WorkerConfig) {
 
           const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
           const nudgeData: NudgeData = {
-            userName: data.userName.split(" ")[0],
+            userName: (recipient.name ?? "there").split(" ")[0],
             interactionsPending: data.interactionsPending,
             targetThisWeek: data.targetThisWeek,
             dayOfWeek: days[new Date().getUTCDay()],
           };
 
           await sendEmail({
-            to: data.email,
+            to: recipient.email,
             subject: `Friendly reminder: ${data.interactionsPending} review${data.interactionsPending !== 1 ? "s" : ""} this week`,
             html: nudgeTemplate(nudgeData),
             unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
@@ -817,53 +839,32 @@ export function createWorkers(config: WorkerConfig) {
           weekStart.setUTCHours(0, 0, 0, 0);
           const weekStartDate = weekStart.toISOString().slice(0, 10);
 
-          // Find active, onboarded users with an engagement row for this week where they are behind target
-          const behindUsers = await db
-            .select({
-              id: users.id,
-              name: users.name,
-              email: users.email,
-              interactionsCompleted: engagementScores.interactionsCompleted,
-              interactionsTarget: engagementScores.interactionsTarget,
-            })
-            .from(users)
-            .innerJoin(
-              engagementScores,
-              and(
-                eq(engagementScores.userId, users.id),
-                eq(engagementScores.weekStarting, weekStartDate),
-              ),
-            )
-            .where(
-              and(
-                eq(users.isActive, true),
-                eq(users.onboardingCompleted, true),
-                sql`${engagementScores.interactionsCompleted} < ${engagementScores.interactionsTarget}`,
-              ),
-            );
+          const platform = (await getActivePlatform(db)) ?? "slack";
+          const behind = await selectNudgeTargets(db, weekStartDate, platform);
 
-          if (behindUsers.length === 0) {
-            job.log("No users behind target this week — skipping nudges");
+          if (behind.length === 0) {
+            job.log("No users behind target this week, skipping nudges");
             break;
           }
 
           const nudgeDay = now.toISOString().slice(0, 10);
 
+          // Ids and counts only: the worker looks up name and email, so no
+          // personal data sits in Redis job payloads.
           await queues.notificationQueue.addBulk(
-            behindUsers.map((u) => ({
+            behind.map((u) => ({
               name: "nudge",
               data: {
                 type: "nudge",
                 orgId,
-                userId: u.id,
-                email: u.email,
-                userName: u.name,
-                interactionsPending: u.interactionsTarget - u.interactionsCompleted,
-                targetThisWeek: u.interactionsTarget,
+                userId: u.userId,
+                interactionsPending: u.pending,
+                targetThisWeek: u.target,
               },
-              opts: { jobId: buildJobId("nudge", orgId, u.id, weekStartDate, nudgeDay) },
+              opts: { jobId: buildJobId("nudge", orgId, u.userId, weekStartDate, nudgeDay) },
             })),
           );
+          const behindUsers = behind;
           job.log(`Dispatched ${behindUsers.length} nudge jobs`);
           break;
         }

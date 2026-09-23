@@ -76,3 +76,35 @@ API route guards (every module has `requireAuth`/`requireRole` or explicit check
 **Step 4 (2026-09-23), Google Chat adapter:**
 - H5: bearer verified as Google's signed token (`jose`): project-number mode against chat@system X.509 certs, endpoint-URL mode as a Google OIDC token that must carry email chat@system (verified). Legacy shared token only with `GCHAT_ALLOW_LEGACY_TOKEN=true`. Replay window kept.
 - Also fixed: the scheduler sent to `platformUserId` (wrong for Google Chat, which needs the DM space) and did not check reachability or link trust.
+
+## Branch review (main...beta-hardening, 2026-09-23, after step 4)
+
+`/code-review high`, then each finding verified by hand against the code.
+
+| # | Severity | Finding | Verdict |
+|---|---|---|---|
+| B1 | High | Scheduling pass runs 10:00 UTC; a default 10:00 preference is already past for UTC and everyone east, so sends roll to the next day. Friday runs land on Saturday (quiet-day check uses today, not the send day). `interaction-scheduler.ts` | Confirmed, **fixed** |
+| B2 | High | `flag_alert` job data carries decrypted `flaggedContent` + `reason` in Redis (kept up to 1,000/5,000 jobs). Breaks the encryption-at-rest requirement. `analysis-pipeline.ts` | Confirmed, **fixed** |
+| B3 | High | Check-in retry loop: permanent failures (`failed`) are re-selected because each failure refreshes `lastAttemptAt`; hourly retry for ever. Attempt ceiling only applies before a transcript exists, so LLM failures retry indefinitely (LLM spend). `check-in-pipeline.ts` | Confirmed, **fixed** |
+| B4 | Medium | Self-reflection extraction failure returns `success:false`, worker ignores it, BullMQ never retries: reflection lost on an LLM blip. `analysis-pipeline.ts` | Confirmed, **fixed** |
+| B5 | Medium | Nudges: zero-activity users never nudged (no engagement row); engagement target defaults to 3 while the scheduler aims for 2, so fully-engaged users get "1 pending" nudges. `workers/index.ts` | Confirmed (extends earlier finding), **fixed** |
+| B6 | Medium | Unique relationship pair makes re-creating a soft-deleted relationship a 500 (three routes). | Confirmed (earlier finding), **fixed** |
+| B7 | Medium | `getCompletedThreeSixtyReviews` has no status filter and sorts NULL `completedAt` first; in-progress 360s shown as "Completed" to managers and the employee. `queries/three-sixty.ts` | Confirmed, **fixed** |
+| B8 | Low | 360 aggregation's LLM theme extraction is never used (caller omits `llm`); keyword fallback always runs. `three-sixty/routes.ts` | Confirmed, **fixed** |
+| B9 | Low | Unmanaged-team gate `assertCanAccessUsers(request, [])` passes for any manager; later per-member check limits the damage to an empty 200. `profiles/routes.ts` | Confirmed, **fixed** |
+| B10 | Low | Pipeline upserts the week's self-reflection as completed, so `/reflections/:id/complete` would 409. No UI calls `/start` or `/complete` today. `analysis-pipeline.ts` | Latent, **fixed** |
+
+Dropped by the reviewer as non-correctness: repeated caller lookups in access checks, duplicated team-insights and week-start logic, em-dashes in comments, dev simulator not using `parseBody`.
+
+**Branch review fixes (2026-09-23), all ten:**
+- B1: `nextPreferredSendTime` (next occurrence in the user's zone) + quiet day checked on the send day; scheduling pass moved to 04:00 UTC daily. 7 fixed-date tests incl. the Friday to Saturday regression and the October clock change.
+- B2: flag alert jobs carry only `escalationId`; the worker reads the encrypted content from Postgres. Nudge jobs also no longer carry names or emails.
+- B3: `selectMeetingsToProcess` never re-selects `failed`, recovers rows stuck in `processing` after 1 h, oldest attempt first; attempt counter resets when the transcript is found; `statusAfterFailure` caps transient retries at 5.
+- B4: reflection extraction failures throw, so BullMQ retries.
+- B5: `selectNudgeTargets` includes people with no activity, uses each person's own weekly target (default 2, matching the scheduler), skips paused and unreachable people; engagement rows store the person's target.
+- B6: `upsertRelationship` reactivates a soft-deleted pair (three routes); calendar sync unchanged (never overrides manual).
+- B7: completed 360s only, NULLs last.
+- B8: 360 completion passes the LLM; also fixed the earlier deep-review note: the LLM call no longer runs inside a transaction (atomic claim to `analyzing`, revert on failure, 409 on a concurrent completion).
+- B9: unmanaged-team profiles require an admin role.
+- B10: pipeline no longer overwrites a reflection the person completed; `/complete` after the pipeline merges the person's answers (no 409).
+- Tests: scheduler-send-time (7), analysis-fixes (4), check-in-retry (4), nudges (2), review-fixes (4). 273 tests total.

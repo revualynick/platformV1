@@ -9,6 +9,7 @@ import {
   updateManagerSchema,
 } from "../../lib/validation.js";
 import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
+import { upsertRelationship } from "../../lib/relationships.js";
 
 export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -192,18 +193,7 @@ export const relationshipsRoutes: FastifyPluginAsync = async (app) => {
     const { db } = request.tenant;
     const body = parseBody(createRelationshipSchema, request.body);
 
-    const [created] = await db
-      .insert(userRelationships)
-      .values({
-        fromUserId: body.fromUserId,
-        toUserId: body.toUserId,
-        label: body.label ?? "",
-        tags: body.tags ?? [],
-        strength: body.strength ?? 0.5,
-        source: body.source ?? "manual",
-        notes: body.notes ?? null,
-      })
-      .returning();
+    const created = await upsertRelationship(db, body);
 
     return reply.code(201).send(created);
   });

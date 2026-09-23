@@ -28,6 +28,7 @@ import {
 } from "../../lib/validation.js";
 import { requireRole } from "../../lib/rbac.js";
 import { encryptConfig } from "../../lib/encryption.js";
+import { upsertRelationship } from "../../lib/relationships.js";
 
 export const orgRoutes: FastifyPluginAsync = async (app) => {
   // All admin routes require admin role
@@ -335,17 +336,7 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     const { db } = request.tenant;
     const body = parseBody(createRelationshipSchema, request.body);
 
-    const [created] = await db
-      .insert(userRelationships)
-      .values({
-        fromUserId: body.fromUserId,
-        toUserId: body.toUserId,
-        label: body.label ?? "",
-        tags: body.tags ?? [],
-        strength: body.strength ?? 0.5,
-        source: body.source ?? "manual",
-      })
-      .returning();
+    const created = await upsertRelationship(db, body);
 
     return reply.code(201).send(created);
   });

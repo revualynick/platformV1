@@ -312,13 +312,16 @@ async function start() {
     }
   }
 
-  // Interaction scheduler: weekdays at 10:00 AM UTC — initiates peer_review /
-  // self_reflection conversations for the day. SCHEDULER_PLATFORM controls the
-  // outbound chat platform (default "slack").
+  // Interaction scheduler: daily at 04:00 UTC. Each conversation is timed
+  // for the user's own preferred local time and skipped if that lands on
+  // one of their quiet days. Running early means the preferred time is
+  // still ahead the same day for the UK, Europe and the Americas (a 10:00
+  // UTC run pushed every UK/Europe send to the next day). The connected chat
+  // integration decides the platform; SCHEDULER_PLATFORM is a dev fallback.
   await queues.schedulerQueue.add(
     "scheduling-pass",
     { orgId: cronOrgId, platform: (process.env.SCHEDULER_PLATFORM ?? "slack") },
-    { repeat: { pattern: "0 10 * * 1-5" }, jobId: "scheduling-pass-cron" },
+    { repeat: { pattern: "0 4 * * *" }, jobId: "scheduling-pass-cron" },
   );
 
   // Weekly digest: Monday 9:00 AM UTC

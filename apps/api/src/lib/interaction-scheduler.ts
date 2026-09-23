@@ -93,13 +93,7 @@ export async function runSchedulingPass(
       continue;
     }
 
-    // Check quiet days
     const quietDays = prefs?.quietDays ?? [0, 6]; // default: weekends off
-    const todayDay = now.getUTCDay();
-    if (quietDays.includes(todayDay)) {
-      skipped++;
-      continue;
-    }
 
     // Select interaction type (rotate: peer_review → self_reflection → peer_review)
     const interactionType = selectInteractionType(existing);
@@ -132,6 +126,13 @@ export async function runSchedulingPass(
       user.timezone,
       prefs?.preferredInteractionTime ?? "10:00",
     );
+
+    // Quiet days apply to the day the message will actually arrive, in the
+    // user's own timezone (not the day the pass happens to run).
+    if (quietDays.includes(localWeekday(sendAt, user.timezone))) {
+      skipped++;
+      continue;
+    }
 
     // Someone who said "stop" is not messaged until they say "start".
     if ((user.preferences as { chatPaused?: boolean } | null)?.chatPaused) {
@@ -398,7 +399,26 @@ async function calculateSendTime(
     // Calendar data unavailable — fall through to preferred time
   }
 
-  // Fix 2: guard against malformed preferredTime (e.g. "10" → minutes=NaN).
+  const sendAt = nextPreferredSendTime(now, userTimezone, preferredTime);
+
+  // Add slight jitter (0-15 min) so not everyone gets pinged at the same second
+  const jitter = Math.floor(Math.random() * 15) * 60 * 1000;
+  sendAt.setTime(sendAt.getTime() + jitter);
+
+  return sendAt;
+}
+
+/**
+ * The next time the user's preferred wall-clock time comes round in their
+ * own timezone: today if it is still ahead, otherwise tomorrow. Uses Intl
+ * only, so it is independent of the server's timezone and correct across
+ * DST changes. Malformed times fall back to 10:00; invalid zones to UTC.
+ */
+export function nextPreferredSendTime(
+  now: Date,
+  userTimezone: string | null | undefined,
+  preferredTime: string, // "HH:mm"
+): Date {
   const parts = preferredTime.split(":");
   let hours = Number(parts[0]);
   let minutes = Number(parts[1]);
@@ -406,51 +426,43 @@ async function calculateSendTime(
     Number.isNaN(hours) || Number.isNaN(minutes) ||
     hours < 0 || hours > 23 || minutes < 0 || minutes > 59
   ) {
-    console.warn(
-      `[Scheduler] Invalid preferredTime "${preferredTime}" for user — defaulting to 10:00`,
-    );
+    console.warn(`[Scheduler] Invalid preferredTime "${preferredTime}" for user, defaulting to 10:00`);
     hours = 10;
     minutes = 0;
   }
 
   const tz = userTimezone && userTimezone.length > 0 ? userTimezone : "UTC";
-
-  // Fix 1: convert preferredTime (wall-clock in the user's zone) to a UTC instant
-  // using Intl APIs only — independent of the Node process's local timezone.
-  // We read today's calendar date in the zone, build the desired wall-clock
-  // instant as a fake-UTC timestamp, then subtract the zone's offset to get
-  // the true UTC send time. If that instant is already past, we advance by
-  // one calendar day *in the zone* (re-derive parts from now+24 h) rather
-  // than blindly adding 86 400 s, which would be wrong across DST boundaries.
-  let sendAt: Date;
   try {
-    const offset = zoneOffsetMs(now, tz);
-    const { year, month, day } = zoneParts(now, tz);
-    // Wall-clock instant for today's preferred time, treated as if UTC
-    const wallClockAsUtc = Date.UTC(year, month, day, hours, minutes, 0);
-    // Subtract offset to get the true UTC instant
-    sendAt = new Date(wallClockAsUtc - offset);
-
+    const today = zoneParts(now, tz);
+    let sendAt = new Date(
+      Date.UTC(today.year, today.month, today.day, hours, minutes, 0) - zoneOffsetMs(now, tz),
+    );
     if (sendAt <= now) {
-      // Advance by one calendar day in the zone
+      // Tomorrow in the zone: re-derive the date from now + 24 h rather than
+      // adding 86,400 s, which is wrong across DST boundaries.
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const tomorrowOffset = zoneOffsetMs(tomorrow, tz);
-      const { year: ty, month: tm, day: td } = zoneParts(tomorrow, tz);
-      const tomorrowWall = Date.UTC(ty, tm, td, hours, minutes, 0);
-      sendAt = new Date(tomorrowWall - tomorrowOffset);
+      const t = zoneParts(tomorrow, tz);
+      sendAt = new Date(
+        Date.UTC(t.year, t.month, t.day, hours, minutes, 0) - zoneOffsetMs(tomorrow, tz),
+      );
     }
+    return sendAt;
   } catch {
-    // Invalid timezone string — fall back to treating preferredTime as UTC.
-    sendAt = new Date(now);
+    // Invalid timezone string: treat preferredTime as UTC.
+    const sendAt = new Date(now);
     sendAt.setUTCHours(hours, minutes, 0, 0);
-    if (sendAt <= now) {
-      sendAt.setUTCDate(sendAt.getUTCDate() + 1);
-    }
+    if (sendAt <= now) sendAt.setUTCDate(sendAt.getUTCDate() + 1);
+    return sendAt;
   }
+}
 
-  // Add slight jitter (0-15 min) so not everyone gets pinged at the same second
-  const jitter = Math.floor(Math.random() * 15) * 60 * 1000;
-  sendAt.setTime(sendAt.getTime() + jitter);
-
-  return sendAt;
+/** Day of week (0 = Sunday) of an instant in the given timezone. */
+export function localWeekday(instant: Date, userTimezone: string | null | undefined): number {
+  const tz = userTimezone && userTimezone.length > 0 ? userTimezone : "UTC";
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(instant);
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+  } catch {
+    return instant.getUTCDay();
+  }
 }

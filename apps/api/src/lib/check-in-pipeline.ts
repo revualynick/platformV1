@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and, or, gte, inArray, notInArray } from "drizzle-orm";
+import { eq, and, or, gte, lt, sql, inArray, notInArray } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import {
   users,
@@ -25,6 +25,12 @@ import {
 const DEFAULT_MARKER = "[Check-in]";
 const TRANSCRIPT_GIVE_UP_DAYS = 7;
 const TRANSCRIPT_MAX_ATTEMPTS = 168; // hourly cron × 7 days
+// Processing attempts once a transcript exists (the counter is reset when
+// the transcript is found). Keeps LLM retries bounded.
+export const PROCESSING_MAX_ATTEMPTS = 5;
+// A row left in "processing" this long was abandoned by a crashed worker.
+const STALE_PROCESSING_MS = 60 * 60 * 1000;
+const TRANSIENT_ERROR_CODES = new Set(["google_rate_limited", "network_error", "llm_error"]);
 const MAX_SEGMENT_CHARS = 24_000;
 const MAX_QUOTE_CHARS = 500;
 const MAX_NOTE_CHARS = 2_000;
@@ -438,26 +444,7 @@ async function processPendingMeetings(
   logger: Logger,
   google: CheckInGoogleDeps,
 ): Promise<number> {
-  // Also retry recently-failed meetings (transient errors) updated within the
-  // last 24 h and below the attempt ceiling — they'll get another chance each
-  // hourly cron run. Permanent failures stay "failed" and are excluded.
-  const retryWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const conditions = [
-    or(
-      eq(checkInMeetings.status, "pending_transcript"),
-      and(
-        eq(checkInMeetings.status, "failed"),
-        gte(checkInMeetings.lastAttemptAt, retryWindow),
-        // attemptCount < TRANSCRIPT_MAX_ATTEMPTS is enforced by the
-        // give-up logic later in the loop; include all here for simplicity
-      ),
-    ),
-  ];
-  const pending = await db
-    .select()
-    .from(checkInMeetings)
-    .where(and(...conditions))
-    .limit(50);
+  const pending = await selectMeetingsToProcess(db);
 
   let processed = 0;
   for (const meeting of pending) {
@@ -503,10 +490,13 @@ async function processPendingMeetings(
             .where(eq(checkInMeetings.id, meeting.id));
           continue;
         }
+        // Waiting for the transcript used the attempt counter; processing
+        // gets its own budget from here.
         await db
           .update(checkInMeetings)
-          .set({ transcriptDocId: docId })
+          .set({ transcriptDocId: docId, attemptCount: 0 })
           .where(eq(checkInMeetings.id, meeting.id));
+        meeting.attemptCount = 0;
       }
 
       await db
@@ -566,11 +556,7 @@ async function processPendingMeetings(
       // responses containing meeting/transcript content. Full detail
       // goes to the logger only.
       const code = classifyPipelineError(err);
-      // Transient errors (network, rate limit, LLM) stay pending_transcript so
-      // the next hourly run retries them. Permanent errors (auth revoked,
-      // missing subject, export failure) go to "failed" and stop retrying.
-      const transientCodes = new Set(["google_rate_limited", "network_error", "llm_error"]);
-      const nextStatus = transientCodes.has(code) ? "pending_transcript" : "failed";
+      const nextStatus = statusAfterFailure(code, meeting.attemptCount + 1);
       await db
         .update(checkInMeetings)
         .set({ status: nextStatus, errorMessage: code, lastAttemptAt: new Date(), attemptCount: meeting.attemptCount + 1 })
@@ -583,4 +569,40 @@ async function processPendingMeetings(
     }
   }
   return processed;
+}
+
+/**
+ * After a processing failure: transient errors (network, rate limit, LLM)
+ * go back to pending_transcript for the next hourly run until the attempt
+ * budget is spent; permanent errors (auth revoked, export failure) and
+ * exhausted retries go to "failed", which is never selected again.
+ */
+export function statusAfterFailure(
+  code: string,
+  attemptsSoFar: number,
+): "pending_transcript" | "failed" {
+  if (!TRANSIENT_ERROR_CODES.has(code)) return "failed";
+  return attemptsSoFar >= PROCESSING_MAX_ATTEMPTS ? "failed" : "pending_transcript";
+}
+
+/**
+ * Meetings to work on this run: those waiting for a transcript or a retry,
+ * plus rows abandoned in "processing" by a crashed worker. "failed" rows
+ * are never retried (the old query re-selected them for ever, because each
+ * failure refreshed last_attempt_at). Least recently attempted first, so
+ * retries cannot crowd new meetings out of the batch.
+ */
+export async function selectMeetingsToProcess(db: TenantDb, limit = 50) {
+  const staleBefore = new Date(Date.now() - STALE_PROCESSING_MS);
+  return db
+    .select()
+    .from(checkInMeetings)
+    .where(
+      or(
+        eq(checkInMeetings.status, "pending_transcript"),
+        and(eq(checkInMeetings.status, "processing"), lt(checkInMeetings.lastAttemptAt, staleBefore)),
+      ),
+    )
+    .orderBy(sql`${checkInMeetings.lastAttemptAt} asc nulls first`)
+    .limit(limit);
 }

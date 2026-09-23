@@ -24,6 +24,8 @@ import {
   getAuthenticatedUserId,
   assertCanAccessUser,
   assertCanAccessUsers,
+  getUserRole,
+  isAdminRole,
 } from "../../lib/rbac.js";
 import type { Queue } from "bullmq";
 import { getReportingTree } from "@revualy/db/queries";
@@ -240,8 +242,13 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       if (team.managerId) {
         await assertCanAccessUser(request, team.managerId);
       } else {
-        // Unmanaged team: fall back to requiring admin-level access.
-        await assertCanAccessUsers(request, []);
+        // Unmanaged team: only admins may view it. (The previous
+        // assertCanAccessUsers(request, []) passed for anyone, because an
+        // empty list has nothing to reject.)
+        const role = await getUserRole(request, getAuthenticatedUserId(request));
+        if (!isAdminRole(role)) {
+          return reply.code(403).send({ error: "Insufficient permissions" });
+        }
       }
 
       // Get team members

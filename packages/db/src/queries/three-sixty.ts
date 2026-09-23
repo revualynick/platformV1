@@ -1,4 +1,4 @@
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import {
   threeSixtyReviews,
   threeSixtyResponses,
@@ -21,8 +21,10 @@ export async function getCompletedThreeSixtyReviews(
   const reviews = await db
     .select()
     .from(threeSixtyReviews)
-    .where(eq(threeSixtyReviews.subjectId, subjectId))
-    .orderBy(desc(threeSixtyReviews.completedAt))
+    // Completed only: in-progress reviews have no aggregate yet and were
+    // being shown (first, since NULL completed_at sorts first) as "Completed".
+    .where(and(eq(threeSixtyReviews.subjectId, subjectId), eq(threeSixtyReviews.status, "completed")))
+    .orderBy(sql`${threeSixtyReviews.completedAt} desc nulls last`)
     .limit(limit);
 
   if (reviews.length === 0) return [];
