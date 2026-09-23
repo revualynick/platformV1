@@ -9,7 +9,7 @@ export default function MarketingLayout({
   return (
     <div className="relative min-h-screen overflow-hidden">
       <MarketingNav />
-      {children}
+      <main>{children}</main>
       <MarketingFooter />
     </div>
   );

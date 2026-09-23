@@ -142,24 +142,37 @@ async function TopRow({
       >
         <div className="flex items-start justify-between">
           <span className="text-[11px] font-medium uppercase tracking-wider text-stone-400">Next Interaction</span>
-          <span className="rounded-full bg-terracotta/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-terracotta">
-            {upcomingInteraction.type.replace("_", " ")}
-          </span>
+          {isDemo && (
+            <span className="rounded-full bg-terracotta/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-terracotta">
+              {upcomingInteraction.type.replace("_", " ")}
+            </span>
+          )}
         </div>
-        <div className="mt-4">
-          <p className="font-display text-lg font-semibold text-stone-900">Review of {upcomingInteraction.subjectName}</p>
-          <p className="mt-1.5 text-sm text-stone-500">{upcomingInteraction.topic}</p>
-        </div>
-        <div className="mt-auto flex items-center gap-4 pt-5">
-          <div className="flex items-center gap-2 text-sm text-stone-500">
-            <span className="text-base">&#9201;</span>
-            {upcomingInteraction.scheduledFor}
+        {isDemo ? (
+          <>
+            <div className="mt-4">
+              <p className="font-display text-lg font-semibold text-stone-900">Review of {upcomingInteraction.subjectName}</p>
+              <p className="mt-1.5 text-sm text-stone-500">{upcomingInteraction.topic}</p>
+            </div>
+            <div className="mt-auto flex items-center gap-4 pt-5">
+              <div className="flex items-center gap-2 text-sm text-stone-500">
+                <span className="text-base">&#9201;</span>
+                {upcomingInteraction.scheduledFor}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-stone-500">
+                <span className="text-base">&#128172;</span>
+                via <span className="capitalize">{upcomingInteraction.platform}</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="mt-4 flex flex-1 flex-col items-center justify-center text-center">
+            <p className="text-sm font-medium text-stone-500">No upcoming interactions</p>
+            <p className="mt-1 text-xs text-stone-400">
+              Revualy will schedule your next feedback conversation automatically.
+            </p>
           </div>
-          <div className="flex items-center gap-2 text-sm text-stone-500">
-            <span className="text-base">&#128172;</span>
-            via <span className="capitalize">{upcomingInteraction.platform}</span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -214,8 +227,8 @@ async function ChartsRow({
         }));
       }
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("dashboard:charts-row", err);
   }
 
   return (

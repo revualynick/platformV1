@@ -23,11 +23,6 @@ const PREF_LABELS: Record<string, { label: string; description: string }> = {
     description:
       "Gentle reminders when you have pending interactions or overdue action items.",
   },
-  leaderboard_update: {
-    label: "Leaderboard Updates",
-    description:
-      "Weekly notification when the engagement leaderboard is updated.",
-  },
 };
 
 export default async function SettingsPage() {

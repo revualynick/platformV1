@@ -178,6 +178,8 @@ export function ValuesCard({ values }: ValuesCardProps) {
             <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 onClick={() => setModalState({ mode: "edit", value })}
+                aria-label={`Edit ${value.name}`}
+                title={`Edit ${value.name}`}
                 className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
               >
                 <svg
@@ -186,6 +188,7 @@ export function ValuesCard({ values }: ValuesCardProps) {
                   viewBox="0 0 24 24"
                   strokeWidth={1.5}
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"

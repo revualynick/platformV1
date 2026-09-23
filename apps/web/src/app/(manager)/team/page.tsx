@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -11,7 +12,7 @@ import {
   leaderboard as mockLeaderboard,
   teamEngagementTrend as mockTrend,
 } from "@/lib/mock-data";
-import { trendIcons, severityStyles } from "@/lib/style-constants";
+import { severityStyles } from "@/lib/style-constants";
 import { isDemoSession } from "@/lib/session-utils";
 import { logPageError } from "@/lib/page-errors";
 import { InfoHint } from "@/components/info-hint";
@@ -23,7 +24,6 @@ type TeamMember = {
   engagementScore: number;
   interactionsThisWeek: number;
   target: number;
-  trend: string;
 };
 
 type FlaggedItem = {
@@ -41,6 +41,83 @@ type LeaderboardEntry = {
   score: number;
   streak: number;
 };
+
+// ── Shared data loader ─────────────────────────────────
+// Wrapped in React.cache so the three Suspense sections (StatsSection,
+// ChartAndLeaderboardSection, FlaggedSection) that each call it with the same
+// (userId, isDemo) args share a single execution per render pass — the
+// listActiveUsers + getBulkLatestEngagement + getFlaggedItemsForReports
+// queries run once, not once per section.
+
+type TeamData = {
+  teamMembers: TeamMember[];
+  flaggedItems: FlaggedItem[];
+  loadFailed: boolean;
+};
+
+const loadTeamData = cache(async function loadTeamData(
+  userId: string,
+  isDemo: boolean,
+): Promise<TeamData> {
+  if (isDemo) {
+    return { teamMembers: mockTeamMembers, flaggedItems: mockFlaggedItems, loadFailed: false };
+  }
+
+  try {
+    const db = getDb();
+    const members = await listActiveUsers(db, { managerId: userId });
+
+    if (members.length === 0) {
+      return { teamMembers: [], flaggedItems: [], loadFailed: false };
+    }
+
+    const memberIds = members.map((m) => m.id);
+    const [bulkEng, flaggedResult] = await Promise.allSettled([
+      getBulkLatestEngagement(db, memberIds),
+      getFlaggedItemsForReports(db, memberIds),
+    ]);
+
+    const engMap = bulkEng.status === "fulfilled"
+      ? bulkEng.value
+      : ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>);
+
+    const teamMembers: TeamMember[] = members.map((m) => {
+      const scores = engMap[m.id] ?? [];
+      if (scores.length > 0) {
+        const latest = scores[0];
+        return {
+          id: m.id,
+          name: m.name,
+          engagementScore: latest.averageQualityScore,
+          interactionsThisWeek: latest.interactionsCompleted,
+          target: latest.interactionsTarget,
+        };
+      }
+      return { id: m.id, name: m.name, engagementScore: 0, interactionsThisWeek: 0, target: 3 };
+    });
+
+    const flaggedItems: FlaggedItem[] =
+      flaggedResult.status === "fulfilled" && flaggedResult.value.length > 0
+        ? flaggedResult.value.map((item) => ({
+            id: item.escalation.id,
+            severity: item.escalation.severity,
+            subjectName: item.subjectName ?? "Team Member",
+            reason: item.escalation.reason,
+            excerpt: item.escalation.flaggedContent || null,
+            date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }),
+          }))
+        : [];
+
+    return { teamMembers, flaggedItems, loadFailed: false };
+  } catch (err) {
+    logPageError("team-overview", err);
+    return { teamMembers: [], flaggedItems: [], loadFailed: true };
+  }
+});
 
 // ── Skeleton fallbacks ─────────────────────────────────
 
@@ -71,56 +148,7 @@ async function StatsSection({
   userId: string;
   isDemo: boolean;
 }) {
-  let teamMembers: TeamMember[] = isDemo ? mockTeamMembers : [];
-  let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
-  let loadFailed = false;
-
-  try {
-    const db = getDb();
-    const members = await listActiveUsers(db, { managerId: userId });
-
-    if (members.length > 0) {
-      const memberIds = members.map((m) => m.id);
-      const [bulkEng, flaggedResult] = await Promise.allSettled([
-        getBulkLatestEngagement(db, memberIds),
-        getFlaggedItemsForReports(db, memberIds),
-      ]);
-
-      const engMap = bulkEng.status === "fulfilled"
-        ? bulkEng.value
-        : ({} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>);
-
-      teamMembers = members.map((m) => {
-        const scores = engMap[m.id] ?? [];
-        if (scores.length > 0) {
-          const latest = scores[0];
-          return {
-            id: m.id,
-            name: m.name,
-            engagementScore: latest.averageQualityScore,
-            interactionsThisWeek: latest.interactionsCompleted,
-            target: latest.interactionsTarget,
-            trend: "stable" as string,
-          };
-        }
-        return { id: m.id, name: m.name, engagementScore: 0, interactionsThisWeek: 0, target: 3, trend: "stable" };
-      });
-
-      if (flaggedResult.status === "fulfilled" && flaggedResult.value.length > 0) {
-        flaggedItems = flaggedResult.value.map((item) => ({
-          id: item.escalation.id,
-          severity: item.escalation.severity,
-          subjectName: item.subjectName ?? "Team Member",
-          reason: item.escalation.reason,
-          excerpt: item.escalation.flaggedContent || null,
-          date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        }));
-      }
-    }
-  } catch (err) {
-    logPageError("team-overview", err);
-    loadFailed = true;
-  }
+  const { teamMembers, flaggedItems, loadFailed } = await loadTeamData(userId, isDemo);
 
   if (loadFailed && !isDemo) {
     return (
@@ -172,43 +200,16 @@ async function ChartAndLeaderboardSection({
   userId: string;
   isDemo: boolean;
 }) {
-  let leaderboard: LeaderboardEntry[] = isDemo ? mockLeaderboard : [];
+  const { teamMembers, loadFailed } = await loadTeamData(userId, isDemo);
   const trendData = isDemo ? mockTrend : [];
-  let loadFailed = false;
 
-  try {
-    const usersResult = await listActiveUsers(getDb(), { managerId: userId }).catch((err) => {
-      logPageError("team-overview", err);
-      loadFailed = true;
-      return [] as Array<{ id: string; name: string }>;
-    });
-
-    if (usersResult.length > 0) {
-      const members = usersResult;
-      const bulkEng = await getBulkLatestEngagement(getDb(), members.map((m) => m.id)).catch(
-        (err) => {
-          logPageError("team-overview", err);
-          return {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>;
-        },
-      );
-
-      const teamMembers: TeamMember[] = members.map((m) => {
-        const scores = bulkEng[m.id] ?? [];
-        if (scores.length > 0) {
-          const latest = scores[0];
-          return { id: m.id, name: m.name, engagementScore: latest.averageQualityScore, interactionsThisWeek: latest.interactionsCompleted, target: latest.interactionsTarget, trend: "stable" };
-        }
-        return { id: m.id, name: m.name, engagementScore: 0, interactionsThisWeek: 0, target: 3, trend: "stable" };
-      });
-
-      leaderboard = [...teamMembers]
+  const leaderboard: LeaderboardEntry[] = teamMembers.length > 0
+    ? [...teamMembers]
         .sort((a, b) => b.engagementScore - a.engagementScore)
-        .map((m, i) => ({ rank: i + 1, name: m.name, score: m.engagementScore, streak: 0 }));
-    }
-  } catch (err) {
-    logPageError("team-overview", err);
-    loadFailed = true;
-  }
+        .map((m, i) => ({ rank: i + 1, name: m.name, score: m.engagementScore, streak: 0 }))
+    : isDemo
+      ? mockLeaderboard
+      : [];
 
   if (loadFailed && !isDemo) {
     return (
@@ -285,32 +286,7 @@ async function FlaggedSection({
   userId: string;
   isDemo: boolean;
 }) {
-  let flaggedItems: FlaggedItem[] = isDemo ? mockFlaggedItems : [];
-  let loadFailed = false;
-
-  try {
-    const db = getDb();
-    const members = await listActiveUsers(db, { managerId: userId });
-    const memberIds = members.map((m) => m.id);
-    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch((err) => {
-      logPageError("team-overview", err);
-      loadFailed = true;
-      return [] as Array<{ escalation: { id: string; severity: string; reason: string; flaggedContent: string | null; createdAt: Date }; feedback: unknown; subjectName: string | null }>;
-    });
-    if (flaggedResult.length > 0) {
-      flaggedItems = flaggedResult.map((item) => ({
-        id: item.escalation.id,
-        severity: item.escalation.severity,
-        subjectName: "Team Member",
-        reason: item.escalation.reason,
-        excerpt: item.escalation.flaggedContent || null,
-        date: new Date(item.escalation.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      }));
-    }
-  } catch (err) {
-    logPageError("team-overview", err);
-    loadFailed = true;
-  }
+  const { flaggedItems, loadFailed } = await loadTeamData(userId, isDemo);
 
   if (loadFailed && !isDemo) {
     return <DataUnavailable what="flagged items" />;
@@ -343,9 +319,13 @@ async function FlaggedSection({
                     <p className="mt-2 rounded-lg bg-surface/60 px-3 py-2 text-xs italic text-stone-500">{item.excerpt}</p>
                   )}
                 </div>
-                <button className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50">
+                {/* Link to flagged page — full review flow lives there */}
+                <Link
+                  href="/team/flagged"
+                  className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50"
+                >
                   Review
-                </button>
+                </Link>
               </div>
             </div>
           );
@@ -362,8 +342,6 @@ export default async function TeamDashboard() {
   const userId = session?.user?.id;
   if (!userId) redirect("/login");
   const isDemo = isDemoSession(session);
-
-  void trendIcons;
 
   return (
     <div className="max-w-6xl">

@@ -45,7 +45,10 @@ async function apiFetch<T>(
   const res = await fetch(url, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      // Only send Content-Type when there's actually a body — Fastify rejects an
+      // empty body with content-type application/json (400), which silently broke
+      // every bodyless POST/DELETE (deactivate, note delete, ws-token → realtime).
+      ...(init?.body != null ? { "Content-Type": "application/json" } : {}),
       ...authHeaders,
       ...init?.headers,
     },
@@ -60,12 +63,9 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    // Don't leak backend error details — log for debugging, expose only status
+    // Truncate body to prevent large dumps; log in all envs for observability
     const body = await res.text().catch(() => "");
-    if (process.env.NODE_ENV === "development") {
-      // Truncate to prevent leaking large error bodies in dev console (#37)
-      console.error(`API error ${res.status}: ${path} — ${body.slice(0, 500)}`);
-    }
+    console.error(`API error ${res.status}: ${path} — ${body.slice(0, 500)}`);
     throw new Error(`API request failed: ${res.status} ${path}`);
   }
 
@@ -703,7 +703,7 @@ export async function generateAgenda(sessionId: string) {
 export interface NotificationPreference {
   id: string | null;
   userId: string;
-  type: "weekly_digest" | "flag_alert" | "nudge" | "leaderboard_update";
+  type: "weekly_digest" | "flag_alert" | "nudge";
   enabled: boolean;
   channel: string;
   createdAt: string | null;

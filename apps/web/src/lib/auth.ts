@@ -9,7 +9,7 @@ import {
   authSessions,
   authVerificationTokens,
 } from "@revualy/db/schema";
-import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared";
+import { encrypt, decrypt, isEncryptionConfigured } from "@revualy/shared/server";
 import { getDb } from "./db";
 
 /**

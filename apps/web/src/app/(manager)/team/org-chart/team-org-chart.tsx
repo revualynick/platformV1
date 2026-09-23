@@ -36,7 +36,13 @@ const LEVEL_H = 200;
 const NODE_W = 130;
 const NODE_H = 56;
 
-const roleStyles: Record<OrgRole, { fill: string; label: string }> = {
+// Keyed by string (not just OrgRole) because live data carries the raw system
+// role (employee | manager | admin | super_admin) as well as the richer
+// hierarchy roles used by the mock/demo data. Any unmapped role falls back to
+// DEFAULT_ROLE_STYLE so the chart never crashes on an unexpected value.
+const DEFAULT_ROLE_STYLE = { fill: "#78716c", label: "Team" };
+
+const roleStyles: Record<string, { fill: string; label: string }> = {
   vp: { fill: "#292524", label: "VP" },
   director: { fill: "#44403c", label: "Dir" },
   manager: { fill: "#C4654A", label: "Mgr" },
@@ -44,6 +50,10 @@ const roleStyles: Record<OrgRole, { fill: string; label: string }> = {
   senior: { fill: "#2D5A3D", label: "Sr" },
   mid: { fill: "#0284c7", label: "Mid" },
   junior: { fill: "#7c3aed", label: "Jr" },
+  // System roles from the live DB:
+  employee: { fill: "#0284c7", label: "IC" },
+  admin: { fill: "#44403c", label: "Admin" },
+  super_admin: { fill: "#292524", label: "Admin" },
 };
 
 const threadStrokeColors: Record<string, string> = {
@@ -549,7 +559,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
               const pos = positions[person.id];
               if (!pos) return null;
 
-              const role = roleStyles[person.role];
+              const role = roleStyles[person.role] ?? DEFAULT_ROLE_STYLE;
               const personThreads = threads.filter(
                 (t) => t.from === person.id || t.to === person.id,
               );
@@ -723,7 +733,7 @@ export function TeamOrgChart({ people, threads, managerId }: TeamOrgChartProps) 
             if (!person) return null;
             const pos = positions[person.id];
             if (!pos) return null;
-            const role = roleStyles[person.role];
+            const role = roleStyles[person.role] ?? DEFAULT_ROLE_STYLE;
             const personThreads = threads.filter(
               (t) => t.from === person.id || t.to === person.id,
             );

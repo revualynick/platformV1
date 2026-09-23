@@ -17,7 +17,6 @@ const NOTIFICATION_TYPES = [
   { type: "weekly_digest", label: "Weekly Digest", description: "Monday engagement summary" },
   { type: "flag_alert", label: "Flag Alerts", description: "Immediate escalation notifications" },
   { type: "nudge", label: "Nudge Reminders", description: "Pending interaction reminders" },
-  { type: "leaderboard_update", label: "Leaderboard Updates", description: "Weekly leaderboard results" },
 ];
 
 const TIMEZONES = [
@@ -43,7 +42,6 @@ export function OnboardingWizard({ initialData }: { initialData: InitialData }) 
     weekly_digest: true,
     flag_alert: true,
     nudge: true,
-    leaderboard_update: true,
   });
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

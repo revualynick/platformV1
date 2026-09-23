@@ -1,3 +1,6 @@
+// Per-user authenticated pages must never be statically prerendered.
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { PathBar } from "@/components/path-bar";

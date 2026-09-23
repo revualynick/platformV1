@@ -3,10 +3,11 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
-import { getFlaggedItemsForReports, listActiveUsers } from "@revualy/db/queries";
+import { getFlaggedItemsForReports, listActiveUsers, getBulkLatestEngagement, getPulseTriggersForReports } from "@revualy/db/queries";
 import {
   flaggedItems as mockFlaggedItems,
   teamMembers as mockTeamMembers,
+  pulseTriggers as mockPulseTriggers,
 } from "@/lib/mock-data";
 import { severityStyles } from "@/lib/style-constants";
 import { InfoHint } from "@/components/info-hint";
@@ -31,21 +32,32 @@ type TeamMember = {
   trend: string;
 };
 
+type PulseTrigger = {
+  id: string;
+  subjectName: string;
+  sourceType: string;
+  sentiment: string | null;
+  date: string;
+};
+
 async function loadFlaggedData(userId: string, isDemo: boolean) {
   try {
     const db = getDb();
     const members = await listActiveUsers(db, { managerId: userId });
     const memberIds = members.map((m) => m.id);
-    const flaggedResult = await getFlaggedItemsForReports(db, memberIds).catch((err) => {
-      logPageError("flagged", err);
-      return [];
-    });
+
+    const [flaggedResult, pulseResult] = await Promise.allSettled([
+      getFlaggedItemsForReports(db, memberIds),
+      getPulseTriggersForReports(db, memberIds),
+    ]);
+    if (flaggedResult.status === "rejected") logPageError("flagged", flaggedResult.reason);
+    if (pulseResult.status === "rejected") logPageError("flagged:pulse", pulseResult.reason);
 
     let flaggedItems: FlaggedItem[] = isDemo
       ? mockFlaggedItems.map((i) => ({ ...i, status: "open" }))
       : [];
-    if (flaggedResult.length > 0) {
-      flaggedItems = flaggedResult.map((item) => ({
+    if (flaggedResult.status === "fulfilled" && flaggedResult.value.length > 0) {
+      flaggedItems = flaggedResult.value.map((item) => ({
         id: item.escalation.id,
         severity: item.escalation.severity,
         status: item.escalation.status,
@@ -56,21 +68,55 @@ async function loadFlaggedData(userId: string, isDemo: boolean) {
       }));
     }
 
-    // For "at risk" sidebar, we'd need engagement scores per member
-    // Fall back to mock data for now since engagement fetch per-user is heavy
-    let needsAttention: TeamMember[] = isDemo
-      ? (mockTeamMembers as TeamMember[])
-          .filter((m) => m.engagementScore < 60 || m.trend === "down")
-          .sort((a, b) => a.engagementScore - b.engagementScore)
+    let pulseTriggers: PulseTrigger[] = isDemo
+      ? mockPulseTriggers.map((t) => ({
+          id: t.id,
+          subjectName: t.subjectName,
+          sourceType: t.sourceType,
+          sentiment: t.sentiment,
+          date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        }))
       : [];
-
-    if (members.length > 0) {
-      // Basic at-risk: members exist but we don't have their scores without extra fetches
-      // Keep mock for now — team page already fetches full engagement data
-      needsAttention = needsAttention;
+    if (pulseResult.status === "fulfilled" && pulseResult.value.length > 0) {
+      pulseTriggers = pulseResult.value.map((t) => ({
+        id: t.id,
+        subjectName: t.subjectName,
+        sourceType: t.sourceType,
+        sentiment: t.sentiment,
+        date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      }));
     }
 
-    return { flaggedItems, needsAttention };
+    // "At risk" sidebar: members whose latest engagement is below threshold.
+    let needsAttention: TeamMember[];
+    if (isDemo) {
+      needsAttention = (mockTeamMembers as TeamMember[])
+        .filter((m) => m.engagementScore < 60 || m.trend === "down")
+        .sort((a, b) => a.engagementScore - b.engagementScore);
+    } else {
+      const eng = memberIds.length
+        ? await getBulkLatestEngagement(db, memberIds).catch((err) => {
+            logPageError("flagged-at-risk", err);
+            return {} as Record<string, Array<{ averageQualityScore: number; interactionsCompleted: number; interactionsTarget: number; streak: number }>>;
+          })
+        : {};
+      needsAttention = members
+        .map((m) => {
+          const latest = eng[m.id]?.[0];
+          return {
+            id: m.id,
+            name: m.name,
+            engagementScore: latest?.averageQualityScore ?? 0,
+            interactionsThisWeek: latest?.interactionsCompleted ?? 0,
+            target: latest?.interactionsTarget ?? 3,
+            trend: (latest?.averageQualityScore ?? 0) < 50 ? "down" : "stable",
+          };
+        })
+        .filter((m) => m.engagementScore < 60)
+        .sort((a, b) => a.engagementScore - b.engagementScore);
+    }
+
+    return { flaggedItems, needsAttention, pulseTriggers };
   } catch {
     if (isDemo) {
       return {
@@ -78,9 +124,16 @@ async function loadFlaggedData(userId: string, isDemo: boolean) {
         needsAttention: (mockTeamMembers as TeamMember[])
           .filter((m) => m.engagementScore < 60 || m.trend === "down")
           .sort((a, b) => a.engagementScore - b.engagementScore),
+        pulseTriggers: mockPulseTriggers.map((t) => ({
+          id: t.id,
+          subjectName: t.subjectName,
+          sourceType: t.sourceType,
+          sentiment: t.sentiment,
+          date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        })),
       };
     }
-    return { flaggedItems: [], needsAttention: [] };
+    return { flaggedItems: [], needsAttention: [], pulseTriggers: [] };
   }
 }
 
@@ -93,7 +146,7 @@ export default async function FlaggedPage() {
   }
 
   const isDemo = isDemoSession(session);
-  const { flaggedItems, needsAttention } = await loadFlaggedData(userId, isDemo);
+  const { flaggedItems, needsAttention, pulseTriggers } = await loadFlaggedData(userId, isDemo);
 
   return (
     <div className="max-w-5xl">
@@ -292,6 +345,42 @@ export default async function FlaggedPage() {
               <p className="text-sm text-stone-400">
                 No members currently at risk.
               </p>
+            )}
+          </div>
+
+          {/* Pulse alerts card */}
+          <div
+            className="card-enter mt-6 rounded-2xl border border-stone-200/60 bg-surface p-6"
+            style={{ animationDelay: "450ms", boxShadow: "var(--shadow-sm)" }}
+          >
+            <h3 className="mb-1 font-display text-base font-semibold text-stone-800">
+              Pulse Alerts
+            </h3>
+            <p className="mb-4 text-xs text-stone-400">
+              Auto-triggered when the AI detects a sustained sentiment decline.
+            </p>
+            {pulseTriggers.length > 0 ? (
+              <div className="space-y-3">
+                {pulseTriggers.map((trigger) => (
+                  <div
+                    key={trigger.id}
+                    className="rounded-xl border border-stone-100 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-stone-800">
+                        {trigger.subjectName}
+                      </p>
+                      <span className="text-xs text-stone-400">{trigger.date}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-stone-500">
+                      {trigger.sourceType.replace(/_/g, " ")}
+                      {trigger.sentiment ? ` · ${trigger.sentiment}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-stone-400">No pulse alerts.</p>
             )}
           </div>
 

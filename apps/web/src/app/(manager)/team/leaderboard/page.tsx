@@ -3,7 +3,15 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
-import { listActiveUsers, getBulkLatestEngagement } from "@revualy/db/queries";
+import { listActiveUsers, getBulkLatestEngagement, getTeamLeaderboardHistory } from "@revualy/db/queries";
+
+/** UTC Monday of the current week (matches the API's engagement aggregation). */
+function currentWeekMondayUTC(): string {
+  const d = new Date();
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+  return date.toISOString().slice(0, 10);
+}
 import {
   leaderboard as mockLeaderboard,
   leaderboardHistory as mockHistory,
@@ -72,9 +80,20 @@ async function loadLeaderboardData(userId: string, isDemo: boolean) {
 
     const activeCount = entries.filter((e) => e.interactionsThisWeek > 0).length;
 
+    const history = isDemo
+      ? mockHistory
+      : await getTeamLeaderboardHistory(
+          getDb(),
+          teamUsers.map((u) => u.id),
+          currentWeekMondayUTC(),
+        ).catch((err) => {
+          logPageError("leaderboard-history", err);
+          return [];
+        });
+
     return {
       leaderboard: entries,
-      history: isDemo ? mockHistory : [], // Historical data not available from API yet
+      history,
       teamSize: teamUsers.length,
       activeCount,
     };

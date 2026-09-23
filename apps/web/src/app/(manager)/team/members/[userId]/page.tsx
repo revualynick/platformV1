@@ -12,6 +12,8 @@ import { getFeedbackForSubject, getFlaggedItemsForReports } from "@revualy/db/qu
 import { getManagerNotes } from "@revualy/db/queries";
 import { getSessionsForPair } from "@revualy/db/queries";
 import { getActiveCoreValues } from "@revualy/db/queries";
+import { getCompletedThreeSixtyReviews } from "@revualy/db/queries";
+import type { ThreeSixtyAggregation } from "@revualy/shared";
 import type { ManagerNoteRow } from "@/lib/api";
 import { EngagementRing } from "@/components/engagement-ring";
 import { EngagementChart } from "@/components/charts/engagement-chart";
@@ -28,6 +30,7 @@ import {
   recentFeedback as mockFeedback,
   flaggedItems as mockFlaggedItems,
   oneOnOneSessions as mockOneOnOneSessions,
+  threeSixtyReviews as mockThreeSixtyReviews,
 } from "@/lib/mock-data";
 import { sentimentStyles, severityStyles } from "@/lib/style-constants";
 
@@ -106,8 +109,8 @@ async function EmployeeHeader({
       streak = latest.streak;
       responseRate = latest.responseRate;
     }
-  } catch {
-    // use defaults
+  } catch (err) {
+    logPageError("member-detail:header", err);
   }
 
   const initials = employee.name.split(" ").map((n) => n[0]).join("");
@@ -256,7 +259,7 @@ async function FeedbackSection({
     if (entriesResult.status === "fulfilled" && entriesResult.value.length > 0) {
       feedback = entriesResult.value.map((e) => ({
         id: e.id,
-        fromName: "Peer",
+        fromName: "Peer", // intentional anonymity — reviewer identity is not exposed to managers either
         date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         summary: e.aiSummary || e.rawContent.slice(0, 200),
         sentiment: e.sentiment,
@@ -545,6 +548,142 @@ async function ProfileWrapper({
   );
 }
 
+async function ThreeSixtySection({
+  userId,
+  isDemo,
+}: {
+  userId: string;
+  isDemo: boolean;
+}) {
+  // subjectId/subjectName live on the review row itself, not inside aggregatedData
+  type ThreeSixtyAggData = Omit<ThreeSixtyAggregation, "subjectId" | "subjectName">;
+
+  type ReviewItem = {
+    id: string;
+    status: string;
+    completedAt: string;
+    completedReviewerCount: number;
+    targetReviewerCount: number;
+    aggregatedData: ThreeSixtyAggData | null;
+  };
+
+  let reviews: ReviewItem[] = isDemo ? (mockThreeSixtyReviews as ReviewItem[]) : [];
+
+  try {
+    const rows = await getCompletedThreeSixtyReviews(getDb(), userId).catch((err) => {
+      logPageError("member-detail:360", err);
+      return [];
+    });
+    if (rows.length > 0) {
+      reviews = rows.map((r) => ({
+        id: r.id,
+        status: r.status,
+        completedAt: r.completedAt
+          ? new Date(r.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : "—",
+        completedReviewerCount: r.completedReviewerCount ?? 0,
+        targetReviewerCount: r.targetReviewerCount,
+        aggregatedData: r.aggregatedData as ThreeSixtyAggData | null,
+      }));
+    }
+  } catch {
+    // use defaults
+  }
+
+  return (
+    <div className="card-enter mb-8" style={{ animationDelay: "450ms" }}>
+      <h3 className="mb-4 font-display text-base font-semibold text-stone-800">360 Reviews</h3>
+
+      {reviews.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-stone-200 p-6 text-center">
+          <p className="text-sm text-stone-400">No 360 reviews completed yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {reviews.map((review) => {
+            const agg = review.aggregatedData;
+            return (
+              <div
+                key={review.id}
+                className="rounded-2xl border border-stone-200/60 bg-surface p-5"
+                style={{ boxShadow: "var(--shadow-sm)" }}
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-forest/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-forest">
+                      Completed
+                    </span>
+                    <span className="text-xs text-stone-400">{review.completedAt}</span>
+                  </div>
+                  <span className="text-xs text-stone-400">
+                    {review.completedReviewerCount}/{review.targetReviewerCount} reviewers
+                  </span>
+                </div>
+
+                {agg ? (
+                  <div className="space-y-4">
+                    <p className="text-sm leading-relaxed text-stone-600">{agg.overallSummary}</p>
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {agg.strengths.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-forest">Strengths</p>
+                          <ul className="space-y-1.5">
+                            {agg.strengths.map((s, idx) => (
+                              <li key={idx} className="flex gap-2 text-xs text-stone-700">
+                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-forest/50" />
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {agg.growthAreas.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-terracotta">Growth Areas</p>
+                          <ul className="space-y-1.5">
+                            {agg.growthAreas.map((g, idx) => (
+                              <li key={idx} className="flex gap-2 text-xs text-stone-700">
+                                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-terracotta/50" />
+                                {g}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {agg.valueScores.length > 0 && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {agg.valueScores.map((vs) => {
+                          const pct = Math.min(Math.round(vs.avgScore), 100);
+                          return (
+                            <div key={vs.valueName}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-stone-600">{vs.valueName}</span>
+                                <span className="text-xs tabular-nums text-stone-400">{pct}</span>
+                              </div>
+                              <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone-100">
+                                <div className="h-full rounded-full bg-forest/60" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-stone-400">Aggregated data not yet available.</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function NotesWrapper({
   userId,
   managerId,
@@ -627,7 +766,8 @@ export default async function EmployeeDetailPage({
       const user = await getUserById(getDb(), userId);
       if (user) employeeName = user.name;
     }
-  } catch {
+  } catch (err) {
+    logPageError("member-detail:page", err);
     usingMockData = true;
   }
 
@@ -680,6 +820,11 @@ export default async function EmployeeDetailPage({
         {/* Profile & Development */}
         <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
           <ProfileWrapper userId={userId} isDemo={isDemo} />
+        </Suspense>
+
+        {/* 360 Reviews */}
+        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+          <ThreeSixtySection userId={userId} isDemo={isDemo} />
         </Suspense>
 
         {/* Manager notes */}

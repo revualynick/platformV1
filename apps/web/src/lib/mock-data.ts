@@ -809,7 +809,6 @@ export const notificationPreferences = [
   { id: "np1", userId: "u1", type: "weekly_digest" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
   { id: "np2", userId: "u1", type: "flag_alert" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
   { id: "np3", userId: "u1", type: "nudge" as const, enabled: false, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
-  { id: "np4", userId: "u1", type: "leaderboard_update" as const, enabled: true, channel: "email" as const, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" },
 ];
 
 // Escalation audit trail (for /settings/escalations)
@@ -1268,6 +1267,86 @@ export const mockGoalLadder = [
     effectiveProgress: 40,
     alignmentPercent: null,
     children: [],
+  },
+];
+
+// 360 Reviews (employee "my results" + manager "reportee results")
+export const threeSixtyReviews = [
+  {
+    id: "tsr1",
+    status: "completed" as const,
+    completedAt: "Feb 5, 2026",
+    completedReviewerCount: 5,
+    targetReviewerCount: 5,
+    aggregatedData: {
+      reviewerCount: 5,
+      avgEngagementScore: 82.4,
+      sentimentDistribution: { positive: 60, neutral: 30, constructive: 10 },
+      strengths: [
+        "Consistently delivers well-structured technical communication",
+        "Reliable under pressure — keeps calm and unblocks the team",
+        "Strong ownership of end-to-end delivery from design to deployment",
+      ],
+      growthAreas: [
+        "Sprint planning sessions would benefit from tighter time-boxing",
+        "Proactive stakeholder updates could reduce surprise escalations",
+      ],
+      overallSummary:
+        "360 review for Sarah Chen based on 5 reviewers. Average engagement score: 82.4. Sentiment breakdown: positive 60%, neutral 30%, constructive 10%. Key strengths identified: 3. Growth areas identified: 2.",
+      valueScores: [
+        { valueName: "Ownership", avgScore: 91, evidenceCount: 4 },
+        { valueName: "Communication", avgScore: 84, evidenceCount: 5 },
+        { valueName: "Teamwork", avgScore: 80, evidenceCount: 3 },
+        { valueName: "Excellence", avgScore: 75, evidenceCount: 2 },
+      ],
+    },
+  },
+  {
+    id: "tsr2",
+    status: "completed" as const,
+    completedAt: "Oct 18, 2025",
+    completedReviewerCount: 4,
+    targetReviewerCount: 5,
+    aggregatedData: {
+      reviewerCount: 4,
+      avgEngagementScore: 76.0,
+      sentimentDistribution: { positive: 50, neutral: 38, constructive: 12 },
+      strengths: [
+        "Solid architectural instincts — peers trust her technical judgment",
+        "Thorough code reviews that help the whole team level up",
+      ],
+      growthAreas: [
+        "Could delegate more rather than taking on too much individually",
+        "Standup updates were sometimes too sparse to be actionable",
+      ],
+      overallSummary:
+        "360 review for Sarah Chen based on 4 reviewers. Average engagement score: 76. Sentiment breakdown: positive 50%, neutral 38%, constructive 12%.",
+      valueScores: [
+        { valueName: "Excellence", avgScore: 88, evidenceCount: 3 },
+        { valueName: "Communication", avgScore: 72, evidenceCount: 4 },
+        { valueName: "Ownership", avgScore: 79, evidenceCount: 2 },
+      ],
+    },
+  },
+];
+
+// Pulse triggers (manager view — "who needs a check-in?")
+export const pulseTriggers = [
+  {
+    id: "pt1",
+    sourceType: "sentiment_decline",
+    sourceRef: "u4",
+    sentiment: "negative",
+    subjectName: "James Okonkwo",
+    createdAt: "Feb 11, 2026",
+  },
+  {
+    id: "pt2",
+    sourceType: "sentiment_decline",
+    sourceRef: "u6",
+    sentiment: "negative",
+    subjectName: "David Kim",
+    createdAt: "Feb 9, 2026",
   },
 ];
 

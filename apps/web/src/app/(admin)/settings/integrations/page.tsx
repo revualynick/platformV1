@@ -42,7 +42,18 @@ export default async function IntegrationsPage() {
   } else {
     try {
       const rows = await getIntegrations(getDb());
-      items = rows as unknown as IntegrationRow[];
+      items = rows.map((r) => ({
+        id: r.id,
+        platform: r.platform,
+        name: r.name,
+        status: r.status,
+        hasConfig: r.hasConfig,
+        workspace: r.workspace ?? null,
+        connectedAt: r.connectedAt ? r.connectedAt.toISOString() : null,
+        connectedByUserId: r.connectedByUserId ?? null,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+      }));
     } catch (err) {
       logPageError("admin-integrations", err);
       items = [];

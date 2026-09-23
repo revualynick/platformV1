@@ -1,7 +1,10 @@
 import "server-only";
 import { createTenantClient, type TenantDb } from "@revualy/db";
 
-let cached: { db: TenantDb } | null = null;
+// Persist the pool on globalThis so Next.js dev HMR (which re-evaluates modules
+// on every edit) reuses one connection pool instead of leaking a new pool per
+// reload — which otherwise exhausts Postgres' max_connections during dev.
+const globalForDb = globalThis as unknown as { __revualyWebDb?: TenantDb };
 
 /**
  * Singleton DB client for web server components.
@@ -9,7 +12,7 @@ let cached: { db: TenantDb } | null = null;
  * Uses a lazy-connect fallback URL for `next build` static analysis.
  */
 export function getDb(): TenantDb {
-  if (cached) return cached.db;
+  if (globalForDb.__revualyWebDb) return globalForDb.__revualyWebDb;
 
   const url =
     process.env.DATABASE_URL ||
@@ -18,6 +21,6 @@ export function getDb(): TenantDb {
   const max = parseInt(process.env.DB_POOL_MAX_WEB ?? "5", 10) || 5;
 
   const { db } = createTenantClient(url, { max });
-  cached = { db };
+  globalForDb.__revualyWebDb = db;
   return db;
 }

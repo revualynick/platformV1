@@ -5,10 +5,12 @@ import { logPageError } from "@/lib/page-errors";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { getDb } from "@/lib/db";
-import { getFeedbackForSubject, getActiveCoreValues } from "@revualy/db/queries";
+import { getFeedbackForSubject, getActiveCoreValues, getCompletedThreeSixtyReviews } from "@revualy/db/queries";
+import type { ThreeSixtyAggregation } from "@revualy/shared";
 import {
   allFeedback as mockFeedback,
   valuesScores as mockValuesScores,
+  threeSixtyReviews as mockThreeSixtyReviews,
 } from "@/lib/mock-data";
 import { sentimentColors } from "@/lib/style-constants";
 
@@ -24,6 +26,18 @@ type FeedbackItem = {
 
 type ValueScore = { value: string; score: number };
 
+// subjectId/subjectName live on the review row itself, not inside aggregatedData
+type ThreeSixtyAggData = Omit<ThreeSixtyAggregation, "subjectId" | "subjectName">;
+
+type ThreeSixtyReviewItem = {
+  id: string;
+  status: string;
+  completedAt: string;
+  completedReviewerCount: number;
+  targetReviewerCount: number;
+  aggregatedData: ThreeSixtyAggData | null;
+};
+
 async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
 
@@ -32,12 +46,14 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
   }
 
   try {
-    const [fbResult, orgResult] = await Promise.allSettled([
+    const [fbResult, orgResult, tsrResult] = await Promise.allSettled([
       getFeedbackForSubject(getDb(), userId),
       getActiveCoreValues(getDb()),
+      getCompletedThreeSixtyReviews(getDb(), userId),
     ]);
     if (fbResult.status === "rejected") logPageError("feedback", fbResult.reason);
     if (orgResult.status === "rejected") logPageError("feedback", orgResult.reason);
+    if (tsrResult.status === "rejected") logPageError("feedback:360", tsrResult.reason);
 
     const valuesMap = new Map<string, string>();
     if (orgResult.status === "fulfilled") {
@@ -50,7 +66,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
     if (fbResult.status === "fulfilled" && fbResult.value.length > 0) {
       feedback = fbResult.value.map((e) => ({
         id: e.id,
-        fromName: "Peer",
+        fromName: "Peer", // intentional anonymity — reviewer identity is never shown to subject
         date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         summary: e.aiSummary || "No summary available",
         sentiment: e.sentiment,
@@ -76,12 +92,30 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
       }
     }
 
-    return { feedback, valuesScores, loadFailed: fbResult.status === "rejected" };
+    // 360 reviews — use real data when available, fall through to mock in demo mode
+    let threeSixtyReviews: ThreeSixtyReviewItem[] = isDemo
+      ? (mockThreeSixtyReviews as ThreeSixtyReviewItem[])
+      : [];
+    if (tsrResult.status === "fulfilled" && tsrResult.value.length > 0) {
+      threeSixtyReviews = tsrResult.value.map((r) => ({
+        id: r.id,
+        status: r.status,
+        completedAt: r.completedAt
+          ? new Date(r.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : "—",
+        completedReviewerCount: r.completedReviewerCount ?? 0,
+        targetReviewerCount: r.targetReviewerCount,
+        aggregatedData: r.aggregatedData as ThreeSixtyAggData | null,
+      }));
+    }
+
+    return { feedback, valuesScores, threeSixtyReviews, loadFailed: fbResult.status === "rejected" };
   } catch (err) {
     logPageError("feedback", err);
     return {
       feedback: isDemo ? (mockFeedback as FeedbackItem[]) : [],
       valuesScores: isDemo ? mockValuesScores : [],
+      threeSixtyReviews: isDemo ? (mockThreeSixtyReviews as ThreeSixtyReviewItem[]) : [],
       loadFailed: true,
     };
   }
@@ -90,7 +124,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
 export default async function FeedbackPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
-  const { feedback, valuesScores, loadFailed } = await loadFeedbackData(session, isDemo);
+  const { feedback, valuesScores, threeSixtyReviews, loadFailed } = await loadFeedbackData(session, isDemo);
 
   if (loadFailed && !isDemo) {
     return (
@@ -292,6 +326,126 @@ export default async function FeedbackPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 360 Reviews */}
+      <div className="mt-10">
+        <div className="mb-6 flex items-center gap-3">
+          <h2 className="font-display text-xl font-semibold text-stone-900">
+            360 Reviews
+          </h2>
+          <span className="rounded-full bg-forest/[0.08] px-2.5 py-0.5 text-[11px] font-medium text-forest">
+            {threeSixtyReviews.length} completed
+          </span>
+        </div>
+
+        {threeSixtyReviews.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-stone-200 p-10 text-center">
+            <p className="text-sm text-stone-400">No 360 reviews yet.</p>
+            <p className="mt-1 text-xs text-stone-300">
+              When a manager initiates a 360 for you and enough reviewers respond, your aggregated results will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {threeSixtyReviews.map((review, i) => {
+              const agg = review.aggregatedData;
+              return (
+                <div
+                  key={review.id}
+                  className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
+                  style={{ animationDelay: `${i * 80}ms`, boxShadow: "var(--shadow-sm)" }}
+                >
+                  {/* Review header */}
+                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-forest/[0.08] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-forest">
+                        Completed
+                      </span>
+                      <span className="text-sm text-stone-500">{review.completedAt}</span>
+                    </div>
+                    <span className="text-xs text-stone-400">
+                      {review.completedReviewerCount} of {review.targetReviewerCount} reviewers responded
+                    </span>
+                  </div>
+
+                  {agg ? (
+                    <div className="space-y-6">
+                      {/* Summary */}
+                      <p className="text-sm leading-relaxed text-stone-600">{agg.overallSummary}</p>
+
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        {/* Strengths */}
+                        {agg.strengths.length > 0 && (
+                          <div>
+                            <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-forest">
+                              Strengths
+                            </h4>
+                            <ul className="space-y-2">
+                              {agg.strengths.map((s, idx) => (
+                                <li key={idx} className="flex gap-2.5 text-sm text-stone-700">
+                                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-forest/50" />
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Growth areas */}
+                        {agg.growthAreas.length > 0 && (
+                          <div>
+                            <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-terracotta">
+                              Growth Areas
+                            </h4>
+                            <ul className="space-y-2">
+                              {agg.growthAreas.map((g, idx) => (
+                                <li key={idx} className="flex gap-2.5 text-sm text-stone-700">
+                                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-terracotta/50" />
+                                  {g}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Value scores */}
+                      {agg.valueScores.length > 0 && (
+                        <div>
+                          <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-stone-400">
+                            Values Alignment
+                          </h4>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {agg.valueScores.map((vs) => {
+                              const pct = Math.min(Math.round(vs.avgScore), 100);
+                              return (
+                                <div key={vs.valueName}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium text-stone-700">{vs.valueName}</span>
+                                    <span className="text-xs tabular-nums text-stone-400">{pct}</span>
+                                  </div>
+                                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-100">
+                                    <div
+                                      className="h-full rounded-full bg-forest/70 transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-stone-400">Aggregated data not yet available for this review.</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

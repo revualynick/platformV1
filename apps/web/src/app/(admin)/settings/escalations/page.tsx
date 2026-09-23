@@ -111,9 +111,9 @@ export default async function EscalationsPage() {
           },
           {
             label: "Avg Resolution",
-            value: resolvedCount > 0 ? "—" : "—",
-            sub: "Average time to close",
-            color: "text-forest",
+            value: resolvedCount > 0 ? "N/A" : "—",
+            sub: resolvedCount > 0 ? "Not tracked yet" : "No resolved cases",
+            color: "text-stone-400",
           },
         ].map((stat, i) => (
           <div
@@ -161,7 +161,13 @@ export default async function EscalationsPage() {
           </div>
         )}
         {items.map((esc, i) => {
-          const severity = severityStyles[esc.severity];
+          const severity = severityStyles[esc.severity] ?? {
+            bg: "bg-stone-100",
+            text: "text-stone-500",
+            border: "border-stone-200",
+            dot: "bg-stone-400",
+            label: esc.severity,
+          };
           const status =
             statusStyles[esc.status] ??
             extraStatusStyles[esc.status] ?? {
