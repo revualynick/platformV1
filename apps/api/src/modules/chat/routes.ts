@@ -3,7 +3,12 @@ import { Queue } from "bullmq";
 import type { ChatPlatform } from "@revualy/shared";
 import type { ChatEvent } from "@revualy/chat-core";
 import type { TenantDb } from "@revualy/db";
+import { and, eq } from "drizzle-orm";
+import { inboundMessages } from "@revualy/db";
 import { autoLinkByEmail, markUnreachable, type AutoLinkResult } from "../../lib/chat-identity.js";
+import { buildJobId } from "../../lib/job-ids.js";
+
+const MAX_INBOUND_CHARS = 2000;
 
 // Lazy-initialized conversation queue (set by server startup)
 let conversationQueue: Queue | null = null;
@@ -66,37 +71,59 @@ async function handleWebhook(
       dmAddress: message.platformChannelId,
     }).catch((err) => app.log.error({ err, platform }, "Chat identity refresh failed"));
   }
-  // Truncate oversized messages but tell the orchestrator, so the bot
-  // can acknowledge the cut instead of silently dropping content.
-  let truncated = false;
-  if (message && message.text.length > 2000) {
-    message.text = message.text.slice(0, 2000);
-    truncated = true;
-    app.log.warn(
-      { messageId: message.id, platform },
-      "Inbound message truncated to 2000 chars",
-    );
-  }
-  if (message && !conversationQueue) {
+  // Only one-to-one DMs are check-in conversations. A mention in a shared
+  // space is ignored rather than routed into someone's private feedback.
+  if (message.isDirectMessage === false) return { status: 200, body: undefined };
+
+  if (!conversationQueue) {
     return { status: 503, body: { error: "Message queue not initialized" } };
   }
-  if (message && conversationQueue) {
-    await conversationQueue.add("reply", {
-      type: "reply",
-      orgId,
-      // Fall back to channel+user so two people in a shared channel can
-      // never be merged into one conversation.
-      conversationId:
-        message.threadId ||
-        `${message.platformChannelId}:${message.platformUserId}` ||
-        message.id,
-      userMessage: message.text,
-      truncated,
+
+  // Truncate oversized messages but record it, so the bot can acknowledge
+  // the cut instead of silently dropping content.
+  let text = message.text;
+  const truncated = text.length > MAX_INBOUND_CHARS;
+  if (truncated) {
+    text = text.slice(0, MAX_INBOUND_CHARS);
+    app.log.warn({ platform }, "Inbound message truncated");
+  }
+
+  // Store first (content encrypted), then queue only the row id: no message
+  // text in Redis, and nothing is lost if the queue or worker is down. The
+  // platform message id dedupes platform retries.
+  const [stored] = await db
+    .insert(inboundMessages)
+    .values({
       platform,
+      platformMessageId: message.platformMessageId || message.id,
       platformUserId: message.platformUserId,
       platformChannelId: message.platformChannelId,
-    });
-    app.log.info({ messageId: message.id, platform }, "Inbound message enqueued");
+      threadId: message.threadId,
+      content: text,
+      truncated,
+    })
+    .onConflictDoNothing()
+    .returning({ id: inboundMessages.id });
+  const inbound =
+    stored ??
+    (await db
+      .select({ id: inboundMessages.id, status: inboundMessages.status })
+      .from(inboundMessages)
+      .where(
+        and(
+          eq(inboundMessages.platform, platform),
+          eq(inboundMessages.platformMessageId, message.platformMessageId || message.id),
+        ),
+      )
+      .then((rows) => (rows[0]?.status === "pending" ? rows[0] : undefined)));
+
+  if (inbound) {
+    await conversationQueue.add(
+      "inbound",
+      { type: "inbound", orgId, inboundId: inbound.id },
+      { jobId: buildJobId("inbound", inbound.id) },
+    );
+    app.log.info({ inboundId: inbound.id, platform, duplicate: !stored }, "Inbound message stored and queued");
   }
 
   return { status: 200, body: undefined };
@@ -113,7 +140,7 @@ function installReply(result: AutoLinkResult, displayName?: string): string {
       return (
         `Hi${first ? ` ${first}` : ""}, I'm Revualy. A couple of times a week I'll check in here ` +
         "with a few quick questions about working with your colleagues, and now and then about your own week. " +
-        "Each check-in takes a few minutes."
+        "Each check-in takes a few minutes. Message help at any time, or stop to pause check-ins."
       );
     case "conflict":
       return "This chat account doesn't match the one already linked to your Revualy profile. Please contact your Revualy admin.";

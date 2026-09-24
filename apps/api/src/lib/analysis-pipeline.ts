@@ -72,7 +72,7 @@ export async function runAnalysisPipeline(
       .select()
       .from(conversationMessages)
       .where(eq(conversationMessages.conversationId, conversationId))
-      .orderBy(conversationMessages.createdAt),
+      .orderBy(conversationMessages.seq),
   ]);
 
   if (!conversation) {

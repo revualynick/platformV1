@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { z } from "zod";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
@@ -6,6 +5,7 @@ import { getTenantDb } from "@revualy/db";
 import {
   users,
   conversations,
+  interactionSchedule,
   feedbackEntries,
   feedbackValueScores,
   coreValues,
@@ -24,9 +24,10 @@ import type { AdapterRegistry } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import {
   initiateConversation,
-  handleReply,
-  type ConversationState,
+  processTurn,
+  turnJobId,
 } from "../lib/conversation-orchestrator.js";
+import { handleInbound } from "../lib/inbound-router.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { buildJobId } from "../lib/job-ids.js";
@@ -56,17 +57,21 @@ const initiateJobSchema = z.object({
   platform: z.enum(["slack", "google_chat", "teams", "internal"]),
   channelId: z.string().optional(),
   questionnaireId: z.string(),
-  // Preserved through Zod so dedup logic can reference the originating schedule
-  // entry. TODO: pass to initiateConversation once the orchestrator persists it
-  // on the conversations row, enabling true idempotent re-delivery guards.
+  // Makes initiation idempotent: a retried job finds the conversation it
+  // already created instead of starting a second one.
   scheduleEntryId: z.string().optional(),
 });
 
-const replyJobSchema = z.object({
-  type: z.literal("reply"),
-  conversationId: z.string(),
+const inboundJobSchema = z.object({
+  type: z.literal("inbound"),
   orgId: z.string(),
-  userMessage: z.string(),
+  inboundId: z.string(),
+});
+
+const turnJobSchema = z.object({
+  type: z.literal("turn"),
+  orgId: z.string(),
+  conversationId: z.string(),
   truncated: z.boolean().optional(),
 });
 
@@ -122,13 +127,10 @@ export function createQueues(redisUrl: string) {
   };
 }
 
-// ── Redis-backed conversation state store ────────────────
-// State is stored as JSON with a 24h TTL via SETEX.
-// No manual cleanup needed — Redis handles expiry automatically.
-// Survives process restarts and supports horizontal scaling.
-
-const CONVERSATION_TTL_SECONDS = 24 * 60 * 60; // 24 hours
-const STATE_KEY_PREFIX = "conv:";
+// ── Shared Redis connection ──────────────────────────────
+// Conversation state lives in Postgres (see conversation-orchestrator.ts).
+// This connection serves the Teams conversation-reference store and
+// campaign bookkeeping.
 
 let stateRedis: Redis | null = null;
 
@@ -141,81 +143,6 @@ export function getStateRedis(redisUrl?: string): Redis {
     });
   }
   return stateRedis;
-}
-
-export async function getConversationState(conversationId: string): Promise<ConversationState | undefined> {
-  const redis = getStateRedis();
-  const raw = await redis.get(`${STATE_KEY_PREFIX}${conversationId}`);
-  if (!raw) return undefined;
-  try {
-    return JSON.parse(raw) as ConversationState;
-  } catch {
-    // Corrupted state — delete and treat as missing
-    await redis.del(`${STATE_KEY_PREFIX}${conversationId}`);
-    return undefined;
-  }
-}
-
-export async function setConversationState(state: ConversationState): Promise<void> {
-  const redis = getStateRedis();
-  await redis.setex(
-    `${STATE_KEY_PREFIX}${state.conversationId}`,
-    CONVERSATION_TTL_SECONDS,
-    JSON.stringify(state),
-  );
-}
-
-export async function deleteConversationState(conversationId: string): Promise<void> {
-  const redis = getStateRedis();
-  await redis.del(`${STATE_KEY_PREFIX}${conversationId}`);
-}
-
-const LOCK_TTL_MS = 60000; // 60s lock timeout (extended by heartbeat)
-const LOCK_HEARTBEAT_MS = 15000; // Extend lock every 15s
-const LOCK_PREFIX = "lock:conv:";
-
-/**
- * Acquire a Redis lock for a conversation with automatic heartbeat extension.
- * Returns a release function, or null if the lock is already held.
- * The lock auto-extends every 15s to prevent expiry during long-running LLM calls.
- */
-export async function acquireConversationLock(
-  conversationId: string,
-): Promise<(() => Promise<void>) | null> {
-  const redis = getStateRedis();
-  const lockKey = `${LOCK_PREFIX}${conversationId}`;
-  const lockValue = crypto.randomUUID();
-
-  // SET NX PX — atomic acquire with TTL
-  const result = await redis.set(lockKey, lockValue, "PX", LOCK_TTL_MS, "NX");
-  if (result !== "OK") return null;
-
-  // Heartbeat: extend lock TTL periodically while held
-  const heartbeat = setInterval(async () => {
-    try {
-      // Only extend if we still own the lock
-      await redis.eval(
-        `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("pexpire", KEYS[1], ARGV[2]) else return 0 end`,
-        1,
-        lockKey,
-        lockValue,
-        String(LOCK_TTL_MS),
-      );
-    } catch {
-      // Heartbeat failure is non-fatal — lock will expire naturally
-    }
-  }, LOCK_HEARTBEAT_MS);
-
-  return async () => {
-    clearInterval(heartbeat);
-    // Only release if we still own the lock (compare-and-delete via Lua)
-    await redis.eval(
-      `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
-      1,
-      lockKey,
-      lockValue,
-    );
-  };
 }
 
 /** Initialize the state Redis connection (called during server startup). */
@@ -243,16 +170,15 @@ export function createWorkers(config: WorkerConfig) {
     async (job) => {
       const { type } = job.data as { type: string };
 
+      const deps = { llm, adapters, analysisQueue: queues.analysisQueue };
+      const tenantDb = (orgId: string) => getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
       switch (type) {
         case "initiate": {
           const data = initiateJobSchema.parse(job.data);
+          const db = tenantDb(data.orgId);
 
-          const db = getTenantDb(
-            data.orgId,
-            process.env.DATABASE_URL ?? "",
-          );
-
-          const state = await initiateConversation(db, { llm, adapters, analysisQueue: queues.analysisQueue }, {
+          const result = await initiateConversation(db, deps, {
             orgId: data.orgId,
             reviewerId: data.reviewerId,
             subjectId: data.subjectId,
@@ -260,68 +186,72 @@ export function createWorkers(config: WorkerConfig) {
             platform: data.platform as ChatPlatform,
             channelId: data.channelId ?? "",
             questionnaireId: data.questionnaireId,
+            scheduleEntryId: data.scheduleEntryId,
+            skipIfOpen: true,
           });
 
-          // Store conversation state for reply handling
-          await setConversationState(state);
+          if (data.scheduleEntryId) {
+            await db
+              .update(interactionSchedule)
+              .set(
+                result.status === "started"
+                  ? { status: "sent", conversationId: result.conversationId }
+                  : { status: "skipped" },
+              )
+              .where(eq(interactionSchedule.id, data.scheduleEntryId));
+          }
+          if (result.status === "skipped_open") {
+            job.log(`Reviewer still has open conversation ${result.openConversationId}; check-in skipped`);
+          }
+          break;
+        }
+
+        case "inbound": {
+          const data = inboundJobSchema.parse(job.data);
+          const result = await handleInbound(tenantDb(data.orgId), {
+            ...deps,
+            scheduleTurn: async (conversationId, seq, truncated) => {
+              await queues.conversationQueue.add(
+                "turn",
+                { type: "turn", orgId: data.orgId, conversationId, truncated },
+                { jobId: turnJobId(conversationId, seq) },
+              );
+            },
+          }, data.inboundId);
+          job.log(`Inbound ${data.inboundId}: ${result.status === "processed" ? result.outcome : result.status}`);
+          break;
+        }
+
+        case "turn": {
+          const data = turnJobSchema.parse(job.data);
+          const result = await processTurn(tenantDb(data.orgId), deps, data.conversationId, {
+            truncatedInbound: data.truncated ?? false,
+          });
+          job.log(`Turn for ${data.conversationId}: ${result.status}`);
           break;
         }
 
         case "reply": {
-          const data = replyJobSchema.parse(job.data);
-
-          // Acquire lock to prevent concurrent state mutations from duplicate webhooks
-          const releaseLock = await acquireConversationLock(data.conversationId);
-          if (!releaseLock) {
-            throw new Error(`Lock held for conversation ${data.conversationId} — will retry`);
-          }
-
-          try {
-            const state = await getConversationState(data.conversationId);
-            if (!state) {
-              job.log(`No active state for conversation ${data.conversationId}`);
-              return;
-            }
-
-            const db = getTenantDb(
-              data.orgId,
-              process.env.DATABASE_URL ?? "",
-            );
-
-            const result = await handleReply(
-              db,
-              { llm, adapters, analysisQueue: queues.analysisQueue },
-              state,
-              data.userMessage,
-              { truncatedInbound: data.truncated ?? false },
-            );
-
-            if (result.closed) {
-              await deleteConversationState(data.conversationId);
-            } else {
-              await setConversationState(result.state);
-            }
-          } finally {
-            await releaseLock();
-          }
+          // Pre-C3 job shape carrying message text in Redis. The message was
+          // never stored, so it cannot be routed; drop it loudly.
+          console.warn(`[conversation] Dropping legacy reply job ${job.id}`);
           break;
         }
 
         case "close": {
           const data = closeJobSchema.parse(job.data);
 
-          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
+          const db = tenantDb(data.orgId);
           await db
             .update(conversations)
             .set({ status: "closed", closedAt: new Date() })
             .where(eq(conversations.id, data.conversationId));
 
-          await queues.analysisQueue.add("analyze", {
-            conversationId: data.conversationId,
-            orgId: data.orgId,
-          });
-
-          await deleteConversationState(data.conversationId);
+          await queues.analysisQueue.add(
+            "analyze",
+            { conversationId: data.conversationId, orgId: data.orgId },
+            { jobId: buildJobId("analyze", data.conversationId) },
+          );
           break;
         }
 

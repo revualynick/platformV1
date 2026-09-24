@@ -1,27 +1,33 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, ne } from "drizzle-orm";
-import { timingSafeEqual } from "node:crypto";
-import { users, questionnaires, questionnaireThemes } from "@revualy/db";
+import crypto, { timingSafeEqual } from "node:crypto";
+import {
+  users,
+  questionnaires,
+  questionnaireThemes,
+  inboundMessages,
+  userPlatformIdentities,
+} from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry } from "@revualy/chat-core";
 import type { Queue } from "bullmq";
 import type { InteractionType } from "@revualy/shared";
 import {
   initiateConversation,
-  handleReply,
+  getConversationView,
+  processTurn,
 } from "../../lib/conversation-orchestrator.js";
-import {
-  getConversationState,
-  setConversationState,
-} from "../../workers/index.js";
+import { handleInbound } from "../../lib/inbound-router.js";
 import type { InternalSimulatorAdapter } from "../../lib/internal-simulator-adapter.js";
 
 /**
  * Dev-only chat-simulation harness.
  *
- * Drives the real conversation orchestrator (LLM question generation, theme
- * progression, close logic) end-to-end in-process, using the "internal"
- * simulator adapter to capture the bot's replies. Lets `claude -p` (or curl)
+ * Drives the real conversation engine end-to-end in-process, using the
+ * "internal" simulator adapter to capture the bot's replies. Replies go
+ * through the same path as a chat webhook (stored in inbound_messages, then
+ * routed by the sender's identity), so routing bugs are not hidden; only
+ * the queue hop is skipped, so the turn runs within the request. Lets `claude -p` (or curl)
  * play the employee side of a feedback conversation locally — no Slack/Teams.
  *
  * Gated exactly like the web test-login endpoint: TEST_LOGIN_ENABLED must be
@@ -70,11 +76,11 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
    * body: {
    *   email: string,                // the reviewer (person chatting)
    *   message?: string,             // omit to START a conversation; include to REPLY
-   *   conversationId?: string,      // required when replying
+   *                                 // (routed like a real DM, by sender)
    *   interactionType?: InteractionType, // default "self_reflection"
    *   subjectEmail?: string,        // for peer_review/three_sixty; defaults to a peer
    * }
-   * returns: { conversationId, reply, closed, messageCount }
+   * returns: { conversationId, reply, closed, messageCount, outcome? }
    */
   app.post("/simulate-chat", async (request, reply) => {
     if (!deps) {
@@ -84,7 +90,6 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
     const body = (request.body ?? {}) as {
       email?: string;
       message?: string;
-      conversationId?: string;
       interactionType?: InteractionType;
       subjectEmail?: string;
     };
@@ -104,34 +109,50 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const channelId = `sim:${reviewer.id}`;
+    // The simulated chat account, linked and confirmed like a real one.
+    await db
+      .insert(userPlatformIdentities)
+      .values({
+        userId: reviewer.id,
+        platform: "internal",
+        platformUserId: channelId,
+        dmAddress: channelId,
+        status: "reachable",
+        linkSource: "admin",
+        confirmedAt: new Date(),
+      })
+      .onConflictDoNothing();
 
     try {
-      // ── Continue an existing conversation ──────────────────
-      if (body.conversationId) {
-        if (!body.message) {
-          return reply
-            .code(400)
-            .send({ error: "message is required when conversationId is set" });
-        }
-        const state = await getConversationState(body.conversationId);
-        if (!state) {
-          return reply
-            .code(404)
-            .send({ error: "No active conversation state (it may have closed)" });
-        }
-        deps.simulator.clear(state.channelId);
-        const { state: next, closed } = await handleReply(
-          db,
-          deps,
-          state,
-          body.message,
-        );
-        if (!closed) await setConversationState(next);
+      // ── Reply: exactly what a chat webhook does, minus the queue ──
+      if (body.message) {
+        const [inbound] = await db
+          .insert(inboundMessages)
+          .values({
+            platform: "internal",
+            platformMessageId: `sim-${crypto.randomUUID()}`,
+            platformUserId: channelId,
+            platformChannelId: channelId,
+            content: body.message.slice(0, 2000),
+            truncated: body.message.length > 2000,
+          })
+          .returning({ id: inboundMessages.id });
+        deps.simulator.clear(channelId);
+        const simDeps = deps;
+        const result = await handleInbound(db, {
+          ...simDeps,
+          scheduleTurn: async (conversationId, _seq, truncated) => {
+            await processTurn(db, simDeps, conversationId, { truncatedInbound: truncated });
+          },
+        }, inbound.id);
+        const conversationId = result.status === "processed" ? result.conversationId : undefined;
+        const view = conversationId ? await getConversationView(db, conversationId) : undefined;
         return reply.send({
-          conversationId: next.conversationId,
-          reply: deps.simulator.drain(next.channelId).join("\n\n"),
-          closed,
-          messageCount: next.messageCount,
+          conversationId: conversationId ?? null,
+          reply: deps.simulator.drain(channelId).join("\n\n"),
+          closed: view?.closed ?? false,
+          messageCount: view?.messageCount ?? 0,
+          outcome: result.status === "processed" ? result.outcome : result.status,
         });
       }
 
@@ -188,7 +209,7 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
       }
 
       deps.simulator.clear(channelId);
-      const state = await initiateConversation(db, deps, {
+      const started = await initiateConversation(db, deps, {
         orgId,
         reviewerId: reviewer.id,
         subjectId,
@@ -196,14 +217,21 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
         platform: "internal",
         channelId,
         questionnaireId,
+        // Same rule as scheduled check-ins: one open conversation at a time.
+        skipIfOpen: true,
       });
-      await setConversationState(state);
+      if (started.status === "skipped_open") {
+        return reply.code(409).send({
+          error: "This person already has an open simulated conversation; reply to it or let it finish",
+          conversationId: started.openConversationId,
+        });
+      }
 
       return reply.send({
-        conversationId: state.conversationId,
+        conversationId: started.conversationId,
         reply: deps.simulator.drain(channelId).join("\n\n"),
         closed: false,
-        messageCount: state.messageCount,
+        messageCount: 1,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "simulation failed";

@@ -16,11 +16,8 @@ import {
 } from "../../lib/validation.js";
 import {
   initiateConversation,
-  type ConversationState,
+  getConversationView,
 } from "../../lib/conversation-orchestrator.js";
-import {
-  setConversationState,
-} from "../../workers/index.js";
 import { extractReflectionData } from "../../lib/reflection-extractor.js";
 
 let analysisQueue: Queue | null = null;
@@ -251,7 +248,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Now safe to create the conversation -- we hold the slot
-    const state: ConversationState = await initiateConversation(
+    const started = await initiateConversation(
       db,
       { llm: app.llm, adapters: emptyAdapters, analysisQueue },
       {
@@ -260,32 +257,32 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         subjectId: userId,
         interactionType: "self_reflection",
         platform: "internal",
-        channelId: "self-reflection",
+        channelId: `web:${userId}`,
         questionnaireId: selectedQuestionnaire.id,
       },
+      { deliveredByCaller: true },
     );
-
-    await setConversationState(state);
+    const view = started.status === "started" ? await getConversationView(db, started.conversationId) : undefined;
+    if (!view) {
+      return reply.code(500).send({ error: "Reflection conversation could not be started" });
+    }
 
     // Update the claimed row with conversation details
     await db
       .update(selfReflections)
       .set({
         status: "in_progress",
-        conversationId: state.conversationId,
+        conversationId: view.conversationId,
         promptTheme,
       })
       .where(eq(selfReflections.id, claimedId));
 
-    const openingMessage =
-      state.messages[state.messages.length - 1]?.content ?? "";
-
     return reply.code(201).send({
-      conversationId: state.conversationId,
-      message: openingMessage,
-      phase: state.phase,
-      messageCount: state.messageCount,
-      maxMessages: state.maxMessages,
+      conversationId: view.conversationId,
+      message: view.lastBotMessage,
+      phase: view.phase,
+      messageCount: view.messageCount,
+      maxMessages: view.maxMessages,
     });
   });
 
@@ -338,7 +335,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
           .select()
           .from(conversationMessages)
           .where(eq(conversationMessages.conversationId, row.conversationId))
-          .orderBy(conversationMessages.createdAt);
+          .orderBy(conversationMessages.seq);
 
         if (messages.length > 0) {
           const llmMessages = messages.map((m) => ({

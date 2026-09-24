@@ -19,6 +19,7 @@ import {
   identityLinkEvents,
   authUsers,
   authAccounts,
+  inboundMessages,
 } from "@revualy/db";
 import { buildApp } from "../server.js";
 import { setConversationQueue } from "../modules/chat/routes.js";
@@ -102,6 +103,9 @@ describe.skipIf(!dbUp)("Google Chat webhook (integration)", () => {
     await db.delete(authAccounts).where(eq(authAccounts.userId, bobAuthId));
     await db.delete(authUsers).where(eq(authUsers.id, bobAuthId));
     await db.delete(identityLinkEvents).where(inArray(identityLinkEvents.userId, ids));
+    await db
+      .delete(inboundMessages)
+      .where(inArray(inboundMessages.platformUserId, [`users/${alice.id}`, `users/${bob.id}`]));
     await db.delete(userPlatformIdentities).where(inArray(userPlatformIdentities.userId, ids));
     await db.delete(users).where(inArray(users.id, ids));
   });
@@ -127,16 +131,32 @@ describe.skipIf(!dbUp)("Google Chat webhook (integration)", () => {
     expect(await findIdentity(db, "google_chat", `users/${stranger.id}`)).toBeUndefined();
   });
 
-  it("queues a DM reply from a linked user", async () => {
-    const res = await post(ev.message(alice, "alice-dm", "Sam was great this week"));
+  it("stores a DM encrypted, then queues only its id", async () => {
+    const event = ev.message(alice, "alice-dm", "Sam was great this week");
+    const res = await post(event);
     expect(res.statusCode).toBe(200);
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({
+    const job = enqueued[0] as { type: string; inboundId: string };
+    expect(job.type).toBe("inbound");
+    expect(Object.keys(job).sort()).toEqual(["inboundId", "orgId", "type"]);
+    expect(JSON.stringify(job)).not.toContain("Sam");
+
+    const [row] = await db.select().from(inboundMessages).where(eq(inboundMessages.id, job.inboundId));
+    expect(row).toMatchObject({
       platform: "google_chat",
       platformUserId: `users/${alice.id}`,
       platformChannelId: "spaces/alice-dm",
-      userMessage: "Sam was great this week",
+      content: "Sam was great this week",
+      status: "pending",
     });
+    const raw = await db.execute(sql`select content from inbound_messages where id = ${job.inboundId}`);
+    expect(String((raw as unknown as Array<{ content: string }>)[0].content)).toMatch(/^enc:v1:/);
+
+    // A platform retry of the same message is stored once.
+    enqueued.length = 0;
+    await post(event);
+    const rows = await db.select().from(inboundMessages).where(eq(inboundMessages.platformMessageId, row.platformMessageId));
+    expect(rows).toHaveLength(1);
   });
 
   it("links on first message by Google account id when the event has no email", async () => {

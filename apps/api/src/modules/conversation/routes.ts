@@ -31,7 +31,7 @@ export const conversationRoutes: FastifyPluginAsync = async (app) => {
       .select()
       .from(conversationMessages)
       .where(eq(conversationMessages.conversationId, id))
-      .orderBy(conversationMessages.createdAt);
+      .orderBy(conversationMessages.seq);
 
     return reply.send({ ...conversation, messages });
   });

@@ -284,3 +284,11 @@
 - Draft engine saved at docs/wip/step5-conversation-engine-draft.ts.txt (not compiled or wired)
 - Resume notes (exact remaining TODO list) in docs/c3-plan.md under step 5
 - Local env: Colima + docker compose must be running for integration tests; local Redis needs a password the tests lack (NOAUTH noise, harmless)
+
+## 2026-09-24: Step 5 done, conversation engine on Postgres
+- Engine wired (draft from last session compiled and finished); new `lib/inbound-router.ts` routes by sender identity: confirmation, help/stop/start, open conversation, late addition within 7 days, honest fallback
+- Webhook stores to `inbound_messages` and queues only the id; worker gained `inbound`/`turn` jobs, idempotent `initiate`; Redis conversation state and lock removed
+- Demo, reflections and dev simulator moved onto the engine; open conversations scoped by platform so a web demo can't capture chat messages (replaces the deferred DB constraint)
+- 20 new integration tests (supersede and atomic claim mutation-checked); 276 API tests, 16/16 typecheck
+- Gaps: no route-level tests for demo/reflections/simulator, not run with a real LLM; `stop` leaves an open conversation open (step 6)
+- Next: code review of step 5, then step 6 (sweeper, incomplete, theme outcomes)

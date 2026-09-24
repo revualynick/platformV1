@@ -12,13 +12,9 @@ import { AdapterRegistry } from "@revualy/chat-core";
 import type { InteractionType } from "@revualy/shared";
 import {
   initiateConversation,
-  handleReply,
+  getConversationView,
+  replyInProcess,
 } from "../../lib/conversation-orchestrator.js";
-import {
-  getConversationState,
-  setConversationState,
-  deleteConversationState,
-} from "../../workers/index.js";
 import { requireAuth } from "../../lib/rbac.js";
 import { parseBody, leadCaptureSchema } from "../../lib/validation.js";
 
@@ -111,7 +107,8 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
       const { db, orgId } = request.tenant;
 
       let userId: string | null = request.tenant.userId;
-      let demoLeadEmail: string | undefined;
+      // Ownership: the conversation's channel names who may reply to it.
+      let channelId = `web:${userId}`;
 
       // In demo mode, use lead email instead of auth
       if (DEMO_MODE) {
@@ -123,13 +120,11 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
             .code(400)
             .send({ error: "x-demo-email header required for demo mode" });
         }
-        demoLeadEmail = headerEmail;
-
         // Check lead exists and rate limit
         const [lead] = await db
           .select()
           .from(leads)
-          .where(eq(leads.email, demoLeadEmail));
+          .where(eq(leads.email, headerEmail));
 
         if (!lead) {
           return reply
@@ -168,6 +163,7 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           .limit(1);
 
         userId = demoUser?.id ?? null;
+        channelId = demoChannel(lead.id);
       }
 
       if (!userId) {
@@ -218,37 +214,35 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "No users found in organization" });
       }
 
-      // Empty AdapterRegistry — sendMessage in orchestrator checks has() and returns early
-      const emptyAdapters = new AdapterRegistry();
-
-      const state = await initiateConversation(
+      // Empty registry plus deliveredByCaller: the reply goes back in this
+      // HTTP response and can never reach a chat platform.
+      const deps = { llm: app.llm, adapters: new AdapterRegistry(), analysisQueue };
+      const started = await initiateConversation(
         db,
-        { llm: app.llm, adapters: emptyAdapters, analysisQueue },
+        deps,
         {
           orgId,
           reviewerId: userId,
           subjectId: subject.id,
           interactionType: selectedQuestionnaire.category as InteractionType,
-          platform: "slack", // dummy — adapter not registered, sends are no-op
-          channelId: "demo",
+          platform: "internal",
+          channelId,
           questionnaireId: selectedQuestionnaire.id,
         },
+        { deliveredByCaller: true },
       );
-
-      // Bind lead email to conversation state for ownership enforcement
-      if (demoLeadEmail) {
-        state.demoLeadEmail = demoLeadEmail;
+      const view = started.status === "started" ? await getConversationView(db, started.conversationId) : undefined;
+      if (!view) {
+        return reply.code(500).send({ error: "Demo conversation could not be started" });
       }
 
-      await setConversationState(state);
-
       return {
-        conversationId: state.conversationId,
-        message: state.messages[state.messages.length - 1]?.content ?? "",
-        phase: state.phase,
-        messageCount: state.messageCount,
-        maxMessages: state.maxMessages,
-        interactionType: state.interactionType,
+        conversationId: view.conversationId,
+        message: view.lastBotMessage,
+        phase: view.phase,
+        messageCount: view.messageCount,
+        maxMessages: view.maxMessages,
+        interactionType: view.interactionType,
       };
     },
   );
@@ -276,60 +270,56 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Analysis queue not initialized" });
       }
 
-      const state = await getConversationState(conversationId);
-      if (!state) {
+      const view = await getConversationView(db, conversationId);
+      if (!view || view.closed) {
         return reply
           .code(404)
-          .send({ error: "Conversation not found or expired" });
+          .send({ error: "Conversation not found or already finished" });
       }
 
       // Ownership check
       if (DEMO_MODE) {
-        // In demo mode, enforce via lead email bound to conversation state
+        // In demo mode the lead is bound to the conversation's channel.
         const callerEmail = request.headers["x-demo-email"] as
           | string
           | undefined;
-        if (
-          !callerEmail ||
-          !state.demoLeadEmail ||
-          callerEmail !== state.demoLeadEmail
-        ) {
+        const [lead] = callerEmail
+          ? await db.select({ id: leads.id }).from(leads).where(eq(leads.email, callerEmail))
+          : [];
+        if (!lead || view.platformChannelId !== demoChannel(lead.id)) {
           return reply.code(403).send({ error: "Forbidden" });
         }
       } else {
         const callerId = request.tenant.userId;
-        if (state.reviewerId !== callerId) {
+        if (view.reviewerId !== callerId || !view.platformChannelId.startsWith("web:")) {
           return reply.code(403).send({ error: "Forbidden" });
         }
       }
 
-      const emptyAdapters = new AdapterRegistry();
-
-      const result = await handleReply(
+      const result = await replyInProcess(
         db,
-        { llm: app.llm, adapters: emptyAdapters, analysisQueue },
-        state,
+        { llm: app.llm, adapters: new AdapterRegistry(), analysisQueue },
+        conversationId,
         message,
+        { deliveredByCaller: true },
       );
-
-      if (result.closed) {
-        await deleteConversationState(conversationId);
-      } else {
-        await setConversationState(result.state);
+      if (result.status === "not_open") {
+        return reply
+          .code(404)
+          .send({ error: "Conversation not found or already finished" });
       }
 
-      // Return the last assistant message
-      const lastAssistantMsg = result.state.messages
-        .filter((m) => m.role === "assistant")
-        .pop();
-
       return {
-        message: lastAssistantMsg?.content ?? "",
-        closed: result.closed,
-        phase: result.state.phase,
-        messageCount: result.state.messageCount,
-        maxMessages: result.state.maxMessages,
+        message: result.reply,
+        closed: result.view.closed,
+        phase: result.view.phase,
+        messageCount: result.view.messageCount,
+        maxMessages: result.view.maxMessages,
       };
     },
   );
 };
+
+function demoChannel(leadId: string): string {
+  return `demo:${leadId}`;
+}

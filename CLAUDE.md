@@ -53,7 +53,7 @@ docker compose up -d              # PostgreSQL, Redis (local dev)
 - **Error handling:** Global Fastify `setErrorHandler` — 400 for validation, 500 for everything else
 - **Frontend API calls:** Server-side `lib/api.ts` with `Promise.allSettled` + mock fallback
 - **BullMQ:** Workers share queue instances from `createQueues()`. Never create ad-hoc `new Queue()` inside workers.
-- **Redis state:** Conversation state via `SETEX`/`GET`/`DEL`, 24h TTL, key `conv:{id}`. WebSocket notes: `1on1:content:{sessionId}`, 24h TTL.
+- **Conversation state:** Postgres only (conversations row + conversation_messages ordered by `seq`). Inbound chat messages are stored in `inbound_messages` first, then only the id is queued. Redis holds BullMQ jobs, the Teams store and WebSocket notes (`1on1:content:{sessionId}`, 24h TTL).
 - **WebSocket:** `@fastify/websocket` for 1:1 sessions. In-memory room map + Redis cache for reconnection. Dedicated ioredis instance (not BullMQ's).
 - **Drizzle:** Can't chain `.where()` — build conditions array, then `.where(and(...conditions))`
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)

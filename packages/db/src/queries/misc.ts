@@ -112,7 +112,7 @@ export async function getConversationWithMessages(
     .select()
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, id))
-    .orderBy(conversationMessages.createdAt);
+    .orderBy(conversationMessages.seq);
 
   return { ...conversation, messages };
 }

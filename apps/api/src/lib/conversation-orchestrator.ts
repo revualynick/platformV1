@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
 import {
@@ -11,36 +11,26 @@ import {
 import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry, OutboundMessage } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
+import { buildJobId } from "./job-ids.js";
 
-// ── Redis conversation state (hot path) ─────────────────
+/**
+ * Conversation engine. All conversation state lives in Postgres (the
+ * conversations row plus conversation_messages ordered by seq); nothing is
+ * held in Redis, so a restart or cache loss never loses or silences a
+ * conversation. See docs/c3-plan.md, phase 3.
+ *
+ * Guarantees:
+ *  - store first: a user message is persisted before any processing
+ *  - one reply per burst: a turn answers every user message after the
+ *    bot's last message, and is abandoned if another arrives before commit
+ *  - one writer per turn: a turn commits only if `turn` is unchanged
+ *  - outbox: bot messages are stored undelivered, then sent; a failed send
+ *    is retried without another LLM call
+ */
 
-export interface ConversationState {
-  conversationId: string;
-  orgId: string;
-  reviewerId: string;
-  subjectId: string;
-  interactionType: InteractionType;
-  platform: ChatPlatform;
-  channelId: string;
-  threadId?: string;
-  questionnaireId: string;
-  /** Theme IDs selected for this conversation */
-  selectedThemes: string[];
-  /** Index of the current theme being explored */
-  currentThemeIndex: number;
-  /** Number of messages exchanged so far */
-  messageCount: number;
-  /** Max messages before auto-close (1-5 based on interaction type) */
-  maxMessages: number;
-  /** Conversation phase */
-  phase: "opening" | "exploring" | "follow_up" | "closing";
-  /** Message history for LLM context */
-  messages: Array<{ role: "system" | "assistant" | "user"; content: string }>;
-  /** Lead email bound to this conversation (demo mode only) */
-  demoLeadEmail?: string;
-}
-
-// ── Orchestrator ─────────────────────────────────────────
+export const OPEN_STATUSES = ["initiated", "in_progress"] as const;
+/** `incomplete` arrives with the step 6 sweeper; listed now so late additions cover it. */
+export const FINISHED_STATUSES = ["closed", "incomplete"] as const;
 
 export interface OrchestratorDeps {
   llm: LLMGateway;
@@ -48,24 +38,57 @@ export interface OrchestratorDeps {
   analysisQueue: Queue;
 }
 
+type Conversation = typeof conversations.$inferSelect;
+
+// ── Starting a conversation ──────────────────────────────
+
+export interface InitiateParams {
+  orgId: string;
+  reviewerId: string;
+  subjectId: string;
+  interactionType: InteractionType;
+  platform: ChatPlatform;
+  /** Where to send: the reviewer's DM address. */
+  channelId: string;
+  questionnaireId: string;
+  /** Scheduler entry; makes initiation idempotent across job retries. */
+  scheduleEntryId?: string;
+  /**
+   * Scheduled check-ins: do not start one while the reviewer still has an
+   * open conversation on this platform (their replies would be ambiguous).
+   */
+  skipIfOpen?: boolean;
+}
+
+export type InitiateResult =
+  /** created is false when this schedule entry already had one (a retry). */
+  | { status: "started"; conversationId: string; created: boolean }
+  | { status: "skipped_open"; openConversationId: string };
+
 /**
- * Initiate a new conversation.
- * Called by the scheduler worker when it's time for an interaction.
+ * Create a conversation and its opening message, then deliver it. Safe to
+ * retry: a repeat for the same schedule entry returns the existing
+ * conversation and only re-attempts delivery.
  */
 export async function initiateConversation(
   db: TenantDb,
   deps: OrchestratorDeps,
-  params: {
-    orgId: string;
-    reviewerId: string;
-    subjectId: string;
-    interactionType: InteractionType;
-    platform: ChatPlatform;
-    channelId: string;
-    questionnaireId: string;
-  },
-): Promise<ConversationState> {
-  // 1. Fetch questionnaire, themes, reviewer, and subject in parallel
+  params: InitiateParams,
+  opts: DeliverOptions = {},
+): Promise<InitiateResult> {
+  if (params.scheduleEntryId) {
+    const existing = await findByScheduleEntry(db, params.scheduleEntryId);
+    if (existing) {
+      await deliverOutbox(db, deps, existing.id, opts);
+      return { status: "started", conversationId: existing.id, created: false };
+    }
+  }
+
+  if (params.skipIfOpen) {
+    const open = await findOpenConversation(db, params.reviewerId, params.platform);
+    if (open) return { status: "skipped_open", openConversationId: open.id };
+  }
+
   const [[questionnaire], themes, [reviewer], [subject]] = await Promise.all([
     db.select().from(questionnaires).where(eq(questionnaires.id, params.questionnaireId)),
     db
@@ -77,7 +100,6 @@ export async function initiateConversation(
     db.select().from(users).where(eq(users.id, params.subjectId)),
   ]);
 
-  // 2. Null guards — bail early if required data is missing
   if (!questionnaire) {
     throw Object.assign(new Error("Questionnaire not found"), { statusCode: 404 });
   }
@@ -88,34 +110,26 @@ export async function initiateConversation(
     throw Object.assign(new Error("Subject not found"), { statusCode: 404 });
   }
 
-  // 3. Select 2-3 themes for this conversation (don't use all every time)
+  // 2-3 themes per conversation (not all of them every time).
   const maxThemes = Math.min(themes.length, params.interactionType === "self_reflection" ? 3 : 2);
   const selectedThemes = themes.slice(0, maxThemes);
 
-  // 4. Determine max messages based on interaction type
-  const maxMessages = getMaxMessages(params.interactionType);
-
-  // 5. Generate opening question, prefixed with a deterministic intro
-  // (what this is, how long it takes, where answers go — the privacy
-  // line must never be LLM-paraphrased).
-  const firstTheme = selectedThemes[0];
+  // Deterministic intro (what this is, how long, where answers go: the
+  // privacy line must never be LLM-paraphrased) + the first question.
   const openingQuestion =
-    getInteractionIntro(
-      params.interactionType,
-      subject?.name ?? "your colleague",
-    ) +
+    getInteractionIntro(params.interactionType, subject.name ?? "your colleague") +
     (await generateQuestion(deps.llm, {
-      theme: firstTheme,
-      verbatim: questionnaire?.verbatim ?? false,
-      reviewerName: reviewer?.name ?? "there",
-      subjectName: subject?.name ?? "your colleague",
+      theme: selectedThemes[0] ?? null,
+      verbatim: questionnaire.verbatim ?? false,
+      reviewerName: reviewer.name ?? "there",
+      subjectName: subject.name ?? "your colleague",
       interactionType: params.interactionType,
       isOpening: true,
       priorMessages: [],
     }));
 
-  // 6. Create conversation record + opening message in a transaction
-  const conversation = await db.transaction(async (tx) => {
+  const now = new Date();
+  const created = await db.transaction(async (tx) => {
     const [conv] = await tx
       .insert(conversations)
       .values({
@@ -127,185 +141,456 @@ export async function initiateConversation(
         platformChannelId: params.channelId,
         status: "initiated",
         messageCount: 1,
-        scheduledAt: new Date(),
-        initiatedAt: new Date(),
+        scheduledAt: now,
+        initiatedAt: now,
+        lastActivityAt: now,
+        selectedThemeIds: selectedThemes.map((t) => t.id),
+        currentThemeIndex: 0,
+        phase: "opening",
+        scheduleEntryId: params.scheduleEntryId ?? null,
       })
-      .returning();
+      // A concurrent retry for the same schedule entry may have won.
+      .onConflictDoNothing()
+      .returning({ id: conversations.id });
+    if (!conv) return null;
 
     await tx.insert(conversationMessages).values({
       conversationId: conv.id,
       role: "assistant",
       content: openingQuestion,
     });
-
     return conv;
   });
 
-  // 7. Send the message via chat adapter (outside transaction — external side effect).
-  // If this fails the conversation row exists but the user never receives the first
-  // message. The BullMQ job will retry, and on retry initiateConversation will be
-  // called again. The DB insert uses no onConflict guard, so a duplicate row can
-  // appear; callers that need idempotency should deduplicate by scheduleEntryId.
-  // questionnaireId is persisted on the conversation row (above) so an in-progress
-  // conversation can be reconstructed from the DB after Redis state loss.
-  await sendMessage(deps.adapters, {
-    platform: params.platform,
-    channelId: params.channelId,
-    text: openingQuestion,
-  });
+  const conversationId =
+    created?.id ?? (params.scheduleEntryId ? (await findByScheduleEntry(db, params.scheduleEntryId))?.id : undefined);
+  if (!conversationId) throw new Error("Conversation was not created");
 
-  // 8. Build conversation state for Redis
-  const state: ConversationState = {
-    conversationId: conversation.id,
-    orgId: params.orgId,
-    reviewerId: params.reviewerId,
-    subjectId: params.subjectId,
-    interactionType: params.interactionType,
-    platform: params.platform,
-    channelId: params.channelId,
-    questionnaireId: params.questionnaireId,
-    selectedThemes: selectedThemes.map((t) => t.id),
-    currentThemeIndex: 0,
-    messageCount: 1,
-    maxMessages,
-    phase: "opening",
-    messages: [{ role: "assistant", content: openingQuestion }],
-  };
+  await deliverOutbox(db, deps, conversationId, opts);
+  return { status: "started", conversationId, created: Boolean(created) };
+}
 
-  return state;
+async function findByScheduleEntry(db: TenantDb, scheduleEntryId: string) {
+  const [row] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.scheduleEntryId, scheduleEntryId));
+  return row;
 }
 
 /**
- * Handle an inbound reply from the user.
- * Decides whether to follow up, move to next theme, or close.
+ * The reviewer's open conversation on a platform, if any (newest first).
+ * Scoped by platform so a web demo or reflection left open never captures
+ * a chat message, and never blocks a scheduled chat check-in.
  */
-const TRUNCATION_NOTE =
-  "(Heads up — your last message was quite long and I could only read the first part. Feel free to split longer thoughts across messages.)\n\n";
+export async function findOpenConversation(
+  db: TenantDb,
+  reviewerId: string,
+  platform: ChatPlatform,
+): Promise<Conversation | undefined> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.reviewerId, reviewerId),
+        eq(conversations.platform, platform),
+        inArray(conversations.status, [...OPEN_STATUSES]),
+      ),
+    )
+    .orderBy(desc(conversations.createdAt))
+    .limit(1);
+  return row;
+}
 
-export async function handleReply(
+/** How long after closing a conversation a message still counts as part of it. */
+export const LATE_ADDITION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The reviewer's most recent conversation on a platform if it finished
+ * within the late-addition window, else undefined.
+ */
+export async function findLateAdditionTarget(
+  db: TenantDb,
+  reviewerId: string,
+  platform: ChatPlatform,
+  now: Date = new Date(),
+): Promise<Conversation | undefined> {
+  const [row] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.reviewerId, reviewerId), eq(conversations.platform, platform)))
+    .orderBy(desc(conversations.createdAt))
+    .limit(1);
+  if (!row || !(FINISHED_STATUSES as readonly string[]).includes(row.status)) return undefined;
+  const finishedAt = row.closedAt ?? row.lastActivityAt;
+  return now.getTime() - finishedAt.getTime() <= LATE_ADDITION_WINDOW_MS ? row : undefined;
+}
+
+// ── Receiving a message ──────────────────────────────────
+
+export type AppendResult =
+  | { status: "appended"; seq: number }
+  | { status: "duplicate" }
+  | { status: "not_open" };
+
+/**
+ * Store a user message on an open conversation. Takes the conversation row
+ * lock first, so a message arriving while a turn commits is inserted after
+ * that turn's reply (higher seq) and is answered by the next turn rather
+ * than silently treated as already answered. Duplicate platform deliveries
+ * are ignored.
+ */
+export async function appendUserMessage(
+  db: TenantDb,
+  conversationId: string,
+  content: string,
+  platformMessageId?: string,
+): Promise<AppendResult> {
+  return db.transaction(async (tx) => {
+    const [locked] = await tx
+      .update(conversations)
+      .set({ lastActivityAt: sql`clock_timestamp()` })
+      .where(and(eq(conversations.id, conversationId), inArray(conversations.status, [...OPEN_STATUSES])))
+      .returning({ id: conversations.id });
+    if (!locked) return { status: "not_open" as const };
+
+    const [row] = await tx
+      .insert(conversationMessages)
+      .values({ conversationId, role: "user", content, platformMessageId: platformMessageId ?? null })
+      .onConflictDoNothing()
+      .returning({ seq: conversationMessages.seq });
+    return row ? { status: "appended" as const, seq: row.seq } : { status: "duplicate" as const };
+  });
+}
+
+/**
+ * Store a message sent after a conversation finished. No turn follows: the
+ * caller acknowledges it and re-runs analysis. Duplicate deliveries are
+ * ignored, so a retried job cannot add it twice.
+ */
+export async function appendLateAddition(
+  db: TenantDb,
+  conversationId: string,
+  content: string,
+  platformMessageId?: string,
+): Promise<Exclude<AppendResult, { status: "not_open" }>> {
+  const [row] = await db
+    .insert(conversationMessages)
+    .values({ conversationId, role: "user", content, platformMessageId: platformMessageId ?? null })
+    .onConflictDoNothing()
+    .returning({ seq: conversationMessages.seq });
+  return row ? { status: "appended", seq: row.seq } : { status: "duplicate" };
+}
+
+/** Queue id for the turn that answers a given user message. */
+export function turnJobId(conversationId: string, seq: number): string {
+  return buildJobId("turn", conversationId, String(seq));
+}
+
+// ── Taking a turn ────────────────────────────────────────
+
+export type TurnResult =
+  | { status: "replied" }
+  | { status: "closed" }
+  /** Nothing to answer: the last message is already the bot's. */
+  | { status: "nothing_pending" }
+  /** Another user message arrived first; a later turn will answer both. */
+  | { status: "superseded" }
+  /** Another worker committed this turn first. */
+  | { status: "lost_race" }
+  | { status: "not_open" };
+
+class Superseded extends Error {}
+class LostRace extends Error {}
+
+/**
+ * Answer every user message since the bot last spoke, as one turn.
+ * Idempotent and safe to run concurrently: see the guarantees at the top.
+ */
+export async function processTurn(
   db: TenantDb,
   deps: OrchestratorDeps,
-  state: ConversationState,
-  userMessage: string,
-  opts: { truncatedInbound?: boolean } = {},
-): Promise<{ state: ConversationState; closed: boolean }> {
-  // 1. Store the user's message
-  await db.insert(conversationMessages).values({
-    conversationId: state.conversationId,
-    role: "user",
-    content: userMessage,
-  });
+  conversationId: string,
+  opts: DeliverOptions & { truncatedInbound?: boolean } = {},
+): Promise<TurnResult> {
+  // Anything stored but not yet sent goes first (no new LLM call).
+  await deliverOutbox(db, deps, conversationId, opts);
 
-  state.messages.push({ role: "user", content: userMessage });
-  state.messageCount++;
+  const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conv || !(OPEN_STATUSES as readonly string[]).includes(conv.status)) return { status: "not_open" };
 
-  // 2. Update conversation record
-  await db
-    .update(conversations)
-    .set({ messageCount: state.messageCount, status: "in_progress" })
-    .where(eq(conversations.id, state.conversationId));
+  const history = await db
+    .select({ role: conversationMessages.role, content: conversationMessages.content, seq: conversationMessages.seq })
+    .from(conversationMessages)
+    .where(eq(conversationMessages.conversationId, conversationId))
+    .orderBy(asc(conversationMessages.seq));
 
-  // 3. Decide next action
-  const decision = await decideNextAction(deps.llm, state, userMessage);
+  const lastBot = history.reduce((max, m) => (m.role === "assistant" ? Math.max(max, m.seq) : max), 0);
+  const pending = history.filter((m) => m.role === "user" && m.seq > lastBot);
+  if (pending.length === 0) return { status: "nothing_pending" };
+  const lastPendingSeq = pending[pending.length - 1].seq;
 
-  if (decision === "close" || state.messageCount >= state.maxMessages) {
-    // Close the conversation
-    return await closeConversation(db, deps, state);
-  }
+  // ── Decide and draft (LLM calls, outside any transaction) ──
+  const interactionType = conv.interactionType as InteractionType;
+  const maxMessages = getMaxMessages(interactionType);
+  const messageCount = history.length;
+  const reply = pending.map((m) => m.content).join("\n\n");
 
-  if (decision === "next_theme") {
-    state.currentThemeIndex++;
-    state.phase = "exploring";
+  const decision = await decideNextAction(
+    deps.llm,
+    {
+      currentThemeIndex: conv.currentThemeIndex,
+      themeCount: conv.selectedThemeIds.length,
+      phase: conv.phase,
+      messageCount,
+      maxMessages,
+    },
+    reply,
+  );
+
+  const closing = decision === "close" || messageCount >= maxMessages;
+  let next = { currentThemeIndex: conv.currentThemeIndex, phase: conv.phase, followUpCount: conv.followUpCount };
+  let outbound: string;
+
+  if (closing) {
+    next = { ...next, phase: "closing" };
+    outbound = getClosingMessage(interactionType);
   } else {
-    state.phase = "follow_up";
+    next =
+      decision === "next_theme"
+        ? { currentThemeIndex: conv.currentThemeIndex + 1, phase: "exploring", followUpCount: 0 }
+        : { ...next, phase: "follow_up", followUpCount: conv.followUpCount + 1 };
+
+    const [theme, [questionnaire], [subject]] = await Promise.all([
+      loadTheme(db, conv.selectedThemeIds[next.currentThemeIndex]),
+      conv.questionnaireId
+        ? db.select().from(questionnaires).where(eq(questionnaires.id, conv.questionnaireId))
+        : Promise.resolve([]),
+      db.select().from(users).where(eq(users.id, conv.subjectId)),
+    ]);
+    outbound = await generateQuestion(deps.llm, {
+      theme,
+      verbatim: questionnaire?.verbatim ?? false,
+      reviewerName: "", // not needed for follow-ups
+      subjectName: subject?.name ?? "your colleague",
+      interactionType,
+      isOpening: false,
+      priorMessages: history.map((m) => ({ role: m.role, content: m.content })),
+    });
+  }
+  if (opts.truncatedInbound) outbound = TRUNCATION_NOTE + outbound;
+
+  // ── Commit: only if the turn is unchanged and nothing new arrived ──
+  try {
+    await db.transaction(async (tx) => {
+      const now = new Date();
+      const [claimed] = await tx
+        .update(conversations)
+        .set({
+          turn: sql`${conversations.turn} + 1`,
+          currentThemeIndex: next.currentThemeIndex,
+          phase: next.phase as Conversation["phase"],
+          followUpCount: next.followUpCount,
+          messageCount: messageCount + 1,
+          lastActivityAt: now,
+          status: closing ? "closed" : "in_progress",
+          ...(closing ? { closedAt: now } : {}),
+        })
+        .where(and(eq(conversations.id, conversationId), eq(conversations.turn, conv.turn)))
+        .returning({ id: conversations.id });
+      if (!claimed) throw new LostRace();
+
+      // We hold the row lock now: any message appended before this point
+      // is visible; any later one will be inserted after our reply.
+      const [newer] = await tx
+        .select({ seq: conversationMessages.seq })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.role, "user"),
+            gt(conversationMessages.seq, lastPendingSeq),
+          ),
+        )
+        .limit(1);
+      if (newer) throw new Superseded();
+
+      await tx.insert(conversationMessages).values({ conversationId, role: "assistant", content: outbound });
+    });
+  } catch (err) {
+    if (err instanceof Superseded) return { status: "superseded" };
+    if (err instanceof LostRace) return { status: "lost_race" };
+    throw err;
   }
 
-  // 4. Generate next question — fetch theme, questionnaire, and subject in parallel
-  const [currentTheme, [questionnaire], [subject]] = await Promise.all([
-    getCurrentTheme(db, state),
-    db.select().from(questionnaires).where(eq(questionnaires.id, state.questionnaireId)),
-    db.select().from(users).where(eq(users.id, state.subjectId)),
-  ]);
+  if (closing) {
+    await deps.analysisQueue.add(
+      "analyze",
+      { conversationId, orgId: tenantOrgId() },
+      { jobId: buildJobId("analyze", conversationId) },
+    );
+  }
 
-  const nextQuestion = await generateQuestion(deps.llm, {
-    theme: currentTheme,
-    verbatim: questionnaire?.verbatim ?? false,
-    reviewerName: "", // not needed for follow-ups
-    subjectName: subject?.name ?? "your colleague",
-    interactionType: state.interactionType,
-    isOpening: false,
-    priorMessages: state.messages,
-  });
+  await deliverOutbox(db, deps, conversationId, opts);
+  return closing ? { status: "closed" } : { status: "replied" };
+}
 
-  // 5. Store and send — acknowledging inbound truncation so long
-  // replies are never silently cut without the user knowing.
-  const outbound = opts.truncatedInbound
-    ? TRUNCATION_NOTE + nextQuestion
-    : nextQuestion;
+// ── In-process conversations (web demo, reflections, simulator) ──
 
-  await db.insert(conversationMessages).values({
-    conversationId: state.conversationId,
-    role: "assistant",
-    content: outbound,
-  });
+export interface ConversationView {
+  conversationId: string;
+  reviewerId: string;
+  platformChannelId: string;
+  interactionType: InteractionType;
+  status: string;
+  closed: boolean;
+  phase: Conversation["phase"];
+  messageCount: number;
+  maxMessages: number;
+  /** The bot's newest message. */
+  lastBotMessage: string;
+  lastBotSeq: number;
+}
 
-  state.messages.push({ role: "assistant", content: outbound });
-  state.messageCount++;
+export async function getConversationView(
+  db: TenantDb,
+  conversationId: string,
+): Promise<ConversationView | undefined> {
+  const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conv) return undefined;
+  const [last] = await db
+    .select({ content: conversationMessages.content, seq: conversationMessages.seq })
+    .from(conversationMessages)
+    .where(and(eq(conversationMessages.conversationId, conversationId), eq(conversationMessages.role, "assistant")))
+    .orderBy(desc(conversationMessages.seq))
+    .limit(1);
+  const interactionType = conv.interactionType as InteractionType;
+  return {
+    conversationId: conv.id,
+    reviewerId: conv.reviewerId,
+    platformChannelId: conv.platformChannelId,
+    interactionType,
+    status: conv.status,
+    closed: !(OPEN_STATUSES as readonly string[]).includes(conv.status),
+    phase: conv.phase,
+    messageCount: conv.messageCount,
+    maxMessages: getMaxMessages(interactionType),
+    lastBotMessage: last?.content ?? "",
+    lastBotSeq: last?.seq ?? 0,
+  };
+}
 
-  await sendMessage(deps.adapters, {
-    platform: state.platform,
-    channelId: state.channelId,
-    text: outbound,
-    threadId: state.threadId,
-  });
+export type InProcessReply =
+  | { status: "not_open" }
+  /** reply is empty when a concurrent request's turn answered this message. */
+  | { status: "ok"; reply: string; view: ConversationView };
 
-  return { state, closed: false };
+/**
+ * Store a message and take the turn in the same request, for callers that
+ * return the bot's reply in the HTTP response instead of via a chat adapter.
+ * Same engine and guarantees as the queued path.
+ */
+export async function replyInProcess(
+  db: TenantDb,
+  deps: OrchestratorDeps,
+  conversationId: string,
+  content: string,
+  opts: DeliverOptions = {},
+): Promise<InProcessReply> {
+  const appended = await appendUserMessage(db, conversationId, content);
+  if (appended.status !== "appended") return { status: "not_open" };
+  await processTurn(db, deps, conversationId, opts);
+  const view = await getConversationView(db, conversationId);
+  if (!view) return { status: "not_open" };
+  return { status: "ok", reply: view.lastBotSeq > appended.seq ? view.lastBotMessage : "", view };
+}
+
+// ── Sending ──────────────────────────────────────────────
+
+export interface DeliverOptions {
+  /**
+   * For channels with no chat adapter (the web demo), the message is
+   * "delivered" by the HTTP response, so mark it sent without an adapter.
+   * Never set for real platforms: a missing adapter must surface as an
+   * error, not as a silently undelivered message.
+   */
+  deliveredByCaller?: boolean;
 }
 
 /**
- * Close the conversation and enqueue analysis.
+ * Send every stored, undelivered bot message for a conversation, in order.
+ * Throws on a send failure (so the job retries); already-sent messages are
+ * marked and never re-sent.
  */
-async function closeConversation(
+export async function deliverOutbox(
   db: TenantDb,
-  deps: OrchestratorDeps,
-  state: ConversationState,
-): Promise<{ state: ConversationState; closed: boolean }> {
-  // Send closing message
-  const closingMessage = getClosingMessage(state.interactionType);
+  deps: Pick<OrchestratorDeps, "adapters">,
+  conversationId: string,
+  opts: DeliverOptions = {},
+): Promise<number> {
+  const undelivered = await db
+    .select({ id: conversationMessages.id, content: conversationMessages.content })
+    .from(conversationMessages)
+    .where(
+      and(
+        eq(conversationMessages.conversationId, conversationId),
+        eq(conversationMessages.role, "assistant"),
+        isNull(conversationMessages.deliveredAt),
+      ),
+    )
+    .orderBy(asc(conversationMessages.seq));
+  if (undelivered.length === 0) return 0;
 
-  await db.insert(conversationMessages).values({
-    conversationId: state.conversationId,
-    role: "assistant",
-    content: closingMessage,
-  });
-
-  await sendMessage(deps.adapters, {
-    platform: state.platform,
-    channelId: state.channelId,
-    text: closingMessage,
-    threadId: state.threadId,
-  });
-
-  // Update conversation status
-  // Denormalized counter — should match COUNT(*) of conversation_messages for this conversation
-  await db
-    .update(conversations)
-    .set({
-      status: "closed",
-      closedAt: new Date(),
-      messageCount: state.messageCount + 1,
+  const [conv] = await db
+    .select({
+      platform: conversations.platform,
+      channelId: conversations.platformChannelId,
+      threadId: conversations.threadId,
     })
-    .where(eq(conversations.id, state.conversationId));
+    .from(conversations)
+    .where(eq(conversations.id, conversationId));
+  if (!conv) return 0;
 
-  // Enqueue analysis job
-  await deps.analysisQueue.add("analyze", {
-    conversationId: state.conversationId,
-    orgId: state.orgId,
-  });
-
-  state.phase = "closing";
-  return { state, closed: true };
+  const platform = conv.platform as ChatPlatform;
+  for (const msg of undelivered) {
+    if (!opts.deliveredByCaller) {
+      if (!deps.adapters.has(platform)) {
+        throw new Error(`No chat adapter registered for ${platform}; message kept in outbox`);
+      }
+      const outboundMessage: OutboundMessage = {
+        platform,
+        channelId: conv.channelId,
+        threadId: conv.threadId ?? undefined,
+        text: msg.content,
+        blocks: [],
+      };
+      await deps.adapters.sendMessage(outboundMessage);
+    }
+    await db
+      .update(conversationMessages)
+      .set({ deliveredAt: new Date() })
+      .where(eq(conversationMessages.id, msg.id));
+  }
+  return undelivered.length;
 }
+
+const TRUNCATION_NOTE =
+  "(Heads up: your last message was quite long and I could only read the first part. Feel free to split longer thoughts across messages.)\n\n";
+
+// Per-tenant deployment: one org per process.
+function tenantOrgId(): string {
+  return process.env.ORG_ID ?? "dev-org";
+}
+
+async function loadTheme(db: TenantDb, themeId: string | undefined) {
+  if (!themeId) return null;
+  const [theme] = await db.select().from(questionnaireThemes).where(eq(questionnaireThemes.id, themeId));
+  return theme
+    ? { intent: theme.intent, dataGoal: theme.dataGoal, examplePhrasings: theme.examplePhrasings }
+    : null;
+}
+
 
 // ── LLM helpers ─────────────────────────────────────────
 
@@ -387,18 +672,26 @@ Rules:
   return response.content.trim();
 }
 
+export interface TurnPosition {
+  currentThemeIndex: number;
+  themeCount: number;
+  phase: string;
+  messageCount: number;
+  maxMessages: number;
+}
+
 async function decideNextAction(
   llm: LLMGateway,
-  state: ConversationState,
+  pos: TurnPosition,
   lastReply: string,
 ): Promise<"follow_up" | "next_theme" | "close"> {
-  // If we've explored all themes (index is past the last one after increment), close
-  if (state.currentThemeIndex >= state.selectedThemes.length && state.phase !== "opening") {
+  // Every theme explored (index moved past the last one): close.
+  if (pos.currentThemeIndex >= pos.themeCount && pos.phase !== "opening") {
     return "close";
   }
 
-  // If only 1 message left before max, close
-  if (state.messageCount >= state.maxMessages - 1) {
+  // One message left before the cap: close.
+  if (pos.messageCount >= pos.maxMessages - 1) {
     return "close";
   }
 
@@ -488,27 +781,6 @@ export function getClosingMessage(type: InteractionType): string {
   }
 }
 
-async function getCurrentTheme(
-  db: TenantDb,
-  state: ConversationState,
-): Promise<{ intent: string; dataGoal: string; examplePhrasings: string[] } | null> {
-  const themeId = state.selectedThemes[state.currentThemeIndex];
-  if (!themeId) return null;
-
-  const [theme] = await db
-    .select()
-    .from(questionnaireThemes)
-    .where(eq(questionnaireThemes.id, themeId));
-
-  return theme
-    ? {
-        intent: theme.intent,
-        dataGoal: theme.dataGoal,
-        examplePhrasings: theme.examplePhrasings,
-      }
-    : null;
-}
-
 /** Strip control characters, quotes, and special chars to mitigate prompt injection via user-provided names. */
 export function stripControlChars(input: string): string {
   return input
@@ -516,21 +788,4 @@ export function stripControlChars(input: string): string {
     .replace(/[`"\\<>']/g, "")         // backticks, quotes, backslashes, angle brackets
     .replace(/\n/g, " ")               // newlines → spaces
     .slice(0, 200);
-}
-
-async function sendMessage(
-  adapters: AdapterRegistry,
-  params: { platform: ChatPlatform; channelId: string; text: string; threadId?: string },
-): Promise<void> {
-  if (!adapters.has(params.platform)) return;
-
-  const message: OutboundMessage = {
-    platform: params.platform,
-    channelId: params.channelId,
-    threadId: params.threadId,
-    text: params.text,
-    blocks: [],
-  };
-
-  await adapters.sendMessage(message);
 }
