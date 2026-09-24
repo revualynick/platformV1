@@ -144,6 +144,8 @@ describe.skipIf(!dbUp)("analysis pipeline fixes (integration)", () => {
         mood: "stressed",
         highlights: "My own words",
         completedAt: new Date(),
+        // What /complete sets (and migration 0035 backfills for older rows).
+        personEditedAt: new Date(),
       });
 
       await runAnalysisPipeline(db, reflectionLLM(), convId, quietLogger, process.env.ORG_ID);
@@ -166,6 +168,8 @@ describe.skipIf(!dbUp)("analysis pipeline fixes (integration)", () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ mood: "tired", highlights: "Actually quite draining", engagementScore: 70 });
+      // Marked as the person's own, so a later re-analysis cannot overwrite it.
+      expect(res.json().personEditedAt).toBeTruthy();
     });
   });
 });

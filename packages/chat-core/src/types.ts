@@ -15,7 +15,10 @@ export interface InboundMessage {
     email?: string;
     displayName?: string;
   };
-  /** True when the message arrived in a one-to-one DM with the bot. */
+  /**
+   * True when the message arrived in a one-to-one DM with the bot. Only DMs
+   * are routed; adapters that cannot tell must leave it unset (ignored).
+   */
   isDirectMessage?: boolean;
 }
 

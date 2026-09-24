@@ -61,6 +61,7 @@ export async function handleInbound(
 
   const platform = msg.platform as ChatPlatform;
   const reply = (text: string) => sendDirect(deps, msg, text);
+  const meta = { platformMessageId: msg.platformMessageId, sentAt: msg.sentAt };
 
   // 1. Who is this?
   const identity = await findIdentity(db, platform, msg.platformUserId);
@@ -87,7 +88,7 @@ export async function handleInbound(
   // 4. An answer in an open conversation.
   const open = await findOpenConversation(db, userId, platform);
   if (open) {
-    const appended = await appendUserMessage(db, open.id, msg.content, msg.platformMessageId);
+    const appended = await appendUserMessage(db, open.id, msg.content, meta);
     // Stored by an earlier attempt of this job: still make sure its turn is queued.
     const seq =
       appended.status === "appended"
@@ -106,7 +107,7 @@ export async function handleInbound(
   // 5. Something they forgot to say in a conversation that just finished.
   const late = await findLateAdditionTarget(db, userId, platform);
   if (late) {
-    await appendLateAddition(db, late.id, msg.content, msg.platformMessageId);
+    await appendLateAddition(db, late.id, msg.content, meta);
     await deps.analysisQueue.add(
       "analyze",
       { conversationId: late.id, orgId: process.env.ORG_ID ?? "dev-org" },

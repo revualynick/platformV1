@@ -292,3 +292,10 @@
 - 20 new integration tests (supersede and atomic claim mutation-checked); 276 API tests, 16/16 typecheck
 - Gaps: no route-level tests for demo/reflections/simulator, not run with a real LLM; `stop` leaves an open conversation open (step 6)
 - Next: code review of step 5, then step 6 (sweeper, incomplete, theme outcomes)
+
+## 2026-09-24: Step 5 review, all 9 findings fixed
+- Main one: 0034 numbered old messages in physical order (12/12 local conversations scrambled); 0035 renumbers by created_at, id. Branch never pushed, so no deployed data affected
+- Ordering decision (Nick asked about platform/model timestamps): seq is the only order; created_at = clock_timestamp() for display; new sent_at keeps the platform's time as evidence only. Recorded in docs/c3-plan.md
+- Also: reflection ownership marker (person_edited_at), re-analysis keeps results of failed steps, signals replaced not added, analysis re-queued on closing-turn retry, DM-only routing for Slack/Teams, send-time pause check, `web` platform for demo/reflections, outbox row-lock claim
+- 16 new tests (mutation-checked where it matters); 292 API tests, 16/16 typecheck; 36 migrations apply to an empty DB
+- Next: step 6 (sweeper, incomplete, theme outcomes, single LLM call per turn)

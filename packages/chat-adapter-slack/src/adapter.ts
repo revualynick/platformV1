@@ -106,12 +106,14 @@ export class SlackAdapter implements ChatAdapter {
     return {
       id: crypto.randomUUID(),
       platform: "slack",
-      platformMessageId: event.ts as string,
+      // ts is only unique within a channel.
+      platformMessageId: `${event.channel}:${event.ts}`,
       platformChannelId: event.channel as string,
       platformUserId: event.user as string,
       text: (event.text as string) ?? "",
       threadId: (event.thread_ts as string) ?? null,
       timestamp: new Date(parseFloat(event.ts as string) * 1000),
+      isDirectMessage: event.channel_type === "im",
       rawPayload,
     };
   }

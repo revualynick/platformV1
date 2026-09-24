@@ -37,7 +37,7 @@ import { selectNudgeTargets } from "../lib/engagement-aggregation.js";
 import { sendEmail } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
-import { extractProfileSignals } from "../lib/profile-signal-extractor.js";
+import { replaceProfileSignals } from "../lib/profile-signal-store.js";
 import {
   weeklyDigestTemplate,
   flagAlertTemplate,
@@ -187,7 +187,7 @@ export function createWorkers(config: WorkerConfig) {
             channelId: data.channelId ?? "",
             questionnaireId: data.questionnaireId,
             scheduleEntryId: data.scheduleEntryId,
-            skipIfOpen: true,
+            scheduled: true,
           });
 
           if (data.scheduleEntryId) {
@@ -200,8 +200,8 @@ export function createWorkers(config: WorkerConfig) {
               )
               .where(eq(interactionSchedule.id, data.scheduleEntryId));
           }
-          if (result.status === "skipped_open") {
-            job.log(`Reviewer still has open conversation ${result.openConversationId}; check-in skipped`);
+          if (result.status === "skipped") {
+            job.log(`Check-in skipped at send time: ${result.reason}`);
           }
           break;
         }
@@ -896,42 +896,12 @@ export function createWorkers(config: WorkerConfig) {
           const { feedbackEntryId, orgId } = job.data as { feedbackEntryId: string; orgId: string };
           const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
 
-          const [entry] = await db
-            .select()
-            .from(feedbackEntries)
-            .where(eq(feedbackEntries.id, feedbackEntryId));
-
-          if (!entry) {
+          const stored = await replaceProfileSignals(db, feedbackEntryId);
+          if (stored === null) {
             job.log(`Feedback entry ${feedbackEntryId} not found`);
             return;
           }
-
-          const signals = extractProfileSignals({
-            text: entry.rawContent,
-            sentiment: entry.sentiment,
-            wordCount: entry.wordCount,
-            hasSpecificExamples: entry.hasSpecificExamples,
-            interactionType: entry.interactionType,
-          });
-
-          if (signals.length === 0) {
-            job.log(`No signals extracted for feedback entry ${feedbackEntryId}`);
-            return;
-          }
-
-          await db.insert(behavioralSignals).values(
-            signals.map((s) => ({
-              userId: entry.reviewerId,
-              framework: s.framework,
-              dimension: s.dimension,
-              value: s.value,
-              confidence: s.confidence,
-              sourceType: entry.interactionType,
-              sourceId: entry.id,
-            })),
-          );
-
-          job.log(`Inserted ${signals.length} signals for user ${entry.reviewerId}`);
+          job.log(`Stored ${stored} signals for feedback entry ${feedbackEntryId}`);
           break;
         }
 

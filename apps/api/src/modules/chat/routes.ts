@@ -71,9 +71,10 @@ async function handleWebhook(
       dmAddress: message.platformChannelId,
     }).catch((err) => app.log.error({ err, platform }, "Chat identity refresh failed"));
   }
-  // Only one-to-one DMs are check-in conversations. A mention in a shared
-  // space is ignored rather than routed into someone's private feedback.
-  if (message.isDirectMessage === false) return { status: 200, body: undefined };
+  // Only one-to-one DMs are check-in conversations. A message in a shared
+  // space or channel (or from an adapter that cannot tell) is ignored rather
+  // than routed into someone's private feedback or answered in public.
+  if (message.isDirectMessage !== true) return { status: 200, body: undefined };
 
   if (!conversationQueue) {
     return { status: 503, body: { error: "Message queue not initialized" } };
@@ -101,6 +102,7 @@ async function handleWebhook(
       threadId: message.threadId,
       content: text,
       truncated,
+      sentAt: message.timestamp,
     })
     .onConflictDoNothing()
     .returning({ id: inboundMessages.id });

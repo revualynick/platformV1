@@ -167,6 +167,7 @@ export class TeamsAdapter implements ChatAdapter {
       timestamp: activity.timestamp
         ? new Date(activity.timestamp as unknown as string)
         : new Date(),
+      isDirectMessage: activity.conversation.conversationType === "personal",
       rawPayload,
     };
   }

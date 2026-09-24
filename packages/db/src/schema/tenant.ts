@@ -75,6 +75,8 @@ export const users = pgTable(
     preferences: jsonb("preferences").$type<{
       preferredInteractionTime?: string;
       weeklyInteractionTarget?: number;
+      /** Set by the "stop" chat keyword; the scheduler skips them until "start". */
+      chatPaused?: boolean;
       quietDays?: number[];
     }>(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -195,9 +197,11 @@ export const inboundMessages = pgTable(
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
+    // When the chat platform says it was sent (its clock; evidence only).
+    sentAt: timestamp("sent_at", { withTimezone: true }),
     receivedAt: timestamp("received_at", { withTimezone: true })
       .notNull()
-      .defaultNow(),
+      .default(sql`clock_timestamp()`),
     processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (table) => [
@@ -317,9 +321,12 @@ export const conversationMessages = pgTable(
     role: varchar("role", { length: 20 }).notNull(), // system | assistant | user
     content: encryptedText("conversation_messages", "content").notNull(),
     platformMessageId: varchar("platform_message_id", { length: 255 }),
+    // Write time (clock_timestamp, migration 0035). Display only: order by seq.
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
-      .defaultNow(),
+      .default(sql`clock_timestamp()`),
+    // User messages: when the chat platform says it was sent (its clock).
+    sentAt: timestamp("sent_at", { withTimezone: true }),
     // Outbox (migration 0033): set when the platform accepted the message.
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     // Insertion order (migration 0034). Always order messages by seq, never
@@ -904,6 +911,9 @@ export const selfReflections = pgTable(
     engagementScore: integer("engagement_score"),
     promptTheme: varchar("prompt_theme", { length: 100 }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    // Set when the person completes or edits it; analysis then only fills
+    // fields they left empty (migration 0035).
+    personEditedAt: timestamp("person_edited_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

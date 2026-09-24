@@ -19,6 +19,7 @@ import { AdapterRegistry } from "@revualy/chat-core";
 import { InternalSimulatorAdapter } from "../lib/internal-simulator-adapter.js";
 import {
   appendUserMessage,
+  deliverOutbox,
   initiateConversation,
   processTurn,
   replyInProcess,
@@ -100,6 +101,8 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
     );
 
   async function start(extra: Partial<Parameters<typeof initiateConversation>[2]> = {}) {
+    // Web conversations are answered in the HTTP response, never via an adapter.
+    const opts = extra.platform === "web" ? { deliveredByCaller: true } : {};
     const res = await initiateConversation(db, deps, {
       orgId: process.env.ORG_ID!,
       reviewerId: ids.reviewer,
@@ -109,7 +112,7 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
       channelId: "dm-rev",
       questionnaireId,
       ...extra,
-    });
+    }, opts);
     if (res.status !== "started") throw new Error("expected a new conversation");
     return res.conversationId;
   }
@@ -248,9 +251,8 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
       expect((await messages(convId))[0].deliveredAt).not.toBeNull();
     });
 
-    it("skips a scheduled check-in while one is still open on that platform", async () => {
-      const open = await start();
-      const res = await initiateConversation(db, deps, {
+    async function scheduledStart() {
+      return initiateConversation(db, deps, {
         orgId: process.env.ORG_ID!,
         reviewerId: ids.reviewer,
         subjectId: ids.subject,
@@ -258,9 +260,27 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
         platform: "internal",
         channelId: "dm-rev",
         questionnaireId,
-        skipIfOpen: true,
+        scheduled: true,
       });
-      expect(res).toEqual({ status: "skipped_open", openConversationId: open });
+    }
+
+    it("skips a scheduled check-in while one is still open on that platform", async () => {
+      const open = await start();
+      expect(await scheduledStart()).toEqual({ status: "skipped", reason: "open_conversation", openConversationId: open });
+    });
+
+    it("an open web conversation (demo, reflection) does not block a chat check-in", async () => {
+      await start({ platform: "web", channelId: `web:${ids.reviewer}` });
+      expect(await scheduledStart()).toMatchObject({ status: "started" });
+    });
+
+    it("re-checks at send time: someone who said stop after scheduling is not messaged", async () => {
+      await db.update(users).set({ preferences: { chatPaused: true } }).where(eq(users.id, ids.reviewer));
+      expect(await scheduledStart()).toEqual({ status: "skipped", reason: "paused" });
+      await db.update(users).set({ preferences: {}, isActive: false }).where(eq(users.id, ids.reviewer));
+      expect(await scheduledStart()).toEqual({ status: "skipped", reason: "inactive" });
+      await db.update(users).set({ isActive: true }).where(eq(users.id, ids.reviewer));
+      expect(chat.sent).toHaveLength(0);
     });
   });
 
@@ -275,6 +295,29 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
       expect(turns[0].conversationId).toBe(convId);
       const msgs = await messages(convId);
       expect(msgs.at(-1)).toMatchObject({ role: "user", content: "Sam ran a great retro" });
+    });
+
+    it("keeps the platform's send time as evidence, without using it for order", async () => {
+      const convId = await start();
+      const platformTime = new Date("2026-01-01T09:14:00Z");
+      const id = await inbound("Sent a while ago");
+      await db.update(inboundMessages).set({ sentAt: platformTime }).where(eq(inboundMessages.id, id));
+      await handleInbound(db, inboundDeps, id);
+      const [row] = await db
+        .select({ sentAt: conversationMessages.sentAt, createdAt: conversationMessages.createdAt })
+        .from(conversationMessages)
+        .where(and(eq(conversationMessages.conversationId, convId), eq(conversationMessages.role, "user")));
+      expect(row.sentAt?.toISOString()).toBe(platformTime.toISOString());
+      // Still ordered after the bot's opening message, whatever the platform clock said.
+      expect((await messages(convId)).map((m) => m.role)).toEqual(["assistant", "user"]);
+    });
+
+    it("never routes a chat message into an open web conversation", async () => {
+      const web = await start({ platform: "web", channelId: `web:${ids.reviewer}` });
+      const res = await handleInbound(db, inboundDeps, await inbound("From the simulator"));
+      expect(res).toMatchObject({ status: "processed" });
+      expect((res as { conversationId?: string }).conversationId).not.toBe(web);
+      expect((await messages(web)).map((m) => m.role)).toEqual(["assistant"]);
     });
 
     it("a redelivered job neither duplicates the message nor loses its turn", async () => {
@@ -442,6 +485,41 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
       expect(conv.closedAt).not.toBeNull();
       expect(analysis).toHaveLength(1);
       expect(await appendUserMessage(db, convId, "late")).toEqual({ status: "not_open" });
+    });
+
+    it("re-queues analysis when a retried closing turn finds the conversation already closed", async () => {
+      const convId = await start();
+      script.state.decision = "close";
+      await appendUserMessage(db, convId, "That's all");
+      const failingQueue = { add: async () => { throw new Error("redis blip"); } } as unknown as Queue;
+      await expect(processTurn(db, { ...deps, analysisQueue: failingQueue }, convId)).rejects.toThrow(/redis blip/);
+      expect(analysis).toHaveLength(0);
+
+      // The job retries: the close already committed, and analysis is queued now.
+      expect(await processTurn(db, deps, convId)).toEqual({ status: "not_open" });
+      expect(analysis).toHaveLength(1);
+      expect(analysis[0].jobId).toContain(convId);
+      // Any further retry is the same job id, so nothing new is queued.
+      await processTurn(db, deps, convId);
+      expect(analysis).toHaveLength(1);
+    });
+
+    it("two workers delivering the same conversation send each message exactly once", async () => {
+      const convId = await start();
+      await appendUserMessage(db, convId, "Reply");
+      chat.failNext = 1;
+      await expect(processTurn(db, deps, convId)).rejects.toThrow(/platform down/);
+      chat.sent = [];
+
+      // A slow platform, so both deliveries overlap.
+      const send = chat.sendMessage.bind(chat);
+      chat.sendMessage = async (m) => {
+        await new Promise((r) => setTimeout(r, 100));
+        return send(m);
+      };
+      const counts = await Promise.all([deliverOutbox(db, deps, convId), deliverOutbox(db, deps, convId)]);
+      expect(counts.sort()).toEqual([0, 1]);
+      expect(chat.sent).toHaveLength(1);
     });
 
     it("runs a whole conversation from Postgres alone (no Redis state anywhere)", async () => {

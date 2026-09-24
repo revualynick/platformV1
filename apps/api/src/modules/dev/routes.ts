@@ -217,12 +217,15 @@ export const devRoutes: FastifyPluginAsync = async (app) => {
         platform: "internal",
         channelId,
         questionnaireId,
-        // Same rule as scheduled check-ins: one open conversation at a time.
-        skipIfOpen: true,
+        // Same rules as a scheduled check-in (one open at a time, not paused).
+        scheduled: true,
       });
-      if (started.status === "skipped_open") {
+      if (started.status === "skipped") {
         return reply.code(409).send({
-          error: "This person already has an open simulated conversation; reply to it or let it finish",
+          error:
+            started.reason === "open_conversation"
+              ? "This person already has an open simulated conversation; reply to it or let it finish"
+              : `Check-in would be skipped: ${started.reason}`,
           conversationId: started.openConversationId,
         });
       }

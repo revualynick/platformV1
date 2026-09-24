@@ -256,7 +256,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         reviewerId: userId,
         subjectId: userId,
         interactionType: "self_reflection",
-        platform: "internal",
+        platform: "web",
         channelId: `web:${userId}`,
         questionnaireId: selectedQuestionnaire.id,
       },
@@ -312,6 +312,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         .update(selfReflections)
         .set({
           mood: body.mood,
+          personEditedAt: new Date(),
           ...(body.highlights !== undefined ? { highlights: body.highlights } : {}),
           ...(body.challenges !== undefined ? { challenges: body.challenges } : {}),
           ...(body.goalForNextWeek !== undefined ? { goalForNextWeek: body.goalForNextWeek } : {}),
@@ -359,6 +360,7 @@ export const reflectionRoutes: FastifyPluginAsync = async (app) => {
         goalForNextWeek: body.goalForNextWeek ?? extracted.goalForNextWeek ?? null,
         engagementScore: extracted.engagementScore ?? null,
         completedAt: new Date(),
+        personEditedAt: new Date(),
       })
       .where(eq(selfReflections.id, id))
       .returning();

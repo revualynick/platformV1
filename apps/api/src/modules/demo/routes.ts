@@ -225,7 +225,7 @@ export const demoRoutes: FastifyPluginAsync = async (app) => {
           reviewerId: userId,
           subjectId: subject.id,
           interactionType: selectedQuestionnaire.category as InteractionType,
-          platform: "internal",
+          platform: "web",
           channelId,
           questionnaireId: selectedQuestionnaire.id,
         },

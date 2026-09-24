@@ -149,6 +149,8 @@ describe.skipIf(!dbUp)("Google Chat webhook (integration)", () => {
       content: "Sam was great this week",
       status: "pending",
     });
+    // The platform's own send time is kept as evidence.
+    expect(row.sentAt).toBeInstanceOf(Date);
     const raw = await db.execute(sql`select content from inbound_messages where id = ${job.inboundId}`);
     expect(String((raw as unknown as Array<{ content: string }>)[0].content)).toMatch(/^enc:v1:/);
 
@@ -164,6 +166,15 @@ describe.skipIf(!dbUp)("Google Chat webhook (integration)", () => {
     expect(res.statusCode).toBe(200);
     const identity = await findIdentity(db, "google_chat", `users/${bob.id}`);
     expect(identity).toMatchObject({ userId: bobId, status: "reachable", dmAddress: "spaces/bob-dm" });
+  });
+
+  it("ignores a message in a shared space: it is never routed or answered there", async () => {
+    const inSpace = { ...ev.message(alice, "team-room", "Sam was great"), space: { name: "spaces/team-room", type: "ROOM", spaceType: "SPACE" } };
+    const res = await post(inSpace);
+    expect(res.statusCode).toBe(200);
+    expect(enqueued).toHaveLength(0);
+    const stored = await db.select().from(inboundMessages).where(eq(inboundMessages.platformChannelId, "spaces/team-room"));
+    expect(stored).toHaveLength(0);
   });
 
   it("ignores bot messages and add-on payloads", async () => {

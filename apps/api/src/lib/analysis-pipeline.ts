@@ -108,7 +108,7 @@ export async function runAnalysisPipeline(
     }
 
     const [existing] = await db
-      .select({ id: selfReflections.id, status: selfReflections.status, engagementScore: selfReflections.engagementScore })
+      .select()
       .from(selfReflections)
       .where(
         and(
@@ -117,17 +117,24 @@ export async function runAnalysisPipeline(
         ),
       );
 
-    if (existing?.status === "completed") {
-      // The person already completed it themselves: their own mood and
-      // notes win. Only attach the conversation and the engagement score.
+    if (existing?.status === "completed" && existing.personEditedAt) {
+      // The person completed or edited it themselves: their own mood and
+      // notes win, and the analysis (including any late addition) only
+      // fills fields they left empty.
       await db
         .update(selfReflections)
         .set({
           conversationId,
-          engagementScore: existing.engagementScore ?? extracted.engagementScore ?? null,
+          mood: existing.mood ?? extracted.mood,
+          highlights: existing.highlights ?? extracted.highlights ?? null,
+          challenges: existing.challenges ?? extracted.challenges ?? null,
+          goalForNextWeek: existing.goalForNextWeek ?? extracted.goalForNextWeek ?? null,
+          engagementScore: extracted.engagementScore ?? existing.engagementScore ?? null,
         })
         .where(eq(selfReflections.id, existing.id));
     } else {
+      // Not yet completed, or completed only by an earlier analysis: the
+      // fresh extraction (which sees any late addition) replaces it.
       const fields = {
         status: "completed" as const,
         conversationId,
@@ -165,6 +172,8 @@ export async function runAnalysisPipeline(
     detectFlags(llm, rawContent),
     orgValues.length > 0 ? mapCoreValues(llm, rawContent, orgValues) : Promise.resolve([]),
   ]);
+
+  const stepOk = (i: number) => results[i].status === "fulfilled";
 
   // Extract results with safe defaults for any failures
   const sentimentResult =
@@ -221,15 +230,18 @@ export async function runAnalysisPipeline(
       })
       // Re-analysis (a late addition to a closed conversation) refreshes
       // the entry rather than being skipped, so the extra answer counts.
+      // A step that failed this time keeps its earlier result instead of
+      // overwriting it with the fallback.
       .onConflictDoUpdate({
         target: feedbackEntries.conversationId,
         set: {
           rawContent,
-          aiSummary: safeSummary,
-          sentiment: sentimentResult,
-          engagementScore: engagementResult.score,
           wordCount: engagementResult.wordCount,
-          hasSpecificExamples: engagementResult.hasExamples,
+          ...(stepOk(0) ? { sentiment: sentimentResult } : {}),
+          ...(stepOk(1)
+            ? { engagementScore: engagementResult.score, hasSpecificExamples: engagementResult.hasExamples }
+            : {}),
+          ...(stepOk(2) ? { aiSummary: safeSummary } : {}),
         },
       })
       .returning();
@@ -237,9 +249,11 @@ export async function runAnalysisPipeline(
     const feedbackEntry = rows[0];
     feedbackEntryId = feedbackEntry.id;
 
-    // Value scores reflect the latest analysis only.
-    await tx.delete(feedbackValueScores).where(eq(feedbackValueScores.feedbackEntryId, feedbackEntry.id));
-    if (valuesResult.length > 0) {
+    // Value scores reflect the latest successful analysis only.
+    if (stepOk(4)) {
+      await tx.delete(feedbackValueScores).where(eq(feedbackValueScores.feedbackEntryId, feedbackEntry.id));
+    }
+    if (stepOk(4) && valuesResult.length > 0) {
       await tx.insert(feedbackValueScores).values(
         valuesResult.map((v) => ({
           feedbackEntryId: feedbackEntry.id,

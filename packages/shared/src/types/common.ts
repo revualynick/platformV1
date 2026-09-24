@@ -19,7 +19,12 @@ export interface ApiResponse<T> {
   };
 }
 
-export type ChatPlatform = "slack" | "google_chat" | "teams" | "internal";
+/**
+ * "internal" is the dev chat simulator; "web" is a conversation held in the
+ * web app (demo, reflections), answered in the HTTP response. Neither is
+ * ever reached through a chat webhook.
+ */
+export type ChatPlatform = "slack" | "google_chat" | "teams" | "internal" | "web";
 
 export type UserRole = "employee" | "manager" | "admin" | "hr";
 

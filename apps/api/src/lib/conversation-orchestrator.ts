@@ -54,16 +54,20 @@ export interface InitiateParams {
   /** Scheduler entry; makes initiation idempotent across job retries. */
   scheduleEntryId?: string;
   /**
-   * Scheduled check-ins: do not start one while the reviewer still has an
-   * open conversation on this platform (their replies would be ambiguous).
+   * Scheduled check-ins: re-check at send time, not only when it was
+   * scheduled (hours earlier). Skips someone who has since said "stop" or
+   * been deactivated, or who still has an open conversation on this
+   * platform (their replies would be ambiguous).
    */
-  skipIfOpen?: boolean;
+  scheduled?: boolean;
 }
+
+export type SkipReason = "open_conversation" | "paused" | "inactive";
 
 export type InitiateResult =
   /** created is false when this schedule entry already had one (a retry). */
   | { status: "started"; conversationId: string; created: boolean }
-  | { status: "skipped_open"; openConversationId: string };
+  | { status: "skipped"; reason: SkipReason; openConversationId?: string };
 
 /**
  * Create a conversation and its opening message, then deliver it. Safe to
@@ -84,9 +88,17 @@ export async function initiateConversation(
     }
   }
 
-  if (params.skipIfOpen) {
+  if (params.scheduled) {
+    const [person] = await db
+      .select({ isActive: users.isActive, preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, params.reviewerId));
+    if (!person?.isActive) return { status: "skipped", reason: "inactive" };
+    if ((person.preferences as { chatPaused?: boolean } | null)?.chatPaused) {
+      return { status: "skipped", reason: "paused" };
+    }
     const open = await findOpenConversation(db, params.reviewerId, params.platform);
-    if (open) return { status: "skipped_open", openConversationId: open.id };
+    if (open) return { status: "skipped", reason: "open_conversation", openConversationId: open.id };
   }
 
   const [[questionnaire], themes, [reviewer], [subject]] = await Promise.all([
@@ -241,11 +253,19 @@ export type AppendResult =
  * than silently treated as already answered. Duplicate platform deliveries
  * are ignored.
  */
+/** Where a user message came from (absent for web callers). */
+export interface InboundMeta {
+  /** Dedupes platform redeliveries. */
+  platformMessageId?: string;
+  /** The platform's own send time: evidence only, never used for ordering. */
+  sentAt?: Date | null;
+}
+
 export async function appendUserMessage(
   db: TenantDb,
   conversationId: string,
   content: string,
-  platformMessageId?: string,
+  meta: InboundMeta = {},
 ): Promise<AppendResult> {
   return db.transaction(async (tx) => {
     const [locked] = await tx
@@ -257,7 +277,7 @@ export async function appendUserMessage(
 
     const [row] = await tx
       .insert(conversationMessages)
-      .values({ conversationId, role: "user", content, platformMessageId: platformMessageId ?? null })
+      .values({ conversationId, role: "user", content, ...metaColumns(meta) })
       .onConflictDoNothing()
       .returning({ seq: conversationMessages.seq });
     return row ? { status: "appended" as const, seq: row.seq } : { status: "duplicate" as const };
@@ -273,14 +293,18 @@ export async function appendLateAddition(
   db: TenantDb,
   conversationId: string,
   content: string,
-  platformMessageId?: string,
+  meta: InboundMeta = {},
 ): Promise<Exclude<AppendResult, { status: "not_open" }>> {
   const [row] = await db
     .insert(conversationMessages)
-    .values({ conversationId, role: "user", content, platformMessageId: platformMessageId ?? null })
+    .values({ conversationId, role: "user", content, ...metaColumns(meta) })
     .onConflictDoNothing()
     .returning({ seq: conversationMessages.seq });
   return row ? { status: "appended", seq: row.seq } : { status: "duplicate" };
+}
+
+function metaColumns(meta: InboundMeta) {
+  return { platformMessageId: meta.platformMessageId ?? null, sentAt: meta.sentAt ?? null };
 }
 
 /** Queue id for the turn that answers a given user message. */
@@ -318,7 +342,13 @@ export async function processTurn(
   await deliverOutbox(db, deps, conversationId, opts);
 
   const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-  if (!conv || !(OPEN_STATUSES as readonly string[]).includes(conv.status)) return { status: "not_open" };
+  if (!conv) return { status: "not_open" };
+  if (!(OPEN_STATUSES as readonly string[]).includes(conv.status)) {
+    // A retry of the closing turn: the close committed but queueing its
+    // analysis may have failed. Same job id, so this is a no-op otherwise.
+    if (conv.status === "closed") await queueAnalysis(deps, conversationId);
+    return { status: "not_open" };
+  }
 
   const history = await db
     .select({ role: conversationMessages.role, content: conversationMessages.content, seq: conversationMessages.seq })
@@ -424,13 +454,7 @@ export async function processTurn(
     throw err;
   }
 
-  if (closing) {
-    await deps.analysisQueue.add(
-      "analyze",
-      { conversationId, orgId: tenantOrgId() },
-      { jobId: buildJobId("analyze", conversationId) },
-    );
-  }
+  if (closing) await queueAnalysis(deps, conversationId);
 
   await deliverOutbox(db, deps, conversationId, opts);
   return closing ? { status: "closed" } : { status: "replied" };
@@ -522,6 +546,13 @@ export interface DeliverOptions {
  * Send every stored, undelivered bot message for a conversation, in order.
  * Throws on a send failure (so the job retries); already-sent messages are
  * marked and never re-sent.
+ *
+ * Each message is claimed with a row lock for the length of its send, so
+ * two workers delivering the same conversation cannot both send it: the
+ * second waits, then finds it delivered. Always taking the oldest
+ * undelivered message keeps them in order. The lock is held across the
+ * platform call (a few hundred ms) on the message row only, so it never
+ * blocks replies being stored or turns committing.
  */
 export async function deliverOutbox(
   db: TenantDb,
@@ -529,19 +560,6 @@ export async function deliverOutbox(
   conversationId: string,
   opts: DeliverOptions = {},
 ): Promise<number> {
-  const undelivered = await db
-    .select({ id: conversationMessages.id, content: conversationMessages.content })
-    .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.conversationId, conversationId),
-        eq(conversationMessages.role, "assistant"),
-        isNull(conversationMessages.deliveredAt),
-      ),
-    )
-    .orderBy(asc(conversationMessages.seq));
-  if (undelivered.length === 0) return 0;
-
   const [conv] = await db
     .select({
       platform: conversations.platform,
@@ -551,32 +569,60 @@ export async function deliverOutbox(
     .from(conversations)
     .where(eq(conversations.id, conversationId));
   if (!conv) return 0;
-
   const platform = conv.platform as ChatPlatform;
-  for (const msg of undelivered) {
-    if (!opts.deliveredByCaller) {
-      if (!deps.adapters.has(platform)) {
-        throw new Error(`No chat adapter registered for ${platform}; message kept in outbox`);
+
+  let sent = 0;
+  for (;;) {
+    const delivered = await db.transaction(async (tx) => {
+      const [msg] = await tx
+        .select({ id: conversationMessages.id, content: conversationMessages.content })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.role, "assistant"),
+            isNull(conversationMessages.deliveredAt),
+          ),
+        )
+        .orderBy(asc(conversationMessages.seq))
+        .limit(1)
+        .for("update");
+      if (!msg) return false;
+
+      if (!opts.deliveredByCaller) {
+        if (!deps.adapters.has(platform)) {
+          throw new Error(`No chat adapter registered for ${platform}; message kept in outbox`);
+        }
+        const outboundMessage: OutboundMessage = {
+          platform,
+          channelId: conv.channelId,
+          threadId: conv.threadId ?? undefined,
+          text: msg.content,
+          blocks: [],
+        };
+        await deps.adapters.sendMessage(outboundMessage);
       }
-      const outboundMessage: OutboundMessage = {
-        platform,
-        channelId: conv.channelId,
-        threadId: conv.threadId ?? undefined,
-        text: msg.content,
-        blocks: [],
-      };
-      await deps.adapters.sendMessage(outboundMessage);
-    }
-    await db
-      .update(conversationMessages)
-      .set({ deliveredAt: new Date() })
-      .where(eq(conversationMessages.id, msg.id));
+      await tx
+        .update(conversationMessages)
+        .set({ deliveredAt: new Date() })
+        .where(eq(conversationMessages.id, msg.id));
+      return true;
+    });
+    if (!delivered) return sent;
+    sent++;
   }
-  return undelivered.length;
 }
 
 const TRUNCATION_NOTE =
   "(Heads up: your last message was quite long and I could only read the first part. Feel free to split longer thoughts across messages.)\n\n";
+
+async function queueAnalysis(deps: Pick<OrchestratorDeps, "analysisQueue">, conversationId: string) {
+  await deps.analysisQueue.add(
+    "analyze",
+    { conversationId, orgId: tenantOrgId() },
+    { jobId: buildJobId("analyze", conversationId) },
+  );
+}
 
 // Per-tenant deployment: one org per process.
 function tenantOrgId(): string {
