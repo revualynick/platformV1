@@ -8,6 +8,8 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 - **Set `REVIEWER_PSEUDONYM_SECRET` on Railway** (demo and test tenant) and backfill or reseed their databases (`ENCRYPTION_LEGACY_READS=on` until then) before deploying this branch.
 - **Encrypt existing data on each tenant** (C3 step 7 tooling merged 2026-09-26): run `pnpm --filter @revualy/db encryption check`, `backfill`, `check`, or simply reseed. Only the demo and Nick's test tenant hold pre-encryption rows; legacy reads are off by default. See `docs/key-rotation.md`.
+- **Pseudonym secret behind a KMS or signing service**, so the API environment alone can't re-identify reviewers (today anyone with the API env and the user list can).
+- **Verify the 2026-09-26 merges end to end:** nothing has run against real models or Railway. Deploy the branch to the test tenant, re-run the topic grid on the Linux box against the ticket-based engine, and walk each build note's review checklist.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
 - **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26).
@@ -37,7 +39,6 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 - **Privacy follow-ups** (from `docs/build/2026-09-26-privacy-step-2-pseudonyms.md` and `...-step-3-tickets.md`):
   - Move the peer feedback write from the analysis pipeline into ticket write-back (the pseudonym hook exists, deliberately unwired to avoid double writes).
-  - Pseudonym secret behind a KMS or signing service, so the API environment alone can't re-identify reviewers. Before the first real customer.
   - Anchor the audit chain head outside the database, and a scheduled chain verify.
   - Timing correlation: `feedback_entries.created_at`, behavioural signal times and engagement rows.
   - Escalation screens and pulse triggers still show named data; `imported_feedback.source_key` includes the author id.
