@@ -66,7 +66,7 @@ pnpm turbo typecheck
 (cd apps/api && npx vitest run)
 ```
 
-Full guide: `docs/local-testing.md`. Deployment: `docs/deployment.md`.
+Full guide: `docs/local-testing.md`. Staging on the Linux box: `docs/staging.md`. Deployment: `docs/deployment.md`.
 
 ## Decisions log
 
