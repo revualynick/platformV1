@@ -145,13 +145,14 @@ export interface CheckInEvent extends CalendarEvent {
 }
 
 /**
- * Fetch past events (last `lookbackDays`) whose title matches the
- * check-in marker. Google's `q` filter is fuzzy — callers must re-check
- * `title.includes(marker)`.
+ * Fetch past events (last `lookbackDays`). With a marker, only events
+ * whose title matches it (Google's `q` filter is fuzzy, so callers must
+ * re-check the title); with null, every timed event, so two-person 1:1s
+ * without the marker can be spotted. Same calendar.readonly scope.
  */
 export async function fetchPastCheckInEvents(
   accessToken: string,
-  marker: string,
+  marker: string | null,
   lookbackDays = 14,
 ): Promise<CheckInEvent[]> {
   const client = createOAuth2Client();
@@ -164,12 +165,12 @@ export async function fetchPastCheckInEvents(
 
   const response = await calendar.events.list({
     calendarId: "primary",
-    q: marker,
+    ...(marker ? { q: marker } : {}),
     timeMin: lookback.toISOString(),
     timeMax: now.toISOString(),
     singleEvents: true,
     orderBy: "startTime",
-    maxResults: 100,
+    maxResults: marker ? 100 : 250,
   });
 
   const items = response.data.items ?? [];
@@ -179,9 +180,15 @@ export async function fetchPastCheckInEvents(
     .map((e) => ({
       externalEventId: e.id!,
       title: e.summary ?? "(No title)",
+      // Meeting rooms are not people.
       attendees: (e.attendees ?? [])
+        .filter((a) => !a.resource)
         .map((a) => a.email)
         .filter((email): email is string => !!email),
+      declined: (e.attendees ?? [])
+        .filter((a) => a.responseStatus === "declined" && a.email)
+        .map((a) => a.email!),
+      visibility: e.visibility ?? "default",
       startAt: new Date(e.start!.dateTime!),
       endAt: new Date(e.end!.dateTime!),
       organizerEmail: e.organizer?.email ?? null,

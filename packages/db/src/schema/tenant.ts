@@ -955,6 +955,12 @@ export const oneOnOneActionItems = pgTable(
     completed: boolean("completed").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     sortOrder: integer("sort_order").notNull().default(0),
+    // Migration 0041: private | shareable. Shareable only for items that by
+    // nature involve other people, with the reason recorded.
+    visibility: varchar("visibility", { length: 20 }).notNull().default("private"),
+    shareReason: encryptedText("one_on_one_action_items", "share_reason"),
+    // The ingested 1:1 this task came from (null for tasks typed by hand).
+    sourceMeetingId: uuid("source_meeting_id").references((): AnyPgColumn => checkInMeetings.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1277,6 +1283,10 @@ export const orgSettings = pgTable("org_settings", {
   checkInTitleMarker: varchar("check_in_title_marker", { length: 100 })
     .notNull()
     .default("[Check-in]"),
+  // How 1:1s are ingested (migration 0041): automatic | semi_automatic | manual.
+  oneOnOneIngestionMode: varchar("one_on_one_ingestion_mode", { length: 20 })
+    .notNull()
+    .default("semi_automatic"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1609,8 +1619,18 @@ export const checkInMeetings = pgTable(
     title: varchar("title", { length: 500 }).notNull(),
     eventStart: timestamp("event_start", { withTimezone: true }).notNull(),
     transcriptDocId: varchar("transcript_doc_id", { length: 255 }),
-    // pending_transcript | processing | processed | transcript_missing
-    // | no_subject_match | no_goals | failed
+    // Migration 0041. calendar | automatic | upload.
+    source: varchar("source", { length: 20 }).notNull().default("calendar"),
+    // marker (title opt-in) | pair (two-person manager/report meeting).
+    detectedBy: varchar("detected_by", { length: 20 }),
+    // Gemini "Take notes for me" Doc: tasks and goals come from here.
+    notesDocId: varchar("notes_doc_id", { length: 255 }),
+    // The 1:1 session the extracted tasks were filed under.
+    sessionId: uuid("session_id").references(() => oneOnOneSessions.id, { onDelete: "set null" }),
+    // Items withheld as wellbeing, conduct or safety: a count, nothing more.
+    withheldCount: integer("withheld_count").notNull().default(0),
+    // awaiting_approval | declined | pending_transcript | processing | processed
+    // | transcript_missing | no_subject_match | no_goals | failed
     status: varchar("status", { length: 30 })
       .notNull()
       .default("pending_transcript"),
@@ -1629,6 +1649,39 @@ export const checkInMeetings = pgTable(
     ),
     index("idx_check_in_meetings_status").on(table.status),
     index("idx_check_in_meetings_subject").on(table.subjectUserId),
+  ],
+);
+
+// ── Between-meeting Goals ───────────────────────────────
+// Ongoing focus areas from a 1:1 that run until the next one (not formal
+// performance goals). Created automatically, visible to and editable by
+// the two people in the 1:1 only. Migration 0041.
+
+export const betweenMeetingGoals = pgTable(
+  "between_meeting_goals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    counterpartId: uuid("counterpart_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    text: encryptedText("between_meeting_goals", "text").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("active"), // active | done | dropped
+    visibility: varchar("visibility", { length: 20 }).notNull().default("private"), // private | shareable
+    shareReason: encryptedText("between_meeting_goals", "share_reason"),
+    sourceMeetingId: uuid("source_meeting_id").references(() => checkInMeetings.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_between_meeting_goals_owner").on(table.ownerId, table.status),
+    index("idx_between_meeting_goals_counterpart").on(table.counterpartId, table.status),
   ],
 );
 

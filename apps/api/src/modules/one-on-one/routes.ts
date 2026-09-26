@@ -22,6 +22,7 @@ import {
 } from "../../lib/validation.js";
 import { generateAgenda } from "../../lib/agenda-generator.js";
 import { generateWsToken } from "../../lib/ws-auth.js";
+import { importRoutes } from "./imports.js";
 
 /**
  * Verify user is the manager or employee for a session.
@@ -75,6 +76,9 @@ async function resolveOneOnOnePair(
 }
 
 export const oneOnOneRoutes: FastifyPluginAsync = async (app) => {
+  // 1:1 ingestion: uploads, import approvals, between-meeting goals
+  await app.register(importRoutes, { resolvePair: resolveOneOnOnePair });
+
   // POST / — Create/schedule a session (manager only)
   app.post("/", { preHandler: requireRole("manager") }, async (request, reply) => {
     const { db } = request.tenant;

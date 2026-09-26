@@ -330,3 +330,10 @@
 - Found: /export/feedback names reviewers next to raw feedback by default (blind is opt-in): needs Nick's decision
 - In flight: import pipeline (0040), 1:1 ingestion v2 (0041), tenant provisioning (worktree agents); topic grid run and re-judge on the box
 - Nick decisions pending: playbook W1-C2, Samaritans line, calendar model questions, topic grid borderlines, admin assistant questions, export privacy
+
+## 2026-09-26: 1:1 ingestion v2 (worktree branch, committed, not pushed)
+- 0041: `between_meeting_goals`, action item visibility/share_reason/source_meeting_id, `org_settings.one_on_one_ingestion_mode` (default semi_automatic), check_in_meetings source/detected_by/notes_doc_id/session_id/withheld_count + new statuses awaiting_approval/declined
+- `lib/one-on-one-ingestion.ts`: one structured call per notes chunk (tasks, focus areas, goal progress), gate withholds wellbeing/conduct/safety (model label + keyword backstop), private unless shareable with a reason; quotes from the transcript, verified verbatim
+- Pipeline: MeetingSource interface (OAuth source today, automatic source to plug in), two-person manager/direct-report detection plus the marker; semi-auto waits for approval
+- Routes: upload (in memory, .txt/.md/.vtt/.docx/.html/.pdf best effort), import approve/decline, between-meeting goals GET/PATCH
+- 417 API tests, 16/16 typecheck. Open for Nick: default mode, suggestions still visible to skip-levels/admins, real PDF parser dependency, running notes docs re-extracted

@@ -12,35 +12,59 @@ export interface TranscriptLookupEvent {
   eventStart: Date;
 }
 
+const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
+
 /**
- * Pick the transcript Doc from a calendar event's attachments.
- * Exported for tests. Meet attaches recordings, transcripts, and notes;
- * the transcript is a Google Doc, usually titled "... — Transcript".
+ * Title patterns for the Docs Meet attaches to a Calendar event. Gemini
+ * "Take notes for me" titles are unconfirmed ("<event> - <date> - Notes by
+ * Gemini" is the likely shape), so match defensively and adjust here.
+ * Notes are checked first: a title matching both is treated as notes.
  */
-export function pickTranscriptAttachment(
-  attachments: Array<{ fileId: string; title: string; mimeType: string }>,
-): string | null {
-  const docs = attachments.filter(
-    (a) => a.mimeType === "application/vnd.google-apps.document",
-  );
-  if (docs.length === 0) return null;
-  const titled = docs.find((a) => /transcript/i.test(a.title));
-  return (titled ?? docs[0]).fileId;
+export const MEET_DOC_PATTERNS: { notes: RegExp[]; transcript: RegExp[] } = {
+  notes: [/notes by gemini/i, /gemini notes/i, /notes from gemini/i, /meeting notes/i],
+  transcript: [/transcript/i],
+};
+
+export interface MeetingDocs {
+  /** Gemini notes: the source of tasks and goals. */
+  notesDocId: string | null;
+  /** Meet transcript: the source of verbatim evidence quotes. */
+  transcriptDocId: string | null;
 }
 
 /**
- * Locate the Meet transcript Doc for a check-in event: first via the
- * event's Drive attachments, then by searching Drive for transcript
- * Docs modified after the meeting started. Returns null when the
- * transcript hasn't been generated (yet) — Meet can take hours.
+ * Sort an event's attachments into the Gemini notes Doc and the Meet
+ * transcript Doc. Only Google Docs count, and an unrecognised Doc (an
+ * agenda, say) is ignored rather than guessed at.
  */
-export async function findTranscriptDoc(
+export function matchMeetAttachments(
+  attachments: Array<{ fileId: string; title: string; mimeType: string }>,
+  patterns = MEET_DOC_PATTERNS,
+): MeetingDocs {
+  let notesDocId: string | null = null;
+  let transcriptDocId: string | null = null;
+  for (const a of attachments) {
+    if (a.mimeType !== GOOGLE_DOC_MIME) continue;
+    if (!notesDocId && patterns.notes.some((p) => p.test(a.title))) notesDocId = a.fileId;
+    else if (!transcriptDocId && patterns.transcript.some((p) => p.test(a.title))) transcriptDocId = a.fileId;
+  }
+  return { notesDocId, transcriptDocId };
+}
+
+/**
+ * Locate the Gemini notes and Meet transcript Docs for a 1:1: first via
+ * the event's attachments, then by searching Drive for Docs modified
+ * after the meeting started whose name starts like the event title.
+ * Both may be missing for hours after the call. Same scope as before
+ * (drive.readonly); no new Google permissions.
+ */
+export async function findMeetingDocs(
   accessToken: string,
   event: TranscriptLookupEvent,
-): Promise<string | null> {
+): Promise<MeetingDocs> {
   const auth = createClient(accessToken);
+  let found: MeetingDocs = { notesDocId: null, transcriptDocId: null };
 
-  // 1. Event attachments (most reliable when present)
   const calendar = google.calendar({ version: "v3", auth });
   try {
     const { data } = await calendar.events.get({
@@ -48,37 +72,32 @@ export async function findTranscriptDoc(
       eventId: event.externalEventId,
       fields: "attachments",
     });
-    const attachments = (data.attachments ?? [])
-      .filter((a) => a.fileId)
-      .map((a) => ({
-        fileId: a.fileId!,
-        title: a.title ?? "",
-        mimeType: a.mimeType ?? "",
-      }));
-    const fromAttachment = pickTranscriptAttachment(attachments);
-    if (fromAttachment) return fromAttachment;
+    found = matchMeetAttachments(
+      (data.attachments ?? [])
+        .filter((a) => a.fileId)
+        .map((a) => ({ fileId: a.fileId!, title: a.title ?? "", mimeType: a.mimeType ?? "" })),
+    );
+    if (found.notesDocId && found.transcriptDocId) return found;
   } catch {
-    // Event may have been deleted — fall through to Drive search
+    // Event may have been deleted: fall through to Drive search
   }
 
-  // 2. Drive search fallback: transcript Docs modified after the event
-  //    started, matched against the event title. Heuristic — breaks if
-  //    the event was renamed after the meeting.
   const drive = google.drive({ version: "v3", auth });
-  const modifiedAfter = event.eventStart.toISOString();
   const { data } = await drive.files.list({
-    q: `name contains 'Transcript' and mimeType = 'application/vnd.google-apps.document' and modifiedTime > '${modifiedAfter}'`,
+    q: `(name contains 'Transcript' or name contains 'Gemini' or name contains 'Notes') and mimeType = '${GOOGLE_DOC_MIME}' and modifiedTime > '${event.eventStart.toISOString()}'`,
     fields: "files(id, name)",
     pageSize: 25,
   });
-
-  const files = data.files ?? [];
-  // Meet names transcripts "<event title> ... — Transcript"
   const titlePrefix = event.title.slice(0, 30).toLowerCase();
-  const match = files.find((f) =>
-    (f.name ?? "").toLowerCase().includes(titlePrefix),
+  const fromDrive = matchMeetAttachments(
+    (data.files ?? [])
+      .filter((f) => f.id && (f.name ?? "").toLowerCase().includes(titlePrefix))
+      .map((f) => ({ fileId: f.id!, title: f.name ?? "", mimeType: GOOGLE_DOC_MIME })),
   );
-  return match?.id ?? null;
+  return {
+    notesDocId: found.notesDocId ?? fromDrive.notesDocId,
+    transcriptDocId: found.transcriptDocId ?? fromDrive.transcriptDocId,
+  };
 }
 
 /** Export a Google Doc as plain text. Works under drive.readonly. */
