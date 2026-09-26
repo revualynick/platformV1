@@ -16,6 +16,7 @@ import { findBestSlot } from "./availability.js";
 import { buildJobId } from "./job-ids.js";
 import { pickSubjectFromMeetings } from "./meeting-anchor.js";
 import { weeklyQuota, type WeeklyQuota } from "./engagement-aggregation.js";
+import { contactHold } from "./contact-guard.js";
 
 /**
  * Run the daily scheduling pass for an org.
@@ -116,6 +117,12 @@ export async function runSchedulingPass(
     // Quiet days apply to the day the message will actually arrive, in the
     // user's own timezone (not the day the pass happens to run).
     if (quietDays.includes(localWeekday(sendAt, user.timezone))) {
+      skipped++;
+      continue;
+    }
+
+    // Don't badger: a gap between check-ins, and no more this week after a rich one.
+    if (await contactHold(db, user.id, sendAt, weekStart)) {
       skipped++;
       continue;
     }
