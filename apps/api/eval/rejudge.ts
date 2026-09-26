@@ -14,6 +14,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { cliBackend } from "./lib/backends.js";
 import { SNAPSHOTS, paraphraseSnapshots } from "./lib/snapshots.js";
+import { TOPIC_GRID } from "./lib/topic-grid.js";
 import { judgeDescription } from "./lib/judge.js";
 import { describe, report, type CaseResult, type RefRun } from "./lib/e2e-report.js";
 
@@ -36,7 +37,7 @@ async function main() {
   const results = JSON.parse(readFileSync(resultsFile, "utf8")) as CaseResult[];
   const configDir = args["claude-config-dir"]?.replace(/^~/, homedir());
   const judges = cliBackend({ neutralise: true, configDir });
-  const snapshots = [...SNAPSHOTS, ...paraphraseSnapshots()];
+  const snapshots = [...SNAPSHOTS, ...paraphraseSnapshots(), ...TOPIC_GRID];
   const onlyMissing = args["only-missing"];
 
   const log = (line: string) => {

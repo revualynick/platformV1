@@ -22,7 +22,7 @@ type CalendarEvent = typeof calendarEvents.$inferSelect;
 
 /** Words that make a title unsafe to repeat back. Deliberately broad: a false positive only costs specificity. */
 const SENSITIVE_TITLE =
-  /\b(hr|people team|disciplinary|grievance|investigation|performance review|performance improvement|pip|probation|appraisal|salary|pay|compensation|bonus|promotion|redundan\w*|restructur\w*|termination|dismissal|exit|offboarding|resignation|notice|interview|candidate|hiring|medical|doctor|dentist|gp|therapy|counsell?ing|health|sick|leave|maternity|paternity|personal|private|confidential|legal|lawyer|complaint|1:1|1-1|one[- ]to[- ]one|1on1|catch[- ]?up with)\b/i;
+  /\b(hr|people team|disciplinary|grievance|investigation|performance review|performance improvement|pip|probation|appraisal|salary|pay|compensation|bonus|promotion|redundan\w*|restructur\w*|termination|dismissal|exit interview|offboarding|resignation|leaver\w*|leaving|notice|interview|candidate|hiring|medical|doctor|dentist|gp|therapy|counsell?ing|health|sick|leave|maternity|paternity|personal|private|confidential|legal|lawyer|complaint|1:1|1-1|one[- ]to[- ]one|1on1|catch[- ]?up with)\b/i;
 
 /** True when free text (a title, or the calendar model's focus) touches a sensitive subject. */
 export function looksSensitive(text: string): boolean {

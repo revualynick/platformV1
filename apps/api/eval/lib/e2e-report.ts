@@ -2,6 +2,7 @@
  * Shared by e2e-concerns.ts and rejudge.ts: the result shapes, the text the
  * judges see for a reference-path turn, and the report.
  */
+import { formatGridSummary, gridCell } from "./topic-grid.js";
 import type { PlanTrace } from "../../src/lib/turn-planner.js";
 import type { ReferenceResult } from "../../src/lib/reference-path.js";
 import { EVAL_ORG, SERIOUS, fixedTail, privacyFacts, type Concern } from "../../src/lib/bot-references.js";
@@ -113,6 +114,18 @@ export function report(rs: CaseResult[], spent: number | null, repeats: number, 
   L.push(`| latency mean (s) | ${f2(mean(pair.map((c) => c.design!.latencyMs / 1000)))} | ${f2(mean(pair.map((c) => c.baseline!.latencyMs / 1000)))} |`);
   const judged = rs.flatMap((c) => [c.design, c.baseline]).filter((x) => x?.result);
   L.push(`\nJudge coverage: ${judged.filter((x) => x!.judges.opus).length}/${judged.length} (Opus), ${judged.filter((x) => x!.judges.sonnet).length}/${judged.length} (Sonnet).`, "");
+
+  // The topic grid, when it ran: where decisions went wrong, by topic and tone.
+  const grid = rs.filter((c) => gridCell(c.snapshot));
+  if (grid.length) {
+    const wrongIds = new Set(grid.filter((c) => !c.finalOk).map((c) => c.snapshot));
+    const ruleIds = new Set(grid.filter((c) => c.everydayPass === false).map((c) => c.snapshot));
+    const pick = (ids: Set<string>) => snapshots.filter((s) => ids.has(s.id));
+    L.push("## Topic grid", "");
+    L.push(`${grid.length} runs over ${new Set(grid.map((c) => c.snapshot)).size} grid cases. Final concern as expected: ${pct(grid.filter((c) => c.finalOk).length, grid.length)}.`, "");
+    L.push("Cases with a wrong concern decision (any run), by topic and tone:", "", "```", formatGridSummary(pick(wrongIds)), "```", "");
+    L.push("Everyday grid cases failing a hard rule (any run), by topic and tone:", "", "```", formatGridSummary(pick(ruleIds)), "```", "");
+  }
 
   L.push("## Wrong decisions", "");
   for (const c of rs.filter((x) => !x.finalOk)) {

@@ -21,8 +21,14 @@ describe("safeMeetingTitle", () => {
     "Doctor",
     "Confidential: restructure",
     "Salary review",
+    "Exit interview: Sam",
+    "Jon leaving drinks",
   ])("drops a sensitive title: %s", (title) => {
     expect(safeMeetingTitle(title, 6)).toBeNull();
+  });
+
+  it("keeps work titles that only look sensitive (calendar model evaluation, 2026-09-26)", () => {
+    expect(safeMeetingTitle("Exit criteria review for launch", 5)).toBe("Exit criteria review for launch");
   });
 
   it("drops empty, untitled and very long titles", () => {

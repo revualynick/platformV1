@@ -24,6 +24,7 @@ import { runReferencePath, tierFor, type ReferenceResult } from "../src/lib/refe
 import { EVAL_ORG, SERIOUS, type Concern } from "../src/lib/bot-references.js";
 import { apiBackend, cliBackend } from "./lib/backends.js";
 import { SNAPSHOTS, concernsFor, paraphraseSnapshots, type Snapshot } from "./lib/snapshots.js";
+import { TOPIC_GRID } from "./lib/topic-grid.js";
 import { check, passes } from "./lib/checks.js";
 import { judgeDescription, RUBRIC_VERSION } from "./lib/judge.js";
 import { describe, report, type CaseResult, type RefRun } from "./lib/e2e-report.js";
@@ -35,6 +36,9 @@ const { values: args } = parseArgs({
     only: { type: "string" },
     "no-judge": { type: "boolean", default: false },
     "no-paraphrases": { type: "boolean", default: false },
+    // The topic grid (eval/lib/topic-grid.ts): everyday feedback by topic and tone.
+    grid: { type: "boolean", default: false },
+    "grid-only": { type: "boolean", default: false },
     "claude-config-dir": { type: "string" },
     out: { type: "string", default: "eval/results" },
   },
@@ -81,7 +85,9 @@ async function main() {
   const configDir = args["claude-config-dir"]?.replace(/^~/, homedir());
   const api = apiBackend(loadApiKey(), { neutralise: false, budgetUsd: Number(args.budget) });
   const judges = cliBackend({ neutralise: true, configDir });
-  const all = [...SNAPSHOTS, ...(args["no-paraphrases"] ? [] : paraphraseSnapshots())];
+  const all = args["grid-only"]
+    ? TOPIC_GRID
+    : [...SNAPSHOTS, ...(args["no-paraphrases"] ? [] : paraphraseSnapshots()), ...(args.grid ? TOPIC_GRID : [])];
   const snapshots = args.only ? all.filter((s) => args.only!.split(",").some((id) => s.id === id || s.paraphraseOf === id)) : all;
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

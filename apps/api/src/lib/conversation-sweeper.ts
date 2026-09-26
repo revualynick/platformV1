@@ -1,7 +1,7 @@
 import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
-import { conversations, conversationMessages, inboundMessages } from "@revualy/db";
+import { checkinJobs, conversations, conversationMessages, inboundMessages } from "@revualy/db";
 import { buildJobId } from "./job-ids.js";
 import {
   OPEN_STATUSES,
@@ -25,6 +25,8 @@ import {
  *                  (its turn job gave up) -> turn re-queued
  *  5. analysis:    finished conversations with answers but no analysis
  *                  result -> re-queued
+ *  6. check-in jobs: claimed by the scheduler but never used (the initiate
+ *                  job failed for good), past their expiry -> expired
  *
  * Re-queued jobs get an hourly job id suffix: at most one retry per item
  * per hour (the original job id may still sit in BullMQ's failed set,
@@ -47,6 +49,7 @@ export interface SweepResult {
   inboundRequeued: number;
   turnsRequeued: number;
   analysisRequeued: number;
+  jobsExpired: number;
   errors: number;
 }
 
@@ -64,6 +67,7 @@ export async function runSweep(
     inboundRequeued: 0,
     turnsRequeued: 0,
     analysisRequeued: 0,
+    jobsExpired: 0,
     errors: 0,
   };
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
@@ -163,6 +167,15 @@ export async function runSweep(
       AND NOT EXISTS (SELECT 1 FROM self_reflections r WHERE r.conversation_id = c.id)
   `)) as unknown as Array<{ id: string }>;
   result.analysisRequeued = await each(unanalysed, "re-queue analysis", (c) => queueAnalysis(deps, c.id, bucket));
+
+  // 6. Calendar-model jobs stuck as "scheduled". Harmless beyond losing that
+  // meeting as a basis, so expiring them at their expiry date is enough.
+  const expired = await db
+    .update(checkinJobs)
+    .set({ status: "expired" })
+    .where(and(eq(checkinJobs.status, "scheduled"), lt(checkinJobs.expiresAt, now)))
+    .returning({ id: checkinJobs.id });
+  result.jobsExpired = expired.length;
 
   return result;
 }

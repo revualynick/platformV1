@@ -14,6 +14,7 @@ import {
   feedbackEntries,
   selfReflections,
   engagementScores,
+  checkinJobs,
 } from "@revualy/db";
 import type { LLMGateway, LLMCompletionRequest } from "@revualy/ai-core";
 import { AdapterRegistry } from "@revualy/chat-core";
@@ -308,6 +309,21 @@ describe.skipIf(!dbUp)("conversation lifecycle and sweeper (integration)", () =>
     analysis.length = 0;
     await runSweep(db, sweepDeps, new Date(Date.now() + HOUR), quiet);
     expect(analysis.some((a) => (a.data as { conversationId: string }).conversationId === convId)).toBe(false);
+  });
+
+  it("expires a calendar job claimed by the scheduler but never used, once past its expiry", async () => {
+    const [stuck] = await db
+      .insert(checkinJobs)
+      .values({ reviewerId: ids.reviewer, subjectId: ids.subject, interactionType: "peer_review", sensitivity: "low", status: "scheduled", source: "calendar_model", expiresAt: ago(HOUR) })
+      .returning({ id: checkinJobs.id });
+    const [live] = await db
+      .insert(checkinJobs)
+      .values({ reviewerId: ids.reviewer, subjectId: ids.reviewer, interactionType: "peer_review", sensitivity: "low", status: "scheduled", source: "calendar_model", expiresAt: new Date(Date.now() + HOUR) })
+      .returning({ id: checkinJobs.id });
+    await runSweep(db, sweepDeps, new Date(), quiet);
+    const rows = await db.select({ id: checkinJobs.id, status: checkinJobs.status }).from(checkinJobs).where(inArray(checkinJobs.id, [stuck.id, live.id]));
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.status]))).toEqual({ [stuck.id]: "expired", [live.id]: "scheduled" });
+    await db.delete(checkinJobs).where(inArray(checkinJobs.id, [stuck.id, live.id]));
   });
 
   // ── Partial feedback ──────────────────────────────────
