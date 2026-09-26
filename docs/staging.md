@@ -16,7 +16,7 @@ From the laptop:
 ```bash
 ssh -N -L 3001:localhost:3001 -L 3000:localhost:3000 nick@linuxbox.local
 ```
-Then open http://localhost:3001. Because your browser sees `localhost`, Google sign-in and "Connect Google" can work once the Google OAuth client is configured for it (not set up yet; see below). Until then, sign in with the test login:
+Then open http://localhost:3001. Because your browser sees `localhost`, Google sign-in and "Connect Google" work (see Limits for who can sign in). The seeded demo people have no Google accounts, so for them use the test login:
 
 ```
 http://localhost:3001/api/test-login?email=jordan.wells@acmecorp.com&key=<TEST_LOGIN_KEY>&redirect=/team
@@ -43,6 +43,6 @@ Reset the data: stop the services, `docker compose -p revualy-staging down`, del
 
 ## Limits
 - Only people who can SSH to the box can use it. For a colleague or beta tester, it needs an HTTPS tunnel on a staging subdomain instead.
-- Google sign-in isn't configured: there are no Google OAuth client settings in staging (the laptop has none either; both use the test login). Adding them needs `http://localhost:3001` registered as a return address on the client.
+- Google sign-in and Connect Google are configured (2026-09-26): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_CALENDAR_REDIRECT_URI` are in `staging.env`, copied from the laptop's client file. Registered return addresses: `http://localhost:3001/api/auth/callback/google` and `http://localhost:3001/api/integrations/google/callback`. Only addresses in the org's allowed domains can sign in (seeded: acmecorp.com, revualy.com); a new address is created as an employee.
 - Chat platforms (Google Chat, Slack, Teams) can't reach it: webhooks need a public HTTPS address.
 - Surviving a reboot is set up (user services enabled, lingering on, containers `restart: unless-stopped`) but hasn't been tested with an actual reboot.
