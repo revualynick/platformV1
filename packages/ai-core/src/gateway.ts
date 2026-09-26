@@ -14,10 +14,13 @@ import { OpenAICompatAdapter } from "./providers/openai-compat.js";
 
 const MAX_TOKENS_CAP = 4096;
 
+// Newest model per tier until a stable base is pinned (Nick, 2026-09-26).
+// There is no "latest" alias on the API: bump these when a model ships, or
+// pin a tier with LLM_MODEL_FAST / LLM_MODEL_STANDARD / LLM_MODEL_ADVANCED.
 const ANTHROPIC_DEFAULTS: Record<ModelTier, string> = {
-  fast: "claude-haiku-4-5-20251001",
-  standard: "claude-sonnet-4-6",
-  advanced: "claude-opus-4-6",
+  fast: "claude-haiku-4-5",
+  standard: "claude-sonnet-5",
+  advanced: "claude-opus-5-5",
 };
 
 const OPENAI_DEFAULTS: Record<ModelTier, string> = {
@@ -71,7 +74,8 @@ export class LLMGateway {
     const result = await Promise.race([
       adapter.complete(request),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("LLM completion timed out after 30s")), 30_000);
+        // Newer models think before replying, so allow more than a plain call needs.
+        timer = setTimeout(() => reject(new Error("LLM completion timed out after 60s")), 60_000);
       }),
     ]).finally(() => clearTimeout(timer));
     return result;

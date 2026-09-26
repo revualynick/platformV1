@@ -7,12 +7,21 @@ export interface LLMMessage {
   content: string;
 }
 
+/** How much the model thinks (Anthropic `output_config.effort`). */
+export type EffortLevel = "low" | "medium" | "high";
+
 export interface LLMCompletionRequest {
   messages: LLMMessage[];
   tier: ModelTier;
+  /** Length of the reply. Models that think get extra room for it on top. */
   maxTokens?: number;
+  /** Ignored by models that reject sampling parameters (Sonnet 5, Opus 4.7+). */
   temperature?: number;
   jsonMode?: boolean;
+  /** Anthropic: thinking depth. Defaults to "medium" on models that think by default. */
+  effort?: EffortLevel;
+  /** Anthropic: JSON Schema the reply must match (structured outputs). Use with jsonMode. */
+  jsonSchema?: Record<string, unknown>;
 }
 
 export interface LLMCompletionResponse {
@@ -23,6 +32,8 @@ export interface LLMCompletionResponse {
   };
   model: string;
   latencyMs: number;
+  /** Why generation stopped, when the provider says ("max_tokens" means cut off). */
+  stopReason?: string;
 }
 
 export interface LLMProviderConfig {

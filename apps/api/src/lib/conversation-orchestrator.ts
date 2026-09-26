@@ -775,7 +775,8 @@ Rules:
     messages,
     tier: "standard",
     maxTokens: 150,
-    temperature: 0.7,
+    temperature: 0.7, // older models only; newer ones ignore it
+    effort: "low",
   });
 
   return response.content.trim();

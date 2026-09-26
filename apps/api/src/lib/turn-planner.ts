@@ -55,6 +55,18 @@ export interface TurnPlan {
   judgedBy: "llm" | "fallback";
 }
 
+/** Structured-output schema for the plan (the API enforces it; zod re-checks). */
+const PLAN_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    quality: { type: "string", enum: ["answered", "weak"] },
+    action: { type: "string", enum: ["follow_up", "next_theme", "close"] },
+    question: { type: "string" },
+  },
+  required: ["quality", "action", "question"],
+  additionalProperties: false,
+};
+
 const planSchema = z.object({
   quality: z.enum(["answered", "weak"]),
   action: z.enum(["follow_up", "next_theme", "close"]),
@@ -82,8 +94,10 @@ export async function planTurn(
         ],
         tier: "standard",
         maxTokens: 300,
-        temperature: 0.5,
+        // A chat turn: keep it quick. Raise if judgements look shallow.
+        effort: "low",
         jsonMode: true,
+        jsonSchema: PLAN_JSON_SCHEMA,
       });
       const parsed = planSchema.parse(JSON.parse(stripFences(response.content)));
       return applyRules(input, { ...parsed, question: parsed.question.trim() }, "llm");
