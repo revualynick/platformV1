@@ -1,5 +1,6 @@
 import { and, eq, gte, lt, sql, exists } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
+import { tenantReviewerRef } from "./pseudonym.js";
 import { feedbackEntries, selfReflections, engagementScores, users, userPlatformIdentities } from "@revualy/db";
 
 /** UTC Monday 00:00 of the week containing `d`. */
@@ -36,7 +37,7 @@ export async function recomputeWeeklyEngagement(
     .from(feedbackEntries)
     .where(
       and(
-        eq(feedbackEntries.reviewerId, userId),
+        eq(feedbackEntries.reviewerRef, tenantReviewerRef(userId)),
         eq(feedbackEntries.isPartial, false),
         gte(feedbackEntries.createdAt, weekStart),
         lt(feedbackEntries.createdAt, weekEnd),

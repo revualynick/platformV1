@@ -2,7 +2,10 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
+import { stripMeetingReferences } from "@revualy/shared";
+import { tenantReviewerRef } from "./pseudonym.js";
 import {
+  calendarEvents,
   conversations,
   conversationMessages,
   feedbackEntries,
@@ -160,6 +163,22 @@ export async function runAnalysisPipeline(
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 
+  // Tier A: stored against the reviewer's pseudonym, never their id.
+  // Computed first so a missing secret fails the job (and it retries)
+  // before any LLM work.
+  const reviewerRefValue = tenantReviewerRef(conversation.reviewerId);
+
+  // Known meeting labels to strip from the summary the subject may see.
+  const meetingTerms: string[] = [];
+  if (conversation.anchorLabel) meetingTerms.push(conversation.anchorLabel);
+  if (conversation.anchorEventId) {
+    const [event] = await db
+      .select({ title: calendarEvents.title })
+      .from(calendarEvents)
+      .where(eq(calendarEvents.id, conversation.anchorEventId));
+    if (event?.title) meetingTerms.push(event.title);
+  }
+
   // 2. Fetch org's core values for mapping
   const orgValues = await db
     .select()
@@ -199,7 +218,7 @@ export async function runAnalysisPipeline(
   const MAX_FLAGGED_CONTENT_LENGTH = 5000;
   const MAX_EVIDENCE_LENGTH = 1000;
 
-  const safeSummary = summaryResult.slice(0, MAX_SUMMARY_LENGTH);
+  const safeSummary = stripMeetingReferences(summaryResult, meetingTerms).slice(0, MAX_SUMMARY_LENGTH);
   const safeFlaggedContent = flagResult.flaggedContent.slice(0, MAX_FLAGGED_CONTENT_LENGTH);
   const safeReason = flagResult.reason.slice(0, MAX_SUMMARY_LENGTH);
 
@@ -221,7 +240,7 @@ export async function runAnalysisPipeline(
       .insert(feedbackEntries)
       .values({
         conversationId,
-        reviewerId: conversation.reviewerId,
+        reviewerRef: reviewerRefValue,
         subjectId: conversation.subjectId,
         interactionType: conversation.interactionType,
         rawContent,
@@ -456,6 +475,7 @@ async function generateSummary(
       {
         role: "system",
         content: `Summarize this ${interactionType.replace("_", " ")} feedback in 2-3 sentences. Focus on the key takeaways, specific observations, and any actionable insights. Be concise and neutral.
+The person the feedback is about may read this summary, so it must not identify who wrote it: paraphrase in your own words (never quote), and leave out meeting names, days, dates, times and names of other people.
 
 <feedback>
 ${content}

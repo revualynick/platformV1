@@ -69,7 +69,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
       feedback = fbResult.value.map((e) => ({
         id: e.id,
         fromName: "Peer", // intentional anonymity — reviewer identity is never shown to subject
-        date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        date: new Date(e.releasedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         summary: e.aiSummary || "No summary available",
         sentiment: e.sentiment,
         engagementScore: e.engagementScore,

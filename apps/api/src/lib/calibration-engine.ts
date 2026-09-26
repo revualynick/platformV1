@@ -7,6 +7,7 @@ import {
   engagementScores,
 } from "@revualy/db";
 import type { TenantDb } from "@revualy/db";
+import { reviewerLabel } from "./pseudonym.js";
 
 // ── Types ──────────────────────────────────────────────
 
@@ -19,7 +20,8 @@ export interface CalibrationReport {
     totalReviewerCount: number;
   };
   reviewerAnalysis: Array<{
-    reviewerId: string;
+    // Tier A: the pseudonym and its label, never a user id or name.
+    reviewerRef: string;
     reviewerName: string;
     feedbackCount: number;
     avgEngagementScore: number;
@@ -106,7 +108,7 @@ export async function generateCalibrationReport(
   const weekFeedback = await db
     .select({
       id: feedbackEntries.id,
-      reviewerId: feedbackEntries.reviewerId,
+      reviewerRef: feedbackEntries.reviewerRef,
       subjectId: feedbackEntries.subjectId,
       sentiment: feedbackEntries.sentiment,
       engagementScore: feedbackEntries.engagementScore,
@@ -175,10 +177,10 @@ export async function generateCalibrationReport(
   >();
 
   for (const f of weekFeedback) {
-    let group = reviewerGroups.get(f.reviewerId);
+    let group = reviewerGroups.get(f.reviewerRef);
     if (!group) {
       group = { sentiments: [], scores: [], feedbackIds: [] };
-      reviewerGroups.set(f.reviewerId, group);
+      reviewerGroups.set(f.reviewerRef, group);
     }
     group.sentiments.push(f.sentiment);
     group.scores.push(f.engagementScore);
@@ -188,8 +190,8 @@ export async function generateCalibrationReport(
   const reviewerSentimentNumerics: number[] = [];
   const reviewerAnalysis: CalibrationReport["reviewerAnalysis"] = [];
 
-  for (const [reviewerId, group] of reviewerGroups) {
-    const user = userMap.get(reviewerId);
+  for (const [reviewerRef, group] of reviewerGroups) {
+
     const avgScore =
       group.scores.reduce((a, b) => a + b, 0) / group.scores.length;
     const sentimentNumeric =
@@ -206,8 +208,8 @@ export async function generateCalibrationReport(
         : 0;
 
     reviewerAnalysis.push({
-      reviewerId,
-      reviewerName: user?.name ?? "Unknown",
+      reviewerRef,
+      reviewerName: reviewerLabel(reviewerRef),
       feedbackCount: group.sentiments.length,
       avgEngagementScore: Math.round(avgScore * 1000) / 1000,
       sentimentDistribution: computeSentimentDistribution(group.sentiments),
@@ -231,7 +233,7 @@ export async function generateCalibrationReport(
 
   for (let i = 0; i < reviewerAnalysis.length; i++) {
     const ra = reviewerAnalysis[i];
-    const group = reviewerGroups.get(ra.reviewerId)!;
+    const group = reviewerGroups.get(ra.reviewerRef)!;
     const sentimentNumeric =
       group.sentiments.map(sentimentToNumeric).reduce((a, b) => a + b, 0) /
       group.sentiments.length;
@@ -247,7 +249,7 @@ export async function generateCalibrationReport(
       const sev = alertSeverity(Math.abs(deviation));
       alerts.push({
         type: "reviewer_bias",
-        subjectId: ra.reviewerId,
+        subjectId: ra.reviewerRef,
         subjectName: ra.reviewerName,
         message: `Reviewer "${ra.reviewerName}" shows leniency bias (${ra.deviationFromMean} std dev above org mean)`,
         severity: sev,
@@ -257,7 +259,7 @@ export async function generateCalibrationReport(
       const sev = alertSeverity(Math.abs(deviation));
       alerts.push({
         type: "reviewer_bias",
-        subjectId: ra.reviewerId,
+        subjectId: ra.reviewerRef,
         subjectName: ra.reviewerName,
         message: `Reviewer "${ra.reviewerName}" shows severity bias (${Math.abs(ra.deviationFromMean)} std dev below org mean)`,
         severity: sev,

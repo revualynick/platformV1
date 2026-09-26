@@ -263,8 +263,8 @@ async function FeedbackSection({
       feedback = entriesResult.value.map((e) => ({
         id: e.id,
         fromName: "Peer", // intentional anonymity — reviewer identity is not exposed to managers either
-        date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        summary: e.aiSummary || e.rawContent.slice(0, 200),
+        date: new Date(e.releasedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        summary: e.aiSummary || "No summary available",
         sentiment: e.sentiment,
         engagementScore: e.engagementScore,
         values: e.valueScores?.map((v) => valueNameMap.get(v.coreValueId) ?? v.coreValueId) ?? [],

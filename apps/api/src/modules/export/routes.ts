@@ -16,6 +16,7 @@ import {
   exportUsersQuerySchema,
 } from "../../lib/validation.js";
 import { toCSV, type CSVColumn } from "../../lib/csv-export.js";
+import { reviewerLabel } from "../../lib/pseudonym.js";
 
 // ── Helpers ─────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       .select({
         id: feedbackEntries.id,
         createdAt: feedbackEntries.createdAt,
-        reviewerId: feedbackEntries.reviewerId,
+        reviewerRef: feedbackEntries.reviewerRef,
         subjectId: feedbackEntries.subjectId,
         interactionType: feedbackEntries.interactionType,
         rawContent: feedbackEntries.rawContent,
@@ -89,12 +90,9 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
       .orderBy(desc(feedbackEntries.createdAt))
       .limit(50000);
 
-    // Resolve user names for reviewer/subject
+    // Resolve subject names (reviewers are never named: tier A)
     const userIds = new Set<string>();
-    for (const e of entries) {
-      userIds.add(e.reviewerId);
-      userIds.add(e.subjectId);
-    }
+    for (const e of entries) userIds.add(e.subjectId);
 
     const userMap = new Map<string, string>();
     const userIdArray = [...userIds];
@@ -141,16 +139,14 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Build blind maps if needed
-    const blindMap = query.blind
-      ? buildBlindMap(entries.map((e) => e.reviewerId))
-      : null;
     const blindSubjectMap = query.blind
       ? buildBlindMap(entries.map((e) => e.subjectId), "Subject")
       : null;
 
     const rows = entries.map((e) => ({
       date: e.createdAt.toISOString(),
-      reviewer: blindMap ? blindMap.get(e.reviewerId) ?? "Anonymous" : (userMap.get(e.reviewerId) ?? "Unknown"),
+      // Always the pseudonym label, blind or not: the export cannot name reviewers.
+      reviewer: reviewerLabel(e.reviewerRef),
       subject: blindSubjectMap ? blindSubjectMap.get(e.subjectId) ?? "Anonymous" : (userMap.get(e.subjectId) ?? "Unknown"),
       interactionType: e.interactionType,
       sentiment: e.sentiment,

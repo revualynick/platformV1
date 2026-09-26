@@ -213,7 +213,7 @@ const secretsStep: StepFn = async (ctx) => {
       );
     }
     await exec.local({
-      purpose: `Generate ENCRYPTION_KEYS (k1, 32 random bytes), NEXTAUTH_SECRET, INTERNAL_API_SECRET, WS_TOKEN_SECRET and ORG_ID; write the secrets to ${paths.secretsFile} (mode 600, outside the repo)`,
+      purpose: `Generate ENCRYPTION_KEYS (k1, 32 random bytes), NEXTAUTH_SECRET, INTERNAL_API_SECRET, WS_TOKEN_SECRET, REVIEWER_PSEUDONYM_SECRET and ORG_ID; write the secrets to ${paths.secretsFile} (mode 600, outside the repo)`,
       run: () => {
         const generated = generateTenantSecrets();
         writeSecretsFile(paths.secretsFile, generated);

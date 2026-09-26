@@ -444,7 +444,7 @@ async function FeedbackSection({
       recentFeedback = entries.map((e) => ({
         id: e.id,
         fromName: "Peer",
-        date: new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        date: new Date(e.releasedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         summary: e.aiSummary || "No summary available",
         sentiment: e.sentiment as "positive" | "neutral" | "negative" | "mixed",
         engagementScore: e.engagementScore,

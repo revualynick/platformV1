@@ -42,6 +42,8 @@ import { sendEmail, unsubscribeUrlFor } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
 import { replaceProfileSignals } from "../lib/profile-signal-store.js";
+import { tenantReviewerRef } from "../lib/pseudonym.js";
+import { getReleasedFeedbackIds } from "@revualy/db/queries";
 import {
   weeklyDigestTemplate,
   flagAlertTemplate,
@@ -456,28 +458,32 @@ export function createWorkers(config: WorkerConfig) {
           const [user] = await db.select().from(users).where(eq(users.id, data.userId));
           if (!user) break;
 
-          const [feedbackReceived, feedbackGiven, kudosRows, engRows, topValueRows] = await Promise.all([
-            db.select().from(feedbackEntries).where(
-              and(eq(feedbackEntries.subjectId, data.userId), gte(feedbackEntries.createdAt, weekAgo)),
-            ),
-            db.select().from(feedbackEntries).where(
-              and(eq(feedbackEntries.reviewerId, data.userId), gte(feedbackEntries.createdAt, weekAgo)),
+          // Received feedback counts only what was released to them this
+          // week (tier A batches), never what arrived: arrival times give
+          // reviewers away.
+          const releases = await getReleasedFeedbackIds(db, [data.userId], now);
+          const receivedIds = [...releases].filter(([, at]) => at > weekAgo).map(([id]) => id);
+          const feedbackReceived = receivedIds;
+          const [feedbackGiven, kudosRows, engRows, topValueRows] = await Promise.all([
+            db.select({ id: feedbackEntries.id }).from(feedbackEntries).where(
+              and(eq(feedbackEntries.reviewerRef, tenantReviewerRef(data.userId)), gte(feedbackEntries.createdAt, weekAgo)),
             ),
             db.select().from(kudos).where(
               and(eq(kudos.receiverId, data.userId), gte(kudos.createdAt, weekAgo)),
             ),
             db.select().from(engagementScores).where(eq(engagementScores.userId, data.userId))
               .orderBy(desc(engagementScores.weekStarting)).limit(1),
-            // Highest-scoring core value received by this user in the digest week
-            db
-              .select({ name: coreValues.name, totalScore: sql<number>`sum(${feedbackValueScores.score})` })
-              .from(feedbackValueScores)
-              .innerJoin(feedbackEntries, eq(feedbackValueScores.feedbackEntryId, feedbackEntries.id))
-              .innerJoin(coreValues, eq(feedbackValueScores.coreValueId, coreValues.id))
-              .where(and(eq(feedbackEntries.subjectId, data.userId), gte(feedbackEntries.createdAt, weekAgo)))
-              .groupBy(coreValues.id, coreValues.name)
-              .orderBy(desc(sql<number>`sum(${feedbackValueScores.score})`))
-              .limit(1),
+            // Highest-scoring core value in the feedback released this week
+            receivedIds.length === 0
+              ? Promise.resolve([] as Array<{ name: string; totalScore: number }>)
+              : db
+                  .select({ name: coreValues.name, totalScore: sql<number>`sum(${feedbackValueScores.score})` })
+                  .from(feedbackValueScores)
+                  .innerJoin(coreValues, eq(feedbackValueScores.coreValueId, coreValues.id))
+                  .where(inArray(feedbackValueScores.feedbackEntryId, receivedIds))
+                  .groupBy(coreValues.id, coreValues.name)
+                  .orderBy(desc(sql<number>`sum(${feedbackValueScores.score})`))
+                  .limit(1),
           ]);
 
           const digestData: WeeklyDigestData = {
@@ -647,16 +653,16 @@ export function createWorkers(config: WorkerConfig) {
               ),
             );
 
-          const monthEntries = await db
-            .select()
-            .from(feedbackEntries)
-            .where(
-              and(
-                inArray(feedbackEntries.subjectId, reportIds),
-                gte(feedbackEntries.createdAt, monthStart),
-                lt(feedbackEntries.createdAt, monthEnd),
-              ),
-            );
+          // Tier A: the month's feedback is what was released to the team in
+          // the month (batches of 3+ reviewers, fortnightly), not what arrived.
+          const monthReleases = await getReleasedFeedbackIds(db, reportIds);
+          const monthIds = [...monthReleases].filter(([, at]) => at >= monthStart && at < monthEnd).map(([id]) => id);
+          const monthEntries = monthIds.length === 0
+            ? []
+            : await db
+                .select()
+                .from(feedbackEntries)
+                .where(inArray(feedbackEntries.id, monthIds));
 
           const entryIds = monthEntries.map((e) => e.id);
           let valueScores: Array<typeof feedbackValueScores.$inferSelect> = [];

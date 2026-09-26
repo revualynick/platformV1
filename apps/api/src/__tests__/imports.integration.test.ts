@@ -16,6 +16,7 @@ import {
 } from "@revualy/db";
 import { buildApp } from "../server.js";
 import { recomputeWeeklyEngagement } from "../lib/engagement-aggregation.js";
+import { tenantReviewerRef } from "../lib/pseudonym.js";
 
 /**
  * Data imports end to end against a real Postgres, with a fake LLM:
@@ -142,7 +143,7 @@ describe.skipIf(!dbUp)("data imports (integration)", () => {
     const ours = await db.select({ id: users.id }).from(users).where(like(users.email, `%-${tag}@test.local`));
     const ids = ours.map((u) => u.id);
     if (ids.length) {
-      await db.delete(importedFeedback).where(or(inArray(importedFeedback.authorId, ids), inArray(importedFeedback.recipientId, ids)));
+      await db.delete(importedFeedback).where(or(inArray(importedFeedback.authorRef, ids.map(tenantReviewerRef)), inArray(importedFeedback.recipientId, ids)));
       await db.delete(goals).where(inArray(goals.ownerId, ids));
       await db.delete(importRuns).where(inArray(importRuns.createdBy, ids));
       await db.delete(engagementScores).where(inArray(engagementScores.userId, ids));
@@ -262,14 +263,14 @@ describe.skipIf(!dbUp)("data imports (integration)", () => {
     await approveAndCommit(uploaded.id);
 
     const [bea, cal] = await Promise.all(["bea", "cal"].map((w) => userByEmail(email(w))));
-    const imported = await db.select().from(importedFeedback).where(eq(importedFeedback.authorId, bea.id));
+    const imported = await db.select().from(importedFeedback).where(eq(importedFeedback.authorRef, tenantReviewerRef(bea.id)));
     expect(imported).toHaveLength(1);
     expect(imported[0]).toMatchObject({ recipientId: cal.id, content: `Great docs, ${tag}`, sourceSystem: "culture_amp", importRunId: uploaded.id });
     const [stored] = await db.execute<{ content: string }>(sql`select content from imported_feedback where id = ${imported[0].id}`);
     expect(stored.content).not.toContain(tag);
 
     // Not feedback_entries, so engagement never counts it.
-    expect(await db.select().from(feedbackEntries).where(eq(feedbackEntries.reviewerId, bea.id))).toHaveLength(0);
+    expect(await db.select().from(feedbackEntries).where(eq(feedbackEntries.reviewerRef, tenantReviewerRef(bea.id)))).toHaveLength(0);
     await recomputeWeeklyEngagement(db, bea.id, "2026-01-05");
     const [score] = await db
       .select()

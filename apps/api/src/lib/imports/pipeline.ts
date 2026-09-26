@@ -34,6 +34,7 @@ import {
 import { MAX_IMPORT_ROWS, readTabular } from "./tabular.js";
 import { insertUsersSkippingExisting } from "../user-provisioning.js";
 import { syncAuthUser } from "../auth-sync.js";
+import { tenantReviewerRef } from "../pseudonym.js";
 
 /**
  * The import flow: stage -> map -> dry run -> admin approves -> commit.
@@ -550,7 +551,7 @@ async function applyFeedback(tx: Db, plan: FeedbackPlan, runId: string, sourceSy
       .insert(importedFeedback)
       .values(
         plan.inserts.slice(i, i + 500).map((f) => ({
-          authorId: f.authorId,
+          authorRef: tenantReviewerRef(f.authorId), // tier A: pseudonym, not the author's id
           recipientId: f.recipientId,
           givenAt: new Date(`${f.givenAt}T12:00:00.000Z`),
           content: f.text,

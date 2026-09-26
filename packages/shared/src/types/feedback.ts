@@ -8,8 +8,8 @@ import type {
 
 export interface FeedbackEntry {
   id: UUID;
-  conversationId: UUID;
-  reviewerId: UUID;
+  conversationId: UUID | null;
+  reviewerRef: string; // tier A pseudonym, never a user id
   subjectId: UUID;
   interactionType: InteractionType;
   rawContent: string; // encrypted at rest
@@ -144,7 +144,7 @@ export interface ThreeSixtyReview {
 export interface ThreeSixtyResponse {
   id: UUID;
   reviewId: UUID;
-  reviewerId: UUID;
+  reviewerRef: string; // tier A pseudonym, never a user id
   feedbackEntryId: UUID | null;
   conversationId: UUID | null;
   status: ThreeSixtyResponseStatus;

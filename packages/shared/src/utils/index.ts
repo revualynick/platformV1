@@ -3,6 +3,7 @@
 // pull into the browser bundle. Node-only helpers (crypto, generateId) live in
 // ./crypto.js and are exposed via the "@revualy/shared/server" subpath instead.
 export * from "./goals.js";
+export * from "./peer-release.js";
 
 export function toISOString(date: Date = new Date()): string {
   return date.toISOString();
