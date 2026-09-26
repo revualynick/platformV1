@@ -12,6 +12,8 @@ import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry, OutboundMessage } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import { buildJobId } from "./job-ids.js";
+import { planTurn, themeQuestion, type ThemeInfo } from "./turn-planner.js";
+import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 
 /**
  * Conversation engine. All conversation state lives in Postgres (the
@@ -128,17 +130,22 @@ export async function initiateConversation(
 
   // Deterministic intro (what this is, how long, where answers go: the
   // privacy line must never be LLM-paraphrased) + the first question.
-  const openingQuestion =
-    getInteractionIntro(params.interactionType, subject.name ?? "your colleague") +
-    (await generateQuestion(deps.llm, {
-      theme: selectedThemes[0] ?? null,
-      verbatim: questionnaire.verbatim ?? false,
-      reviewerName: reviewer.name ?? "there",
-      subjectName: subject.name ?? "your colleague",
-      interactionType: params.interactionType,
-      isOpening: true,
-      priorMessages: [],
-    }));
+  // If the model is down, ask the first theme as written rather than fail.
+  const firstTheme = selectedThemes[0] ?? null;
+  const firstQuestion = await generateQuestion(deps.llm, {
+    theme: firstTheme,
+    verbatim: questionnaire.verbatim ?? false,
+    reviewerName: reviewer.name ?? "there",
+    subjectName: subject.name ?? "your colleague",
+    interactionType: params.interactionType,
+    isOpening: true,
+    priorMessages: [],
+  }).catch((err) => {
+    if (!firstTheme) throw err;
+    console.warn("[Orchestrator] opening question fell back to the theme's own wording:", err instanceof Error ? err.message : err);
+    return themeQuestion(firstTheme);
+  });
+  const openingQuestion = getInteractionIntro(params.interactionType, subject.name ?? "your colleague") + firstQuestion;
 
   const now = new Date();
   const created = await db.transaction(async (tx) => {
@@ -171,6 +178,20 @@ export async function initiateConversation(
       role: "assistant",
       content: openingQuestion,
     });
+    if (firstTheme) {
+      await recordThemeAsked(
+        tx,
+        {
+          id: conv.id,
+          reviewerId: params.reviewerId,
+          subjectId: params.subjectId,
+          interactionType: params.interactionType,
+          selectedThemeIds: selectedThemes.map((t) => t.id),
+        },
+        firstTheme.id,
+        firstQuestion,
+      );
+    }
     return conv;
   });
 
@@ -361,54 +382,44 @@ export async function processTurn(
   if (pending.length === 0) return { status: "nothing_pending" };
   const lastPendingSeq = pending[pending.length - 1].seq;
 
-  // ── Decide and draft (LLM calls, outside any transaction) ──
+  // ── Decide and draft (one LLM call, outside any transaction) ──
   const interactionType = conv.interactionType as InteractionType;
   const maxMessages = getMaxMessages(interactionType);
   const messageCount = history.length;
   const reply = pending.map((m) => m.content).join("\n\n");
 
-  const decision = await decideNextAction(
-    deps.llm,
-    {
-      currentThemeIndex: conv.currentThemeIndex,
-      themeCount: conv.selectedThemeIds.length,
-      phase: conv.phase,
-      messageCount,
-      maxMessages,
-    },
+  const index = conv.currentThemeIndex;
+  const [themes, [questionnaire], [subject]] = await Promise.all([
+    loadThemes(db, conv.selectedThemeIds),
+    conv.questionnaireId
+      ? db.select({ verbatim: questionnaires.verbatim }).from(questionnaires).where(eq(questionnaires.id, conv.questionnaireId))
+      : Promise.resolve([]),
+    db.select({ name: users.name }).from(users).where(eq(users.id, conv.subjectId)),
+  ]);
+  const currentTheme = themes[index] ?? null;
+  const nextTheme = themes[index + 1] ?? null;
+
+  const plan = await planTurn(deps.llm, {
+    interactionType,
+    subjectName: stripControlChars(subject?.name ?? "your colleague"),
+    verbatim: questionnaire?.verbatim ?? false,
+    currentTheme,
+    nextTheme,
+    followUpsOnTheme: conv.followUpCount,
+    // Room for another question and its answer before the cap.
+    canContinue: messageCount < maxMessages - 1,
+    history: history.map((m) => ({ role: m.role, content: m.content })),
     reply,
-  );
+  });
 
-  const closing = decision === "close" || messageCount >= maxMessages;
-  let next = { currentThemeIndex: conv.currentThemeIndex, phase: conv.phase, followUpCount: conv.followUpCount };
-  let outbound: string;
-
-  if (closing) {
-    next = { ...next, phase: "closing" };
-    outbound = getClosingMessage(interactionType);
-  } else {
-    next =
-      decision === "next_theme"
-        ? { currentThemeIndex: conv.currentThemeIndex + 1, phase: "exploring", followUpCount: 0 }
-        : { ...next, phase: "follow_up", followUpCount: conv.followUpCount + 1 };
-
-    const [theme, [questionnaire], [subject]] = await Promise.all([
-      loadTheme(db, conv.selectedThemeIds[next.currentThemeIndex]),
-      conv.questionnaireId
-        ? db.select().from(questionnaires).where(eq(questionnaires.id, conv.questionnaireId))
-        : Promise.resolve([]),
-      db.select().from(users).where(eq(users.id, conv.subjectId)),
-    ]);
-    outbound = await generateQuestion(deps.llm, {
-      theme,
-      verbatim: questionnaire?.verbatim ?? false,
-      reviewerName: "", // not needed for follow-ups
-      subjectName: subject?.name ?? "your colleague",
-      interactionType,
-      isOpening: false,
-      priorMessages: history.map((m) => ({ role: m.role, content: m.content })),
-    });
-  }
+  const closing = plan.action === "close";
+  const next =
+    plan.action === "next_theme"
+      ? { currentThemeIndex: index + 1, phase: "exploring" as const, followUpCount: 0 }
+      : plan.action === "follow_up"
+        ? { currentThemeIndex: index, phase: "follow_up" as const, followUpCount: conv.followUpCount + 1 }
+        : { currentThemeIndex: index, phase: "closing" as const, followUpCount: conv.followUpCount };
+  let outbound = closing ? getClosingMessage(interactionType) : plan.question!;
   if (opts.truncatedInbound) outbound = TRUNCATION_NOTE + outbound;
 
   // ── Commit: only if the turn is unchanged and nothing new arrived ──
@@ -447,6 +458,19 @@ export async function processTurn(
       if (newer) throw new Superseded();
 
       await tx.insert(conversationMessages).values({ conversationId, role: "assistant", content: outbound });
+
+      // How the theme just answered went, and what was asked next.
+      if (currentTheme) {
+        await recordThemeJudged(tx, conv, currentTheme.id, {
+          outcome: plan.quality,
+          followUpCount: next.followUpCount,
+          judgedBy: plan.judgedBy,
+        });
+      }
+      if (plan.action === "next_theme" && nextTheme) {
+        await recordThemeAsked(tx, conv, nextTheme.id, plan.question!);
+      }
+      if (closing) await recordUnreachedThemes(tx, conv);
     });
   } catch (err) {
     if (err instanceof Superseded) return { status: "superseded" };
@@ -474,11 +498,15 @@ export async function markIncomplete(
   conversationId: string,
 ): Promise<boolean> {
   const now = new Date();
-  const [row] = await db
-    .update(conversations)
-    .set({ status: "incomplete", closedAt: now, lastActivityAt: now, turn: sql`${conversations.turn} + 1` })
-    .where(and(eq(conversations.id, conversationId), inArray(conversations.status, [...OPEN_STATUSES])))
-    .returning({ id: conversations.id });
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(conversations)
+      .set({ status: "incomplete", closedAt: now, lastActivityAt: now, turn: sql`${conversations.turn} + 1` })
+      .where(and(eq(conversations.id, conversationId), inArray(conversations.status, [...OPEN_STATUSES])))
+      .returning();
+    if (updated) await recordUnreachedThemes(tx, updated);
+    return updated;
+  });
   if (!row) return false;
   await queueAnalysis(deps, conversationId);
   return true;
@@ -658,12 +686,18 @@ function tenantOrgId(): string {
   return process.env.ORG_ID ?? "dev-org";
 }
 
-async function loadTheme(db: TenantDb, themeId: string | undefined) {
-  if (!themeId) return null;
-  const [theme] = await db.select().from(questionnaireThemes).where(eq(questionnaireThemes.id, themeId));
-  return theme
-    ? { intent: theme.intent, dataGoal: theme.dataGoal, examplePhrasings: theme.examplePhrasings }
-    : null;
+/**
+ * The conversation's selected themes, by position. A theme deleted since
+ * the conversation started is null, so later positions do not shift.
+ */
+async function loadThemes(db: TenantDb, themeIds: string[]): Promise<Array<ThemeInfo | null>> {
+  if (themeIds.length === 0) return [];
+  const rows = await db.select().from(questionnaireThemes).where(inArray(questionnaireThemes.id, themeIds));
+  const byId = new Map(rows.map((t) => [t.id, t]));
+  return themeIds.map((id) => {
+    const t = byId.get(id);
+    return t ? { id: t.id, intent: t.intent, dataGoal: t.dataGoal, examplePhrasings: t.examplePhrasings } : null;
+  });
 }
 
 
@@ -745,59 +779,6 @@ Rules:
   });
 
   return response.content.trim();
-}
-
-export interface TurnPosition {
-  currentThemeIndex: number;
-  themeCount: number;
-  phase: string;
-  messageCount: number;
-  maxMessages: number;
-}
-
-async function decideNextAction(
-  llm: LLMGateway,
-  pos: TurnPosition,
-  lastReply: string,
-): Promise<"follow_up" | "next_theme" | "close"> {
-  // Every theme explored (index moved past the last one): close.
-  if (pos.currentThemeIndex >= pos.themeCount && pos.phase !== "opening") {
-    return "close";
-  }
-
-  // One message left before the cap: close.
-  if (pos.messageCount >= pos.maxMessages - 1) {
-    return "close";
-  }
-
-  // Use LLM to decide if the response was substantive enough to move on
-  const response = await llm.complete({
-    messages: [
-      {
-        role: "system",
-        content: `You are analyzing a conversation reply to decide the next action.
-
-Evaluate the user's reply:
-1. Did they give a substantive, specific answer? (more than a few words, includes details/examples)
-2. Is there a clear opportunity for a meaningful follow-up?
-
-Respond with exactly ONE word: "follow_up" if the answer is vague and needs elaboration, "next_theme" if the answer is complete and specific, or "close" if the conversation feels natural to end.`,
-      },
-      {
-        role: "user",
-        content: lastReply.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "").slice(0, 2000),
-      },
-    ],
-    tier: "fast",
-    maxTokens: 10,
-    temperature: 0,
-  });
-
-  const decision = response.content.trim().toLowerCase();
-  if (decision === "follow_up") return "follow_up";
-  if (decision === "close") return "close";
-  if (decision === "next_theme") return "next_theme";
-  return "next_theme";
 }
 
 // ── Utilities ────────────────────────────────────────────

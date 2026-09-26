@@ -60,9 +60,9 @@ class FakeChat extends InternalSimulatorAdapter {
 }
 
 /**
- * Scripted LLM: "fast" tier is the next-action decision, "standard" writes a
- * question. `onQuestion` runs during the question call, so a test can make
- * something happen "while the LLM is thinking".
+ * Scripted LLM. The opening question is plain text; each turn is one JSON
+ * plan (`decision` is the action it proposes). `onQuestion` runs during
+ * the call, so a test can make something happen "while the LLM is thinking".
  */
 function scriptedLLM() {
   const state = {
@@ -71,12 +71,13 @@ function scriptedLLM() {
     onQuestion: undefined as undefined | (() => Promise<void>),
   };
   const complete = async (req: LLMCompletionRequest) => {
-    if (req.tier === "fast") return { content: state.decision, usage: { inputTokens: 1, outputTokens: 1 }, model: "m", latencyMs: 1 };
     state.questionCalls++;
     const hook = state.onQuestion;
     state.onQuestion = undefined;
     if (hook) await hook();
-    return { content: `Question ${state.questionCalls}?`, usage: { inputTokens: 1, outputTokens: 1 }, model: "m", latencyMs: 1 };
+    const question = `Question ${state.questionCalls}?`;
+    const content = req.jsonMode ? JSON.stringify({ quality: "answered", action: state.decision, question }) : question;
+    return { content, usage: { inputTokens: 1, outputTokens: 1 }, model: "m", latencyMs: 1 };
   };
   return { llm: { complete } as unknown as LLMGateway, state };
 }

@@ -311,6 +311,46 @@ export const conversations = pgTable(
   ],
 );
 
+export type ThemeOutcome = "answered" | "weak" | "unanswered";
+
+/**
+ * How each theme went in a conversation (migration 0037). Created when a
+ * theme is first asked (or unreached at the end), judged from the reply.
+ */
+export const conversationThemeOutcomes = pgTable(
+  "conversation_theme_outcomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    themeId: uuid("theme_id").references(() => questionnaireThemes.id, { onDelete: "set null" }),
+    reviewerId: uuid("reviewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Null for self-reflections.
+    subjectId: uuid("subject_id").references(() => users.id, { onDelete: "cascade" }),
+    interactionType: varchar("interaction_type", { length: 50 }).notNull(),
+    outcome: varchar("outcome", { length: 20 }).$type<ThemeOutcome>().notNull().default("unanswered"),
+    followUpCount: integer("follow_up_count").notNull().default(0),
+    // As first asked; null if never reached. Encrypted: it can name the subject.
+    questionText: encryptedText("conversation_theme_outcomes", "question_text"),
+    judgedBy: varchar("judged_by", { length: 20 }).$type<"llm" | "fallback">(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (table) => [
+    uniqueIndex("uq_theme_outcome_conversation_theme").on(table.conversationId, table.themeId),
+    index("idx_theme_outcomes_reviewer_recent")
+      .on(table.reviewerId, table.createdAt.desc())
+      .where(sql`outcome IN ('weak', 'unanswered')`),
+  ],
+);
+
 export const conversationMessages = pgTable(
   "conversation_messages",
   {

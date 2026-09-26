@@ -299,3 +299,10 @@
 - Also: reflection ownership marker (person_edited_at), re-analysis keeps results of failed steps, signals replaced not added, analysis re-queued on closing-turn retry, DM-only routing for Slack/Teams, send-time pause check, `web` platform for demo/reflections, outbox row-lock claim
 - 16 new tests (mutation-checked where it matters); 292 API tests, 16/16 typecheck; 36 migrations apply to an empty DB
 - Next: step 6 (sweeper, incomplete, theme outcomes, single LLM call per turn)
+
+## 2026-09-26: Step 6 done (sweeper, partial feedback, theme outcomes, one LLM call per turn)
+- Part 1 b9cdb46: 5-minute sweeper (stale -> incomplete, re-send, re-queue inbound/turns/analysis), is_partial (0036) excluded from averages, Partial badge in web, "stop" ends open conversation
+- Part 2: conversation_theme_outcomes (0037), lib/turn-planner.ts single structured call with rules in code, LLM-outage fallback (length judgement + theme's own phrasing), opening fallback
+- Finding: message caps (4-5) bind before the follow-up cap; at most two answers per conversation. Flagged to Nick, revisit with beta data
+- 21 new tests (mutation-checked: turn bump, follow-up cap); 324 API tests, 16/16 typecheck
+- Not done: prompt never run against the real model (no local API key). Next: step 6 review, then step 7 (encrypt existing data)
