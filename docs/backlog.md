@@ -48,6 +48,9 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Technical debt
 
+- `pnpm tenant:fleet migrate` runs migrations under the Postgres service's variables, which lack `REVIEWER_PSEUDONYM_SECRET`, so migration 0043 would refuse on a tenant with feedback rows. Deployed tenants migrate at API boot with the secret, so this only affects the fleet tool. Fix: run it through the API service, or pass the secret (found 2026-09-26).
+- Local Postgres (Docker bind mount on macOS) occasionally fails `CREATE DATABASE` under heavy parallel load with "could not open file ... Permission denied". Intermittent, environmental; seen twice on 2026-09-26.
+
 
 - Read-only Postgres role for the web app.
 - Parity tests for endpoints migrated to direct reads; auth matrix tests.

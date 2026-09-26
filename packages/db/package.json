@@ -36,11 +36,12 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && rm -rf dist/migrations && cp -R src/migrations dist/migrations",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
+    "migrate": "tsx src/migrate-cli.ts",
+    "migrate:kit": "drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "seed:defaults": "tsx src/seed-defaults.ts",
