@@ -8,6 +8,8 @@ import type {
   EmbeddingResponse,
   LLMProvider,
   LLMGatewayConfig,
+  LLMToolLoopRequest,
+  LLMToolLoopResponse,
 } from "./types.js";
 import { AnthropicAdapter } from "./providers/anthropic.js";
 import { OpenAICompatAdapter } from "./providers/openai-compat.js";
@@ -79,6 +81,26 @@ export class LLMGateway {
       }),
     ]).finally(() => clearTimeout(timer));
     return result;
+  }
+
+  /**
+   * Completion with client-side tools, looping until the model answers.
+   * Anthropic only for now; other providers throw.
+   */
+  async completeWithTools(request: LLMToolLoopRequest, provider?: LLMProvider): Promise<LLMToolLoopResponse> {
+    if (!request.messages?.length) throw new Error("LLM completion request must have at least one message");
+    if (request.maxTokens && request.maxTokens > MAX_TOKENS_CAP) request = { ...request, maxTokens: MAX_TOKENS_CAP };
+    const target = provider ?? this.defaultProvider;
+    const adapter = this.providers.get(target);
+    if (!adapter?.completeWithTools) throw new Error(`Provider ${target} does not support tool use`);
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      adapter.completeWithTools(request),
+      new Promise<never>((_, reject) => {
+        // Several model calls in one loop, each of which may think.
+        timer = setTimeout(() => reject(new Error("LLM tool loop timed out after 180s")), 180_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
   }
 
   async embed(

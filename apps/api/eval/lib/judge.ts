@@ -69,19 +69,24 @@ function describe(snapshot: Snapshot, trace: PlanTrace): string {
   ].join("\n");
 }
 
-export async function judgeTurn(judge: Backend, snapshot: Snapshot, trace: PlanTrace): Promise<JudgeScores> {
+export async function judgeTurn(judge: Backend, snapshot: Snapshot, trace: PlanTrace, tier: "advanced" | "standard" = "advanced"): Promise<JudgeScores> {
+  return judgeDescription(judge, describe(snapshot, trace), tier);
+}
+
+/** Judge any described turn against the fixed rubric, with the given judge model tier. */
+export async function judgeDescription(judge: Backend, description: string, tier: "advanced" | "standard" = "advanced"): Promise<JudgeScores> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await judge.complete({
-        tier: "advanced",
+        tier,
         effort: "medium",
         maxTokens: 400,
         jsonMode: true,
         jsonSchema: JUDGE_SCHEMA,
         messages: [
           { role: "system", content: RUBRIC },
-          { role: "user", content: describe(snapshot, trace) },
+          { role: "user", content: description },
         ],
       });
       return scoresSchema.parse(JSON.parse(res.content));

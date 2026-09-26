@@ -7,6 +7,8 @@ import type {
   LLMCompletionRequest,
   LLMCompletionResponse,
   LLMMessage,
+  LLMToolLoopRequest,
+  LLMToolLoopResponse,
 } from "../types.js";
 
 export class AnthropicAdapter implements LLMProviderAdapter {
@@ -50,6 +52,69 @@ export class AnthropicAdapter implements LLMProviderAdapter {
       latencyMs,
       stopReason: response.stop_reason ?? undefined,
     };
+  }
+
+  /**
+   * Manual tool loop (the documented pattern): each response is passed back
+   * unchanged, thinking blocks included, which models with preserved
+   * thinking (Opus 5.5) require.
+   */
+  async completeWithTools(request: LLMToolLoopRequest): Promise<LLMToolLoopResponse> {
+    const model = this.models[request.tier];
+    const base = buildAnthropicRequest(request, model);
+    const tools: Anthropic.Tool[] = request.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+    }));
+    const messages: Anthropic.MessageParam[] = [...base.messages];
+    const toolCalls: LLMToolLoopResponse["toolCalls"] = [];
+    const maxRounds = request.maxToolRounds ?? 4;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    const start = performance.now();
+
+    for (let round = 1; round <= maxRounds + 1; round++) {
+      const response = await this.client.messages.create({ ...base, messages, tools });
+      inputTokens += response.usage.input_tokens;
+      outputTokens += response.usage.output_tokens;
+      const uses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+
+      if (response.stop_reason !== "tool_use" || uses.length === 0) {
+        let content = response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+        if (request.jsonMode) content = stripCodeFences(content);
+        return {
+          content,
+          usage: { inputTokens, outputTokens },
+          model: response.model,
+          latencyMs: Math.round(performance.now() - start),
+          stopReason: response.stop_reason ?? undefined,
+          toolCalls,
+          rounds: round,
+        };
+      }
+      if (round > maxRounds) break;
+
+      messages.push({ role: "assistant", content: response.content });
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const use of uses) {
+        let output: string;
+        let isError = false;
+        try {
+          output = await request.runTool(use.name, use.input);
+        } catch (err) {
+          output = `Tool error: ${err instanceof Error ? err.message : String(err)}`;
+          isError = true;
+        }
+        toolCalls.push({ name: use.name, input: use.input, output });
+        results.push({ type: "tool_result", tool_use_id: use.id, content: output, ...(isError ? { is_error: true } : {}) });
+      }
+      messages.push({ role: "user", content: results });
+    }
+    throw new Error(`Tool loop still calling tools after ${maxRounds} rounds`);
   }
 
 }

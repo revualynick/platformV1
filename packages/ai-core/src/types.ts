@@ -36,6 +36,27 @@ export interface LLMCompletionResponse {
   stopReason?: string;
 }
 
+/** A client-side tool the model may call during a completion. */
+export interface LLMTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+export interface LLMToolLoopRequest extends LLMCompletionRequest {
+  tools: LLMTool[];
+  /** Runs one tool call; the returned text goes back to the model. */
+  runTool(name: string, input: unknown): Promise<string>;
+  /** Tool rounds before giving up (default 4). */
+  maxToolRounds?: number;
+}
+
+export interface LLMToolLoopResponse extends LLMCompletionResponse {
+  toolCalls: Array<{ name: string; input: unknown; output: string }>;
+  /** Model calls made (1 = answered without tools). */
+  rounds: number;
+}
+
 export interface LLMProviderConfig {
   provider: LLMProvider;
   apiKey: string;
@@ -51,6 +72,9 @@ export interface LLMProviderAdapter {
   readonly provider: LLMProvider;
 
   complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse>;
+
+  /** Completion with client-side tools. Optional: not every provider supports it. */
+  completeWithTools?(request: LLMToolLoopRequest): Promise<LLMToolLoopResponse>;
 }
 
 export interface LLMGatewayConfig {

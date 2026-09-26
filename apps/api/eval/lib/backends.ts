@@ -52,7 +52,7 @@ export interface CallRecord {
   error?: string;
 }
 
-export interface Backend extends Pick<LLMGateway, "complete"> {
+export interface Backend extends Pick<LLMGateway, "complete" | "completeWithTools"> {
   name: BackendName;
   calls: CallRecord[];
   /** Spend so far on the API (0 for the CLI). */
@@ -113,6 +113,29 @@ export function apiBackend(apiKey: string, opts: BackendOptions): Backend {
         throw err;
       }
     },
+    async completeWithTools(request) {
+      if (opts.budgetUsd !== undefined && spent() >= opts.budgetUsd) {
+        throw new Error(`API budget of $${opts.budgetUsd} reached ($${spent().toFixed(4)} spent)`);
+      }
+      const model = models[request.tier];
+      const started = Date.now();
+      try {
+        const res = await gateway.completeWithTools(withNeutraliser(request, opts.neutralise) as typeof request);
+        const [inP, outP] = PRICES[model] ?? [5, 25];
+        calls.push({
+          backend: "api",
+          model,
+          latencyMs: Date.now() - started,
+          inputTokens: res.usage.inputTokens,
+          outputTokens: res.usage.outputTokens,
+          costUsd: (res.usage.inputTokens * inP + res.usage.outputTokens * outP) / 1e6,
+        });
+        return res;
+      } catch (err) {
+        calls.push({ backend: "api", model, latencyMs: Date.now() - started, inputTokens: 0, outputTokens: 0, costUsd: 0, error: String(err) });
+        throw err;
+      }
+    },
   };
 }
 
@@ -141,6 +164,9 @@ export function cliBackend(opts: CliOptions): Backend {
         calls.push({ backend: "cli", model, latencyMs: Date.now() - started, inputTokens: 0, outputTokens: 0, costUsd: 0, error: String(err) });
         throw err;
       }
+    },
+    async completeWithTools() {
+      throw new Error("claude -p backend does not support our tools; use the api backend");
     },
   };
 }

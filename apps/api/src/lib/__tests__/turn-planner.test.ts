@@ -45,7 +45,7 @@ describe("planTurn", () => {
     expect(calls[0].jsonMode).toBe(true);
     // The judgement sees the question that was answered, not just the reply.
     expect(calls[0].messages.map((m) => m.content)).toContain("How has Sam been to work with?");
-    expect(result).toEqual({ action: "follow_up", quality: "weak", question: "Could you give an example?", judgedBy: "llm" });
+    expect(result).toEqual({ action: "follow_up", quality: "weak", question: "Could you give an example?", judgedBy: "llm", concern: "none" });
   });
 
   it("caps follow-ups per theme: a second one moves on, with the next theme's own question", async () => {
@@ -57,12 +57,17 @@ describe("planTurn", () => {
   it("closes when there is no next theme to move to", async () => {
     const { gateway } = llm(plan("next_theme", "Next?", "answered"));
     const result = await planTurn(gateway, input({ nextTheme: null }), { logger: quiet });
-    expect(result).toEqual({ action: "close", quality: "answered", question: null, judgedBy: "llm" });
+    expect(result).toEqual({ action: "close", quality: "answered", question: null, judgedBy: "llm", concern: "none" });
   });
 
   it("closes at the message cap whatever the model proposes", async () => {
     const { gateway } = llm(plan("follow_up"));
     expect((await planTurn(gateway, input({ canContinue: false }), { logger: quiet })).action).toBe("close");
+  });
+
+  it("passes the model's concern through, so the turn can be routed", async () => {
+    const { gateway } = llm(JSON.stringify({ quality: "answered", action: "follow_up", question: "Tell me more?", concern: "wellbeing" }));
+    expect((await planTurn(gateway, input(), { logger: quiet })).concern).toBe("wellbeing");
   });
 
   it("verbatim questionnaires ask the next theme exactly as written", async () => {
@@ -88,7 +93,7 @@ describe("planTurn", () => {
       const { gateway, calls } = llm(new Error("down"), new Error("down"));
       const result = await planTurn(gateway, input(), { logger: quiet });
       expect(calls).toHaveLength(2);
-      expect(result).toEqual({ action: "next_theme", quality: "weak", question: "Where could Sam grow next?", judgedBy: "fallback" });
+      expect(result).toEqual({ action: "next_theme", quality: "weak", question: "Where could Sam grow next?", judgedBy: "fallback", concern: "none" });
     });
 
     it("treats invalid output the same as an outage", async () => {
@@ -100,7 +105,7 @@ describe("planTurn", () => {
       const { gateway } = llm(new Error("down"), new Error("down"));
       const reply = "Sam led the incident review calmly and wrote a clear, specific plan everyone could follow";
       const result = await planTurn(gateway, input({ reply, nextTheme: null }), { logger: quiet });
-      expect(result).toEqual({ action: "close", quality: "answered", question: null, judgedBy: "fallback" });
+      expect(result).toEqual({ action: "close", quality: "answered", question: null, judgedBy: "fallback", concern: "none" });
     });
   });
 });
