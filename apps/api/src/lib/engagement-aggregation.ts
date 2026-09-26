@@ -87,13 +87,33 @@ export async function recomputeWeeklyEngagement(
     });
 }
 
-/** Default weekly interactions; must match the scheduler's default. */
-export const DEFAULT_WEEKLY_TARGET = 2;
+/**
+ * Weekly contact, kept low so the bot is never a nuisance (Nick,
+ * 2026-09-26): one check-in about a peer, and one or two personal ones
+ * (self-reflection or pulse). The person's weeklyInteractionTarget is the
+ * total, clamped to what that allows (2 or 3).
+ */
+export const PEER_PER_WEEK = 1;
+export const MAX_PERSONAL_PER_WEEK = 2;
+export const DEFAULT_WEEKLY_TARGET = PEER_PER_WEEK + 1;
 
-/** The user's own weekly target (preferences), the scheduler's source of truth. */
-export function weeklyTarget(preferences: unknown): number {
+export interface WeeklyQuota {
+  peer: number;
+  personal: number;
+}
+
+/** The user's weekly quota, from their preferences: the scheduler's source of truth. */
+export function weeklyQuota(preferences: unknown): WeeklyQuota {
   const t = (preferences as { weeklyInteractionTarget?: unknown } | null)?.weeklyInteractionTarget;
-  return typeof t === "number" && Number.isInteger(t) && t > 0 ? t : DEFAULT_WEEKLY_TARGET;
+  const total = typeof t === "number" && Number.isInteger(t) ? t : DEFAULT_WEEKLY_TARGET;
+  const personal = Math.min(MAX_PERSONAL_PER_WEEK, Math.max(1, total - PEER_PER_WEEK));
+  return { peer: PEER_PER_WEEK, personal };
+}
+
+/** Total interactions a week (engagement targets, nudges): the quota's sum. */
+export function weeklyTarget(preferences: unknown): number {
+  const q = weeklyQuota(preferences);
+  return q.peer + q.personal;
 }
 
 async function weeklyTargetFor(db: TenantDb, userId: string): Promise<number> {

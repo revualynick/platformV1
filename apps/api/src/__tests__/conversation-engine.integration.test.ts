@@ -526,17 +526,17 @@ describe.skipIf(!dbUp)("conversation engine (integration)", () => {
     it("runs a whole conversation from Postgres alone (no Redis state anywhere)", async () => {
       const convId = await start();
       // Fresh deps per turn: nothing survives between turns except the DB.
-      // A peer review closes after its fourth message (the cap is five).
+      // A peer review allows three exchanges, then closes (seven messages).
       const statuses: string[] = [];
-      for (const text of ["One", "Two"]) {
+      for (const text of ["One", "Two", "Three"]) {
         const fresh = { ...deps };
         await appendUserMessage(db, convId, text);
         statuses.push((await processTurn(db, fresh, convId)).status);
       }
-      expect(statuses).toEqual(["replied", "closed"]);
+      expect(statuses).toEqual(["replied", "replied", "closed"]);
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, convId));
-      expect(conv).toMatchObject({ turn: 2, status: "closed", messageCount: 5 });
-      expect((await messages(convId)).map((m) => m.role)).toEqual(["assistant", "user", "assistant", "user", "assistant"]);
+      expect(conv).toMatchObject({ turn: 3, status: "closed", messageCount: 7 });
+      expect((await messages(convId)).map((m) => m.role)).toEqual(["assistant", "user", "assistant", "user", "assistant", "user", "assistant"]);
     });
 
     it("in-process replies (web demo) return the bot's answer without any adapter", async () => {

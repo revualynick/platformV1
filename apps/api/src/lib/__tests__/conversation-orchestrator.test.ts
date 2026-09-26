@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   stripControlChars,
   getMaxMessages,
+  getMaxExchanges,
   getClosingMessage,
 } from "../conversation-orchestrator.js";
 
@@ -57,24 +58,17 @@ describe("stripControlChars", () => {
 });
 
 describe("getMaxMessages", () => {
-  it("returns 5 for peer_review", () => {
-    expect(getMaxMessages("peer_review")).toBe(5);
+  // At most three back-and-forths (two for pulse checks), plus the close.
+  it("allows three exchanges for peer reviews, 360s and reflections", () => {
+    for (const type of ["peer_review", "three_sixty", "self_reflection"] as const) {
+      expect(getMaxExchanges(type)).toBe(3);
+      expect(getMaxMessages(type)).toBe(7);
+    }
   });
 
-  it("returns 4 for self_reflection", () => {
-    expect(getMaxMessages("self_reflection")).toBe(4);
-  });
-
-  it("returns 5 for three_sixty", () => {
-    expect(getMaxMessages("three_sixty")).toBe(5);
-  });
-
-  it("returns 3 for pulse_check", () => {
-    expect(getMaxMessages("pulse_check")).toBe(3);
-  });
-
-  it("returns 4 for unknown interaction type", () => {
-    expect(getMaxMessages("unknown" as never)).toBe(4);
+  it("keeps pulse checks to two exchanges", () => {
+    expect(getMaxExchanges("pulse_check")).toBe(2);
+    expect(getMaxMessages("pulse_check")).toBe(5);
   });
 });
 

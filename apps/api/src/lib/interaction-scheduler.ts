@@ -15,6 +15,7 @@ import type { InteractionType, ChatPlatform } from "@revualy/shared";
 import { findBestSlot } from "./availability.js";
 import { buildJobId } from "./job-ids.js";
 import { pickSubjectFromMeetings } from "./meeting-anchor.js";
+import { weeklyQuota, type WeeklyQuota } from "./engagement-aggregation.js";
 
 /**
  * Run the daily scheduling pass for an org.
@@ -86,19 +87,15 @@ export async function runSchedulingPass(
       quietDays?: number[];
     } | null;
 
-    const target = prefs?.weeklyInteractionTarget ?? 2;
     const existing = scheduleByUser.get(user.id) ?? [];
-    const remaining = target - existing.length;
-
-    if (remaining <= 0) {
+    const interactionType = selectInteractionType(existing, weeklyQuota(user.preferences));
+    if (!interactionType) {
       skipped++;
       continue;
     }
 
     const quietDays = prefs?.quietDays ?? [0, 6]; // default: weekends off
 
-    // Select interaction type (rotate: peer_review → self_reflection → peer_review)
-    const interactionType = selectInteractionType(existing);
 
     // Select questionnaire (prefer team-scoped for this user's team)
     const questionnaire = selectQuestionnaire(availableQuestionnaires, interactionType, user.teamId);
@@ -226,20 +223,18 @@ export async function runSchedulingPass(
 
 // ── Interaction type selection ───────────────────────────
 
-function selectInteractionType(
+/**
+ * What to schedule next this week within the quota: the one peer check-in
+ * first, then personal ones; null when the week is full.
+ */
+export function selectInteractionType(
   existing: Array<{ interactionType: string }>,
-): InteractionType {
-  const typeCounts = new Map<string, number>();
-  existing.forEach((e) => {
-    typeCounts.set(e.interactionType, (typeCounts.get(e.interactionType) ?? 0) + 1);
-  });
-
-  // Prefer peer_review, mix in self_reflection every other time
-  const peerCount = typeCounts.get("peer_review") ?? 0;
-  const selfCount = typeCounts.get("self_reflection") ?? 0;
-
-  if (selfCount === 0 && peerCount > 0) return "self_reflection";
-  return "peer_review";
+  quota: WeeklyQuota,
+): InteractionType | null {
+  const count = (types: string[]) => existing.filter((e) => types.includes(e.interactionType)).length;
+  if (count(["peer_review", "three_sixty"]) < quota.peer) return "peer_review";
+  if (count(["self_reflection", "pulse_check"]) < quota.personal) return "self_reflection";
+  return null;
 }
 
 // ── Subject selection ────────────────────────────────────

@@ -99,7 +99,8 @@ export const updateUserSchema = z.object({
   preferences: z
     .object({
       preferredInteractionTime: z.string().max(10).optional(),
-      weeklyInteractionTarget: z.number().int().min(1).max(10).optional(),
+      // Total check-ins a week: one peer plus one or two personal (see weeklyQuota).
+      weeklyInteractionTarget: z.number().int().min(2).max(3).optional(),
       quietDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     })
     .optional(),

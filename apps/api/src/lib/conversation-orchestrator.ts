@@ -506,7 +506,8 @@ export async function processTurn(
       if (currentTheme) {
         await recordThemeJudged(tx, conv, currentTheme.id, {
           outcome: plan.quality,
-          followUpCount: next.followUpCount,
+          // Follow-ups spent on THIS theme (next.followUpCount resets when moving on).
+          followUpCount: conv.followUpCount + (plan.action === "follow_up" ? 1 : 0),
           judgedBy: plan.judgedBy,
         });
       }
@@ -834,19 +835,17 @@ Rules:
 
 // ── Utilities ────────────────────────────────────────────
 
+/**
+ * Back-and-forths (a question and its answer) per check-in: at most three,
+ * so a conversation stays short (Nick, 2026-09-26); pulse checks two.
+ */
+export function getMaxExchanges(type: InteractionType): number {
+  return type === "pulse_check" ? 2 : 3;
+}
+
+/** Messages before the close: every exchange, plus the closing message. */
 export function getMaxMessages(type: InteractionType): number {
-  switch (type) {
-    case "peer_review":
-      return 5;
-    case "self_reflection":
-      return 4;
-    case "three_sixty":
-      return 5;
-    case "pulse_check":
-      return 3;
-    default:
-      return 4;
-  }
+  return getMaxExchanges(type) * 2 + 1;
 }
 
 /**

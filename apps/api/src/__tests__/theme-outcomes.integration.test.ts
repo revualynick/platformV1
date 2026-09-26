@@ -151,29 +151,30 @@ describe.skipIf(!dbUp)("theme outcomes and single-call turns (integration)", () 
   });
 
   it("judges each theme, and marks themes the conversation never reached unanswered", async () => {
-    // A self-reflection allows 4 messages: opening, answer, one more
-    // question, answer. So after a follow-up the message cap closes it,
-    // whatever the model proposes, and themes 2 and 3 are never asked.
+    // Three exchanges at most: a follow-up on theme 1, a move to theme 2,
+    // then the cap closes the conversation before theme 3 is asked.
     const { llm, calls } = scripted([
       { quality: "weak", action: "follow_up", question: "Could you give an example?" },
-      { quality: "answered", action: "next_theme", question: "Next?" },
+      { quality: "answered", action: "next_theme", question: "What got in your way this week?" },
+      { quality: "answered", action: "next_theme", question: "Never asked?" },
     ]);
     const convId = await begin(llm);
-    for (const text of ["ok", "Shipped the audit fix"]) {
+    for (const text of ["ok", "Shipped the audit fix", "A flaky test suite"]) {
       await appendUserMessage(db, convId, text);
       await processTurn(db, deps(llm), convId);
     }
 
     // One call to open, then exactly one per turn.
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     expect(await botMessages(convId)).toEqual([
       expect.stringContaining("Opening question?"),
       "Could you give an example?",
+      "What got in your way this week?",
       expect.stringMatching(/reflection/i), // closing message
     ]);
     expect(await outcomes(convId)).toEqual([
       { outcome: "answered", followUps: 1, asked: "Opening question?", by: "llm", subjectId: null },
-      { outcome: "unanswered", followUps: 0, asked: null, by: null, subjectId: null },
+      { outcome: "answered", followUps: 0, asked: "What got in your way this week?", by: "llm", subjectId: null },
       { outcome: "unanswered", followUps: 0, asked: null, by: null, subjectId: null },
     ]);
   });
