@@ -49,3 +49,6 @@ e2e/shots-mobile/
 
 # Evaluation harness output (runs on the Linux box)
 apps/api/eval/results/
+
+# Tenant provisioning state (identifiers and progress, no secrets)
+scripts/tenant/state/

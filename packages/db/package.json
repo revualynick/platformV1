@@ -39,6 +39,7 @@
     "migrate": "drizzle-kit migrate",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
+    "seed:defaults": "tsx src/seed-defaults.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
