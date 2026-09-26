@@ -3,6 +3,7 @@ import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
 import { checkinJobs, conversations, conversationMessages, inboundMessages } from "@revualy/db";
 import { buildJobId } from "./job-ids.js";
+import { expireTickets } from "./tickets/prepare.js";
 import {
   OPEN_STATUSES,
   deliverOutbox,
@@ -27,6 +28,9 @@ import {
  *                  result -> re-queued
  *  6. check-in jobs: claimed by the scheduler but never used (the initiate
  *                  job failed for good), past their expiry -> expired
+ *  7. tickets:     any ticket past its expiry (prepared but never used,
+ *                  stuck open, done but never written back) -> expired,
+ *                  context wiped
  *
  * Re-queued jobs get an hourly job id suffix: at most one retry per item
  * per hour (the original job id may still sit in BullMQ's failed set,
@@ -50,6 +54,7 @@ export interface SweepResult {
   turnsRequeued: number;
   analysisRequeued: number;
   jobsExpired: number;
+  ticketsExpired: number;
   errors: number;
 }
 
@@ -68,6 +73,7 @@ export async function runSweep(
     turnsRequeued: 0,
     analysisRequeued: 0,
     jobsExpired: 0,
+    ticketsExpired: 0,
     errors: 0,
   };
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
@@ -176,6 +182,9 @@ export async function runSweep(
     .where(and(eq(checkinJobs.status, "scheduled"), lt(checkinJobs.expiresAt, now)))
     .returning({ id: checkinJobs.id });
   result.jobsExpired = expired.length;
+
+  // 7. Tickets past their expiry, whatever state they were stuck in.
+  result.ticketsExpired = await expireTickets(db, now);
 
   return result;
 }

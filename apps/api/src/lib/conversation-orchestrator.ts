@@ -1,21 +1,15 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
-import {
-  conversations,
-  conversationMessages,
-  questionnaires,
-  questionnaireThemes,
-  users,
-  checkinJobs,
-} from "@revualy/db";
+import { conversations, conversationMessages, users, checkinJobs } from "@revualy/db";
 import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry, OutboundMessage } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import { buildJobId } from "./job-ids.js";
-import { planTurn, themeQuestion, type ThemeInfo } from "./turn-planner.js";
+import { planTurn, themeQuestion } from "./turn-planner.js";
 import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
-import { meetingLabel, resolveAnchor } from "./meeting-anchor.js";
+import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
+import { openTicket, openTicketForConversation } from "./tickets/reader.js";
 
 /**
  * Conversation engine. All conversation state lives in Postgres (the
@@ -40,6 +34,11 @@ export interface OrchestratorDeps {
   llm: LLMGateway;
   adapters: AdapterRegistry;
   analysisQueue: Queue;
+  /**
+   * The job agent's model (proposes each ticket's context; the policy gate
+   * decides). Absent: every ticket gets the deterministic default.
+   */
+  ticketAgent?: Pick<LLMGateway, "complete">;
 }
 
 type Conversation = typeof conversations.$inferSelect;
@@ -109,65 +108,39 @@ export async function initiateConversation(
     if (open) return { status: "skipped", reason: "open_conversation", openConversationId: open.id };
   }
 
-  const [[questionnaire], themes, [reviewer], [subject]] = await Promise.all([
-    db.select().from(questionnaires).where(eq(questionnaires.id, params.questionnaireId)),
-    db
-      .select()
-      .from(questionnaireThemes)
-      .where(eq(questionnaireThemes.questionnaireId, params.questionnaireId))
-      .orderBy(questionnaireThemes.sortOrder),
-    db.select().from(users).where(eq(users.id, params.reviewerId)),
-    db.select().from(users).where(eq(users.id, params.subjectId)),
-  ]);
+  // ── Job side: prepare the ticket (policy gate decides what goes in) ──
+  const now = new Date();
+  const prepared = await prepareTicket(
+    db,
+    {
+      reviewerId: params.reviewerId,
+      subjectId: params.subjectId,
+      interactionType: params.interactionType,
+      questionnaireId: params.questionnaireId,
+      anchorEventId: params.anchorEventId,
+      checkinJobId: params.checkinJobId,
+      now,
+    },
+    { agent: deps.ticketAgent },
+  );
 
-  if (!questionnaire) {
-    throw Object.assign(new Error("Questionnaire not found"), { statusCode: 404 });
-  }
-  if (!reviewer) {
-    throw Object.assign(new Error("Reviewer not found"), { statusCode: 404 });
-  }
-  if (!subject) {
-    throw Object.assign(new Error("Subject not found"), { statusCode: 404 });
-  }
-
-  // 2-3 themes per conversation (not all of them every time).
-  const maxThemes = Math.min(themes.length, params.interactionType === "self_reflection" ? 3 : 2);
-  const selectedThemes = themes.slice(0, maxThemes);
+  // ── Chat side: from here on, context comes only from the ticket ──
+  const ticket = await openTicket(db, prepared.ticketId);
+  if (!ticket) throw new Error("Ticket was not prepared");
+  const ctx = ticket.context;
+  const anchorLabel = ctx.meeting;
+  const anchorFocus = ctx.meetingFocus;
+  const selectedThemes = ctx.themes;
 
   // Deterministic intro (what this is, how long, where answers go: the
   // privacy line must never be LLM-paraphrased) + the first question.
-  // The meeting to open with, for peer check-ins (re-checked at send time).
-  const now = new Date();
-  const anchor =
-    params.interactionType === "peer_review" || params.interactionType === "three_sixty"
-      ? await resolveAnchor(db, params.reviewerId, params.subjectId, params.anchorEventId, now)
-      : null;
-  // The calendar model's job counts only while its meeting is still the
-  // anchor. Its focus is used only when the title may be repeated too: a
-  // focus drawn from a title that must not be repeated should not steer
-  // the questions either.
-  const [job] =
-    anchor && params.checkinJobId
-      ? await db
-          .select({ anchorEventId: checkinJobs.anchorEventId, subjectId: checkinJobs.subjectId, titleSafe: checkinJobs.titleSafe, focus: checkinJobs.focus })
-          .from(checkinJobs)
-          .where(and(eq(checkinJobs.id, params.checkinJobId), eq(checkinJobs.reviewerId, params.reviewerId)))
-      : [];
-  const jobApplies = Boolean(job && anchor && job.anchorEventId === anchor.id && job.subjectId === params.subjectId);
-  const anchorLabel = anchor
-    ? meetingLabel(anchor, (subject.name ?? "your colleague").split(" ")[0], now, reviewer.timezone, {
-        allowTitle: jobApplies ? job.titleSafe : undefined,
-      })
-    : null;
-  const anchorFocus = jobApplies && job.titleSafe && job.focus.trim() ? job.focus.trim() : null;
-
   // If the model is down, ask the first theme as written rather than fail.
   const firstTheme = selectedThemes[0] ?? null;
   const firstQuestion = await generateQuestion(deps.llm, {
     theme: firstTheme,
-    verbatim: questionnaire.verbatim ?? false,
-    reviewerName: reviewer.name ?? "there",
-    subjectName: subject.name ?? "your colleague",
+    verbatim: ctx.verbatim,
+    reviewerName: ctx.reviewerFirstName,
+    subjectName: ctx.subjectFirstName,
     interactionType: params.interactionType,
     isOpening: true,
     priorMessages: [],
@@ -178,7 +151,8 @@ export async function initiateConversation(
     console.warn("[Orchestrator] opening question fell back to the theme's own wording:", err instanceof Error ? err.message : err);
     return themeQuestion(firstTheme);
   });
-  const openingQuestion = getInteractionIntro(params.interactionType, subject.name ?? "your colleague", anchorLabel ?? undefined) + firstQuestion;
+  const openingQuestion = getInteractionIntro(params.interactionType, ctx.subjectFirstName, anchorLabel ?? undefined) + firstQuestion;
+  const selectedThemeIds = prepared.selectedThemeIds;
 
   const created = await db.transaction(async (tx) => {
     const [conv] = await tx
@@ -195,24 +169,22 @@ export async function initiateConversation(
         scheduledAt: now,
         initiatedAt: now,
         lastActivityAt: now,
-        selectedThemeIds: selectedThemes.map((t) => t.id),
+        selectedThemeIds,
         currentThemeIndex: 0,
         phase: "opening",
         scheduleEntryId: params.scheduleEntryId ?? null,
-        anchorEventId: anchor?.id ?? null,
+        anchorEventId: prepared.anchorEventId,
         anchorLabel,
         anchorFocus,
       })
-      // A concurrent retry for the same schedule entry may have won.
+      // A concurrent retry for the same schedule entry may have won (its
+      // unused prepared ticket is expired by the sweeper).
       .onConflictDoNothing()
       .returning({ id: conversations.id });
     if (!conv) return null;
 
-    await tx.insert(conversationMessages).values({
-      conversationId: conv.id,
-      role: "assistant",
-      content: openingQuestion,
-    });
+    await attachTicket(tx, prepared.ticketId, conv.id);
+    await ticket.appendTurn(tx, openingQuestion);
     if (firstTheme) {
       await recordThemeAsked(
         tx,
@@ -221,7 +193,7 @@ export async function initiateConversation(
           reviewerId: params.reviewerId,
           subjectId: params.subjectId,
           interactionType: params.interactionType,
-          selectedThemeIds: selectedThemes.map((t) => t.id),
+          selectedThemeIds,
         },
         firstTheme.id,
         firstQuestion,
@@ -412,11 +384,16 @@ export async function processTurn(
     return { status: "not_open" };
   }
 
-  const history = await db
-    .select({ role: conversationMessages.role, content: conversationMessages.content, seq: conversationMessages.seq })
-    .from(conversationMessages)
-    .where(eq(conversationMessages.conversationId, conversationId))
-    .orderBy(asc(conversationMessages.seq));
+  // The chat side's context comes only from the ticket. A conversation that
+  // started before tickets existed gets one from the job side first.
+  let ticket = await openTicketForConversation(db, conversationId);
+  if (!ticket) {
+    await prepareTicketForConversation(db, conversationId);
+    ticket = await openTicketForConversation(db, conversationId);
+    if (!ticket) throw new Error(`No open ticket for conversation ${conversationId}`);
+  }
+  const ctx = ticket.context;
+  const history = await ticket.turns();
 
   const lastBot = history.reduce((max, m) => (m.role === "assistant" ? Math.max(max, m.seq) : max), 0);
   const pending = history.filter((m) => m.role === "user" && m.seq > lastBot);
@@ -430,25 +407,19 @@ export async function processTurn(
   const reply = pending.map((m) => m.content).join("\n\n");
 
   const index = conv.currentThemeIndex;
-  const [themes, [questionnaire], [subject]] = await Promise.all([
-    loadThemes(db, conv.selectedThemeIds),
-    conv.questionnaireId
-      ? db.select({ verbatim: questionnaires.verbatim }).from(questionnaires).where(eq(questionnaires.id, conv.questionnaireId))
-      : Promise.resolve([]),
-    db.select({ name: users.name }).from(users).where(eq(users.id, conv.subjectId)),
-  ]);
+  const themes = ctx.themes;
   const currentTheme = themes[index] ?? null;
   const nextTheme = themes[index + 1] ?? null;
 
   const plan = await planTurn(deps.llm, {
     interactionType,
-    subjectName: stripControlChars(subject?.name ?? "your colleague"),
-    verbatim: questionnaire?.verbatim ?? false,
+    subjectName: stripControlChars(ctx.subjectFirstName),
+    verbatim: ctx.verbatim,
     currentTheme,
     nextTheme,
     followUpsOnTheme: conv.followUpCount,
-    anchor: conv.anchorLabel ?? undefined,
-    anchorFocus: conv.anchorFocus ?? undefined,
+    anchor: ctx.meeting ?? undefined,
+    anchorFocus: ctx.meetingFocus ?? undefined,
     // Room for another question and its answer before the cap.
     canContinue: messageCount < maxMessages - 1,
     history: history.map((m) => ({ role: m.role, content: m.content })),
@@ -500,7 +471,8 @@ export async function processTurn(
         .limit(1);
       if (newer) throw new Superseded();
 
-      await tx.insert(conversationMessages).values({ conversationId, role: "assistant", content: outbound });
+      await ticket.appendTurn(tx, outbound);
+      if (closing) await ticket.markDone(tx);
 
       // How the theme just answered went, and what was asked next.
       if (currentTheme) {
@@ -548,7 +520,10 @@ export async function markIncomplete(
       .set({ status: "incomplete", closedAt: now, lastActivityAt: now, turn: sql`${conversations.turn} + 1` })
       .where(and(eq(conversations.id, conversationId), inArray(conversations.status, [...OPEN_STATUSES])))
       .returning();
-    if (updated) await recordUnreachedThemes(tx, updated);
+    if (updated) {
+      await recordUnreachedThemes(tx, updated);
+      await markTicketDoneForConversation(tx, conversationId, "incomplete", now);
+    }
     return updated;
   });
   if (!row) return false;
@@ -728,20 +703,6 @@ export async function queueAnalysis(
 // Per-tenant deployment: one org per process.
 function tenantOrgId(): string {
   return process.env.ORG_ID ?? "dev-org";
-}
-
-/**
- * The conversation's selected themes, by position. A theme deleted since
- * the conversation started is null, so later positions do not shift.
- */
-async function loadThemes(db: TenantDb, themeIds: string[]): Promise<Array<ThemeInfo | null>> {
-  if (themeIds.length === 0) return [];
-  const rows = await db.select().from(questionnaireThemes).where(inArray(questionnaireThemes.id, themeIds));
-  const byId = new Map(rows.map((t) => [t.id, t]));
-  return themeIds.map((id) => {
-    const t = byId.get(id);
-    return t ? { id: t.id, intent: t.intent, dataGoal: t.dataGoal, examplePhrasings: t.examplePhrasings } : null;
-  });
 }
 
 
