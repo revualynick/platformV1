@@ -17,8 +17,11 @@ export interface LLMMessage {
   attachments?: LLMAttachment[];
 }
 
-/** How much the model thinks (Anthropic `output_config.effort`). */
-export type EffortLevel = "low" | "medium" | "high";
+/**
+ * How much the model thinks (Anthropic `output_config.effort`). Sonnet 5 and
+ * Opus 5.5 accept all five; Opus 5.5 defaults to "medium" when unset.
+ */
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface LLMCompletionRequest {
   messages: LLMMessage[];

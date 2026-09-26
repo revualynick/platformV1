@@ -206,6 +206,22 @@ export const CONVERSATION_START = "(Conversation start.)";
 /** Extra output room for models that think before replying: thinking counts toward max_tokens. */
 export const THINKING_HEADROOM_TOKENS = 4000;
 
+/**
+ * Thinking room by effort: the default for low and medium (and unset), more
+ * for the deeper levels so a decision is not cut off mid-thought.
+ */
+export function thinkingHeadroom(effort: LLMCompletionRequest["effort"]): number {
+  switch (effort) {
+    case "high":
+      return 12_000;
+    case "xhigh":
+    case "max":
+      return 24_000;
+    default:
+      return THINKING_HEADROOM_TOKENS;
+  }
+}
+
 // Model capabilities, by id. Newer models reject sampling parameters and
 // think by default; unknown ids are treated as newer (omitting temperature
 // and adding headroom is valid everywhere; sending them is not).
@@ -234,12 +250,13 @@ export function buildAnthropicRequest(
   const replyTokens = request.maxTokens ?? 1024;
   const effort = caps.effort ? (request.effort ?? (caps.thinksByDefault ? "medium" : undefined)) : undefined;
   const outputConfig: Anthropic.OutputConfig = {
-    ...(effort ? { effort } : {}),
+    // SDK 0.76 types lack "xhigh"; the API accepts it on Sonnet 5 and Opus 5.5.
+    ...(effort ? { effort: effort as Anthropic.OutputConfig["effort"] } : {}),
     ...(request.jsonSchema ? { format: { type: "json_schema", schema: request.jsonSchema } } : {}),
   };
   return {
     model,
-    max_tokens: caps.thinksByDefault ? replyTokens + THINKING_HEADROOM_TOKENS : replyTokens,
+    max_tokens: caps.thinksByDefault ? replyTokens + thinkingHeadroom(effort) : replyTokens,
     ...(caps.sampling && request.temperature !== undefined ? { temperature: request.temperature } : {}),
     ...(Object.keys(outputConfig).length ? { output_config: outputConfig } : {}),
     ...(systemPrompt ? { system: systemPrompt } : {}),

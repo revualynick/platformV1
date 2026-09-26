@@ -34,3 +34,16 @@ Tests the bot's LLM calls with real models. Runs on the Linux box (see
 
 The API key comes from `$ANTHROPIC_API_KEY` or `~/.config/revualy-eval/anthropic.env`
 on the box. Never commit it.
+
+## decide() calibration
+
+`decide-calibration.ts` runs the concern decision through `decide()`
+(packages/ai-core) over the snapshots, rewrites and topic grid, and reports
+accuracy per confidence band, a threshold sweep for "accept none only above
+t", and agreement with the turn planner's flag. See
+`docs/design/typed-decisions.md`.
+
+    pnpm exec tsx eval/decide-calibration.ts --dry-run          # fake model, no key, no cost
+    pnpm exec tsx eval/decide-calibration.ts --repeats 3 --budget 5 --planner
+    pnpm exec tsx eval/decide-calibration.ts --configs standard:medium,advanced:high --repeats 3 --budget 15 \
+      --planner-results eval/results/e2e-<stamp>/results.json
