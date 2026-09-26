@@ -24,6 +24,11 @@ type CalendarEvent = typeof calendarEvents.$inferSelect;
 const SENSITIVE_TITLE =
   /\b(hr|people team|disciplinary|grievance|investigation|performance review|performance improvement|pip|probation|appraisal|salary|pay|compensation|bonus|promotion|redundan\w*|restructur\w*|termination|dismissal|exit|offboarding|resignation|notice|interview|candidate|hiring|medical|doctor|dentist|gp|therapy|counsell?ing|health|sick|leave|maternity|paternity|personal|private|confidential|legal|lawyer|complaint|1:1|1-1|one[- ]to[- ]one|1on1|catch[- ]?up with)\b/i;
 
+/** True when free text (a title, or the calendar model's focus) touches a sensitive subject. */
+export function looksSensitive(text: string): boolean {
+  return SENSITIVE_TITLE.test(text);
+}
+
 /** The title when it is safe to repeat in a chat message, else null. */
 export function safeMeetingTitle(title: string, attendeeCount: number): string | null {
   const t = title.trim().replace(/\s+/g, " ");
@@ -71,14 +76,27 @@ export async function resolveAnchor(
   return findSharedMeeting(db, reviewerId, subjectId, now);
 }
 
-/** How the meeting is described to the reviewer. */
-export function meetingLabel(event: Pick<CalendarEvent, "title" | "attendees" | "startAt">, subjectFirstName: string, now: Date, timeZone: string): string {
-  const title = safeMeetingTitle(event.title, event.attendees.length);
+/**
+ * How the meeting is described to the reviewer. `allowTitle: false` forces
+ * the generic label (the calendar model judged the title unsafe to repeat).
+ */
+export function meetingLabel(
+  event: Pick<CalendarEvent, "title" | "attendees" | "startAt">,
+  subjectFirstName: string,
+  now: Date,
+  timeZone: string,
+  opts: { allowTitle?: boolean } = {},
+): string {
+  const title = opts.allowTitle === false ? null : safeMeetingTitle(event.title, event.attendees.length);
   const when = whenLabel(event.startAt, now, timeZone);
   return title ? `the "${title}" call ${when}` : `your call with ${subjectFirstName} ${when}`;
 }
 
-function usable(event: CalendarEvent, emails: string[]): boolean {
+/** Whether a meeting can anchor a check-in for everyone in `emails` (recency is checked by the callers' queries). */
+export function usable(
+  event: Pick<CalendarEvent, "attendees" | "declined" | "visibility" | "startAt" | "endAt">,
+  emails: string[],
+): boolean {
   const lower = (xs: string[]) => xs.map((x) => x.toLowerCase());
   const attendees = lower(event.attendees);
   const declined = lower(event.declined);
@@ -93,7 +111,7 @@ function usable(event: CalendarEvent, emails: string[]): boolean {
 }
 
 /** The reviewer's recent meetings, newest first (their own calendar only). */
-async function recentMeetings(db: TenantDb, reviewerId: string, now: Date): Promise<CalendarEvent[]> {
+export async function recentMeetings(db: TenantDb, reviewerId: string, now: Date): Promise<CalendarEvent[]> {
   const since = new Date(now.getTime() - ANCHOR_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   return db
     .select()

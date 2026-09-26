@@ -315,3 +315,10 @@
 - Agreed loop roles: employee qwen3:8b (local Ollama), bot claude-sonnet-5 via claude -p, judge + designer Opus 5.5; loop agent runs --no-sandbox; code copied over ssh, not GitHub
 - Next: build the harness (not started)
 - Test API key (7-day) stored on the box at ~/.config/revualy-eval/anthropic.env (600); first real calls: Sonnet 5 structured output works, ~3 s, ~$0.0014 per turn
+
+## 2026-09-26: Calendar model built (uncommitted)
+- 0039: `checkin_jobs` (proposals, encrypted reason/focus, CHECKs, unique reviewer/subject/event, lookup index) + `conversations.anchor_focus`
+- `lib/calendar-model.ts`: Haiku structured call on titles/times/durations/attendees (first name + P-number, guests as count); code gate on every proposal; rejected rows kept with reason; one retry then nothing
+- Cron 03:00 UTC on the scheduler queue (single worker, so the 04:00 pass waits); scheduler claims best proposed job first; focus loaded by job id at send time, used only when the title is safe too
+- 22 new tests (gate rules mutation-checked); 375 API tests, 16/16 typecheck; eval/calendar-model.ts written, not run
+- Open for Nick: jobs per person per week, priority rules, whether focus should be dropped when title is hidden

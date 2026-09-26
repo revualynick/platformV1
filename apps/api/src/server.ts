@@ -312,6 +312,15 @@ async function start() {
     }
   }
 
+  // Calendar model: daily at 03:00 UTC, an hour before the scheduling pass,
+  // so its proposals are ready when the pass looks for them. Same queue and
+  // a single worker, so the pass waits if this runs long.
+  await queues.schedulerQueue.add(
+    "calendar-model",
+    { orgId: cronOrgId },
+    { repeat: { pattern: "0 3 * * *" }, jobId: "calendar-model-cron" },
+  );
+
   // Interaction scheduler: daily at 04:00 UTC. Each conversation is timed
   // for the user's own preferred local time and skipped if that lands on
   // one of their quiet days. Running early means the preferred time is

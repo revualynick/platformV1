@@ -297,6 +297,9 @@ export const conversations = pgTable(
     // can be sensitive.
     anchorEventId: uuid("anchor_event_id").references((): AnyPgColumn => calendarEvents.id, { onDelete: "set null" }),
     anchorLabel: encryptedText("conversations", "anchor_label"),
+    // What the calendar model suggested asking about (migration 0039).
+    // Background for the bot's questions, never quoted; encrypted.
+    anchorFocus: encryptedText("conversations", "anchor_focus"),
   },
   (table) => [
     uniqueIndex("uq_conversations_schedule_entry")
@@ -774,6 +777,46 @@ export const interactionSchedule = pgTable(
     index("idx_interaction_schedule_user_id").on(table.userId),
     index("idx_interaction_schedule_scheduled_at").on(table.scheduledAt),
     index("idx_interaction_schedule_status").on(table.status),
+  ],
+);
+
+export type CheckinJobStatus = "proposed" | "scheduled" | "used" | "rejected" | "expired";
+
+/**
+ * Check-ins proposed ahead of scheduling (migration 0039): who to ask
+ * about which recent meeting, and what to focus on. The calendar model
+ * writes them nightly; the scheduler takes the best unexpired one first.
+ * Rejected proposals are kept, with the rule that rejected them, so the
+ * model can be evaluated. Reason and focus are encrypted: both are free
+ * text about named colleagues.
+ */
+export const checkinJobs = pgTable(
+  "checkin_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reviewerId: uuid("reviewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Null for self-reflection jobs, and for rejected proposals naming nobody real.
+    subjectId: uuid("subject_id").references(() => users.id, { onDelete: "cascade" }),
+    anchorEventId: uuid("anchor_event_id").references((): AnyPgColumn => calendarEvents.id, { onDelete: "set null" }),
+    interactionType: varchar("interaction_type", { length: 50 }).notNull(),
+    reason: encryptedText("checkin_jobs", "reason").notNull().default(""),
+    focus: encryptedText("checkin_jobs", "focus").notNull().default(""),
+    sensitivity: varchar("sensitivity", { length: 10 }).$type<"low" | "medium" | "high">().notNull(),
+    // The model's judgement; the title is repeated only if safeMeetingTitle() also allows it.
+    titleSafe: boolean("title_safe").notNull().default(false),
+    priority: integer("priority").notNull().default(3),
+    status: varchar("status", { length: 20 }).$type<CheckinJobStatus>().notNull().default("proposed"),
+    source: varchar("source", { length: 20 }).$type<"calendar_model" | "rules">().notNull(),
+    model: varchar("model", { length: 100 }),
+    rejectionReason: varchar("rejection_reason", { length: 50 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("uq_checkin_jobs_pair").on(table.reviewerId, table.subjectId, table.anchorEventId),
+    index("idx_checkin_jobs_lookup").on(table.reviewerId, table.status, table.priority.desc()),
   ],
 );
 

@@ -274,6 +274,13 @@
       "when": 1790420000000,
       "tag": "0038_meeting_anchors",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790430000000,
+      "tag": "0039_checkin_jobs",
+      "breakpoints": true
     }
   ]
 }

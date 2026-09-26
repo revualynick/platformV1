@@ -39,6 +39,8 @@ export interface PlanInput {
   followUpsOnTheme: number;
   /** The meeting this check-in is about ("the \"Q3 planning\" call on Wednesday"), if any. */
   anchor?: string;
+  /** The calendar model's suggested angle on that meeting ("how clearly Jon shared the numbers"). Background only, never quoted. */
+  anchorFocus?: string;
   /** False when the message cap leaves no room for another question. */
   canContinue: boolean;
   /** Conversation so far, oldest first, including the reply being answered. */
@@ -226,7 +228,8 @@ ${themeBlock("Current theme (what the last question asked about)", input.current
 
 ${themeBlock("Next theme", input.nextTheme)}
 
-${input.anchor ? `This check-in is about ${input.anchor}, which ${input.interactionType === "self_reflection" ? "they" : `they and ${input.subjectName}`} were both invited to (picked from their calendar). Keep questions grounded in it where natural. If they say they weren't there, left early or don't remember it, don't argue and don't apologise at length: ask more generally about ${input.interactionType === "self_reflection" ? "their week" : `working with ${input.subjectName} recently`} (that is not a concern).
+${input.anchor ? `This check-in is about ${input.anchor}, which ${input.interactionType === "self_reflection" ? "they" : `they and ${input.subjectName}`} were both invited to (picked from their calendar). Keep questions grounded in it where natural. If they say they weren't there, left early or don't remember it, don't argue and don't apologise at length: ask more generally about ${input.interactionType === "self_reflection" ? "their week" : `working with ${input.subjectName} recently`} (that is not a concern).${input.anchorFocus ? `
+Background for you only: a useful angle on that meeting might be "${input.anchorFocus.replace(/["\n\r]/g, " ").slice(0, 200)}". It is a suggestion made from the calendar, not something they said: let it shape a question if it fits, but never quote it, never say it was suggested, and drop it if they say otherwise.` : ""}
 
 ` : ""}Judge the person's latest reply (the final user message or messages) against the question they were answering:
 - "answered": a substantive, specific reply to that question (details or an example)

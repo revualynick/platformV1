@@ -1,4 +1,4 @@
-import { eq, and, sql, gte, lte, desc } from "drizzle-orm";
+import { eq, and, sql, gt, gte, lte, desc, isNotNull } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
 import {
@@ -9,6 +9,7 @@ import {
   userRelationships,
   questionnaires,
   userPlatformIdentities,
+  checkinJobs,
 } from "@revualy/db";
 import type { InteractionType, ChatPlatform } from "@revualy/shared";
 import { findBestSlot } from "./availability.js";
@@ -99,28 +100,6 @@ export async function runSchedulingPass(
     // Select interaction type (rotate: peer_review → self_reflection → peer_review)
     const interactionType = selectInteractionType(existing);
 
-    // Select review subject (for peer reviews): a colleague from a recent
-    // shared meeting first, so the check-in can ask about it; otherwise the
-    // strongest relationship not reviewed recently.
-    let subjectId: string | null = null;
-    let anchorEventId: string | null = null;
-    if (interactionType === "peer_review" || interactionType === "three_sixty") {
-      const anchored = await pickSubjectFromMeetings(db, user.id, await recentSubjectIds(db, user.id));
-      if (anchored) {
-        subjectId = anchored.subjectId;
-        anchorEventId = anchored.event.id;
-      } else {
-        subjectId = await selectReviewSubject(db, orgId, user.id);
-      }
-      if (!subjectId) {
-        skipped++;
-        continue;
-      }
-    } else {
-      // Self-reflection: subject is self
-      subjectId = user.id;
-    }
-
     // Select questionnaire (prefer team-scoped for this user's team)
     const questionnaire = selectQuestionnaire(availableQuestionnaires, interactionType, user.teamId);
     if (!questionnaire) {
@@ -188,6 +167,23 @@ export async function runSchedulingPass(
       continue;
     }
 
+    // Select review subject (for peer reviews), last so a proposed job is
+    // only claimed for someone who will actually be messaged.
+    let subjectId: string | null = null;
+    let anchorEventId: string | null = null;
+    let checkinJobId: string | null = null;
+    if (interactionType === "peer_review" || interactionType === "three_sixty") {
+      const choice = await choosePeerSubject(db, orgId, user.id, now);
+      if (!choice) {
+        skipped++;
+        continue;
+      }
+      ({ subjectId, anchorEventId, checkinJobId } = choice);
+    } else {
+      // Self-reflection: subject is self
+      subjectId = user.id;
+    }
+
     // Create schedule entry
     const [entry] = await db
       .insert(interactionSchedule)
@@ -216,6 +212,8 @@ export async function runSchedulingPass(
         questionnaireId: questionnaire.id,
         scheduleEntryId: entry.id,
         anchorEventId,
+        // The job's focus stays in Postgres (encrypted); initiation loads it by id.
+        checkinJobId,
       },
       { delay, jobId: buildJobId("initiate", entry.id) },
     );
@@ -245,6 +243,66 @@ function selectInteractionType(
 }
 
 // ── Subject selection ────────────────────────────────────
+
+export interface PeerChoice {
+  subjectId: string;
+  anchorEventId: string | null;
+  /** The calendar model's job this came from, now marked scheduled. */
+  checkinJobId: string | null;
+}
+
+/**
+ * Who a peer check-in is about, best source first: the calendar model's
+ * highest-priority unexpired proposal (claimed, so it is used once); then a
+ * colleague from a recent shared meeting (the rules layer); then the
+ * strongest relationship. People reviewed recently are skipped.
+ */
+export async function choosePeerSubject(
+  db: TenantDb,
+  orgId: string,
+  userId: string,
+  now: Date = new Date(),
+): Promise<PeerChoice | null> {
+  const avoid = await recentSubjectIds(db, userId);
+  const job = await claimCheckinJob(db, userId, avoid, now);
+  if (job) return job;
+  const anchored = await pickSubjectFromMeetings(db, userId, avoid, now);
+  if (anchored) return { subjectId: anchored.subjectId, anchorEventId: anchored.event.id, checkinJobId: null };
+  const subjectId = await selectReviewSubject(db, orgId, userId);
+  return subjectId ? { subjectId, anchorEventId: null, checkinJobId: null } : null;
+}
+
+async function claimCheckinJob(
+  db: TenantDb,
+  userId: string,
+  avoid: ReadonlySet<string>,
+  now: Date,
+): Promise<PeerChoice | null> {
+  const candidates = await db
+    .select({ id: checkinJobs.id, subjectId: checkinJobs.subjectId, anchorEventId: checkinJobs.anchorEventId })
+    .from(checkinJobs)
+    .where(
+      and(
+        eq(checkinJobs.reviewerId, userId),
+        eq(checkinJobs.status, "proposed"),
+        gt(checkinJobs.expiresAt, now),
+        isNotNull(checkinJobs.subjectId),
+      ),
+    )
+    .orderBy(desc(checkinJobs.priority), checkinJobs.createdAt)
+    .limit(20);
+  for (const c of candidates) {
+    if (!c.subjectId || avoid.has(c.subjectId)) continue;
+    // Conditional on still being proposed, so a job is never claimed twice.
+    const [claimed] = await db
+      .update(checkinJobs)
+      .set({ status: "scheduled" })
+      .where(and(eq(checkinJobs.id, c.id), eq(checkinJobs.status, "proposed")))
+      .returning({ id: checkinJobs.id });
+    if (claimed) return { subjectId: c.subjectId, anchorEventId: c.anchorEventId, checkinJobId: c.id };
+  }
+  return null;
+}
 
 /**
  * Pick the best review subject for a user.

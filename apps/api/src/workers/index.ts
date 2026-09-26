@@ -17,6 +17,7 @@ import {
   behavioralSignals,
   profileSnapshots,
   feedbackDigests,
+  checkinJobs,
 } from "@revualy/db";
 import { eq, and, gte, lte, lt, desc, inArray, sql } from "drizzle-orm";
 import type { LLMGateway } from "@revualy/ai-core";
@@ -31,6 +32,7 @@ import { handleInbound } from "../lib/inbound-router.js";
 import { runSweep } from "../lib/conversation-sweeper.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
+import { runCalendarModelPass } from "../lib/calendar-model.js";
 import { buildJobId } from "../lib/job-ids.js";
 import { getActivePlatform } from "../lib/active-platform.js";
 import { discoverGoogleChatDm } from "../lib/chat-identity.js";
@@ -63,6 +65,8 @@ const initiateJobSchema = z.object({
   scheduleEntryId: z.string().optional(),
   // The shared meeting chosen at scheduling (re-checked at send time).
   anchorEventId: z.string().nullable().optional(),
+  // The calendar model's job it came from (its focus is loaded from Postgres, not carried here).
+  checkinJobId: z.string().nullable().optional(),
 });
 
 const inboundJobSchema = z.object({
@@ -191,6 +195,7 @@ export function createWorkers(config: WorkerConfig) {
             questionnaireId: data.questionnaireId,
             scheduleEntryId: data.scheduleEntryId,
             anchorEventId: data.anchorEventId ?? null,
+            checkinJobId: data.checkinJobId ?? null,
             scheduled: true,
           });
 
@@ -205,6 +210,13 @@ export function createWorkers(config: WorkerConfig) {
               .where(eq(interactionSchedule.id, data.scheduleEntryId));
           }
           if (result.status === "skipped") {
+            // Not asked after all: the proposal can be taken again while it is fresh.
+            if (data.checkinJobId) {
+              await db
+                .update(checkinJobs)
+                .set({ status: "proposed" })
+                .where(and(eq(checkinJobs.id, data.checkinJobId), eq(checkinJobs.status, "scheduled")));
+            }
             job.log(`Check-in skipped at send time: ${result.reason}`);
           }
           break;
@@ -289,7 +301,10 @@ export function createWorkers(config: WorkerConfig) {
     { connection, concurrency: 3, lockDuration: 120_000, lockRenewTime: 40_000 },
   );
 
-  // Scheduler worker — daily cron for interaction scheduling
+  // Scheduler worker: daily crons, the calendar model (proposes check-ins),
+  // then the interaction scheduling pass (which takes them first). One job
+  // at a time, so a slow calendar-model run delays the pass rather than
+  // racing it.
   const schedulerWorker = new Worker(
     "scheduler",
     async (job) => {
@@ -302,6 +317,12 @@ export function createWorkers(config: WorkerConfig) {
         orgId,
         process.env.DATABASE_URL ?? "",
       );
+
+      if (job.name === "calendar-model") {
+        const result = await runCalendarModelPass(db, llm, { concurrency: 3 });
+        job.log(`Calendar model: ${result.reviewers} people, ${result.proposed} proposed, ${result.rejected} rejected, ${result.failed} failed`);
+        return;
+      }
 
       // The connected chat integration decides the platform; the job's
       // platform (SCHEDULER_PLATFORM) is only a local-development fallback.
