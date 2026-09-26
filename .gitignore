@@ -46,3 +46,6 @@ scripts/.chat-sim-state.json
 test-results/
 e2e/shots/
 e2e/shots-mobile/
+
+# Evaluation harness output (runs on the Linux box)
+apps/api/eval/results/

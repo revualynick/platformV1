@@ -76,17 +76,40 @@ const planSchema = z.object({
 type Logger = Pick<Console, "warn">;
 
 export async function planTurn(
-  llm: LLMGateway,
+  llm: Pick<LLMGateway, "complete">,
   input: PlanInput,
   opts: { attempts?: number; logger?: Logger } = {},
 ): Promise<TurnPlan> {
-  const attempts = opts.attempts ?? 2;
+  return (await planTurnTraced(llm, input, opts)).plan;
+}
+
+/** What happened inside one plan: for the evaluation harness and debugging. */
+export interface PlanTrace {
+  plan: TurnPlan;
+  /** The model's own proposal before the rules applied (null if it never produced a valid one). */
+  proposal: { quality: AnswerQuality; action: TurnAction; question: string } | null;
+  /** Raw text of each attempt, and why an attempt was rejected. */
+  attempts: Array<{ raw: string | null; error: string | null; latencyMs: number }>;
+  /** The system prompt sent (the thing the tuning loop changes). */
+  systemPrompt: string;
+}
+
+export async function planTurnTraced(
+  llm: Pick<LLMGateway, "complete">,
+  input: PlanInput,
+  opts: { attempts?: number; logger?: Logger } = {},
+): Promise<PlanTrace> {
+  const maxAttempts = opts.attempts ?? 2;
   const logger = opts.logger ?? console;
-  for (let i = 1; i <= attempts; i++) {
+  const system = systemPrompt(input);
+  const attempts: PlanTrace["attempts"] = [];
+  for (let i = 1; i <= maxAttempts; i++) {
+    const started = Date.now();
+    let raw: string | null = null;
     try {
       const response = await llm.complete({
         messages: [
-          { role: "system", content: systemPrompt(input) },
+          { role: "system", content: system },
           ...input.history.slice(-10).map((m) => ({
             role: (m.role === "assistant" ? "assistant" : "user") as "assistant" | "user",
             content: m.content.slice(0, 4000),
@@ -99,13 +122,18 @@ export async function planTurn(
         jsonMode: true,
         jsonSchema: PLAN_JSON_SCHEMA,
       });
+      raw = response.content;
       const parsed = planSchema.parse(JSON.parse(stripFences(response.content)));
-      return applyRules(input, { ...parsed, question: parsed.question.trim() }, "llm");
+      const proposal = { ...parsed, question: parsed.question.trim() };
+      attempts.push({ raw, error: null, latencyMs: Date.now() - started });
+      return { plan: applyRules(input, proposal, "llm"), proposal, attempts, systemPrompt: system };
     } catch (err) {
-      logger.warn(`[TurnPlanner] attempt ${i}/${attempts} failed:`, err instanceof Error ? err.message : err);
+      const error = err instanceof Error ? err.message : String(err);
+      attempts.push({ raw, error, latencyMs: Date.now() - started });
+      logger.warn(`[TurnPlanner] attempt ${i}/${maxAttempts} failed:`, error);
     }
   }
-  return fallbackPlan(input);
+  return { plan: fallbackPlan(input), proposal: null, attempts, systemPrompt: system };
 }
 
 /** What the rules allow from here. */

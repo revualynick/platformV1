@@ -306,3 +306,12 @@
 - Finding: message caps (4-5) bind before the follow-up cap; at most two answers per conversation. Flagged to Nick, revisit with beta data
 - 21 new tests (mutation-checked: turn bump, follow-up cap); 324 API tests, 16/16 typecheck
 - Not done: prompt never run against the real model (no local API key). Next: step 6 review, then step 7 (encrypt existing data)
+
+## 2026-09-26: Model move to latest; LLM test-loop groundwork on the Linux box
+- 97fbe83: tiers now claude-haiku-4-5 / claude-sonnet-5 / claude-opus-5-5 (pin via LLM_MODEL_*); request builder drops temperature on 5-family, sets effort, adds thinking headroom, structured outputs for the turn planner; added a neutral user first message (docs say required; a real API call showed assistant-first is accepted on Sonnet 4.6 and 5, so it was never a live bug)
+- Linux box: personal Claude login in ~/.claude-personal (Pro); claude-tools qm-agent gained --config-dir (uncommitted in claude-tools, Quadmark repo, Nick to commit)
+- claude -p findings: the `sonnet` alias was 60-90 s/call, exact model ids 2-4 s; environment/account context can't be removed but did not leak into realistic turns
+- Box thermals: CPU hits 94-98 C when GPU is loaded (shared 360 loop, 4 years without coolant/paste change); harness needs temperature guards
+- Agreed loop roles: employee qwen3:8b (local Ollama), bot claude-sonnet-5 via claude -p, judge + designer Opus 5.5; loop agent runs --no-sandbox; code copied over ssh, not GitHub
+- Next: build the harness (not started)
+- Test API key (7-day) stored on the box at ~/.config/revualy-eval/anthropic.env (600); first real calls: Sonnet 5 structured output works, ~3 s, ~$0.0014 per turn
