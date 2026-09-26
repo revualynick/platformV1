@@ -351,3 +351,5 @@
 - Topic grid (93 cases x 2, no judge): 186/186 final concern as expected, 0/160 false alarms, 4/4 safety; script path alone flagged 2 everyday as conduct and 4 safety as wellbeing, both corrected downstream
 - Sonnet-only reference path escalated "he talks over people on the client call" to conduct 2/2; Opus stood it down: evidence for keeping option 1
 - Re-judges queued on the box: rejudge-1 (experiment 3, 15:52) then rejudge-2 (grid, --only-missing)
+- Re-judges done (189/189 exp 3, 56/56 grid, 0 failed calls): both judges score Opus ahead on serious flags in both sets (exp 3 +0.09/+0.07, grid +0.14/+0.14); Opus also avoided Sonnet's over-escalation of ordinary criticism. Keep option 1 (serious flags on Opus), ~2s slower
+- Experiment 4 ($1.39): 35-word cap on reference-path replies, Opus length failures 7/70 -> 1/35, decisions 47/47; "don't invite more when pausing" reverted because the conduct reference asks for "share only what you're comfortable with" (playbook wording for Nick)
