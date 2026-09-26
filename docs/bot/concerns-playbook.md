@@ -4,6 +4,13 @@ What the bot does when a check-in turns into something other than feedback. The 
 
 Status: proposed defaults. Items marked **DECISION** need Nick's call. The safety section also needs review by someone with HR or clinical grounding before any real employee sees it.
 
+**Decided by Nick (2026-09-26):**
+- We never contact emergency services and never tell people to. Escalation is to a named person at the organisation, live (a direct message on the chat platform, email as backup).
+- Do not over-flag a bad day. Tiredness, a tough week or frustration is normal conversation.
+- Wording stays work-relevant. We are not a crisis service and do not try to replace one.
+- Option 1: wellbeing, conduct and safety are handled by Opus 5.5. The Opus review of a Sonnet draft (option 3) was tested and dropped.
+- Nick reviews examples once there is a meaningful dataset, not before.
+
 ## How a turn gets here
 
 The script path (one structured call) judges every reply. Its output gains two fields:
@@ -27,11 +34,15 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 - After two off-script replies in a row: offer to stop and pick up next time.
 - No record.
 
-### wellbeing: about the person themselves (burnout, stress, thinking of quitting, struggling)
+### Threshold: a bad day is not a concern
+
+"Rough day", "shattered", "fed up with this sprint": set no concern. The script path acknowledges it in a few words and carries on. Wellbeing is for sustained or serious struggle; safety for words that could mean risk of harm.
+
+### wellbeing: about the person themselves, sustained or serious (burnout, anxiety about coming in, crying at work, thinking of quitting because of it)
 
 - Acknowledge in one or two sentences, specifically, without therapising and without forced positivity.
 - **Stop the feedback questions for this conversation.** Do not ask for wins after someone says they are exhausted.
-- Offer, in fixed wording: support resources (from the organisation's settings: manager, HR contact, Employee Assistance Programme) and the choice to pause.
+- Offer, in fixed wording framed around work: the HR contact and Employee Assistance Programme from the organisation's settings, and the choice to pause.
 - Record: the conversation is closed as `incomplete`, with outcome `wellbeing_paused` on the current theme; no content copied anywhere.
 - **DECISION W1:** notify anyone? Proposed: **no one, unless the person asks.** The bot offers: "Would you like me to let [HR contact] know you'd welcome a conversation? I'll only do that if you say yes." A yes creates an escalation to HR containing only "asked for a wellbeing conversation", never what they wrote.
 - **DECISION W2:** does the line manager ever hear? Proposed: never from this path. The manager may be part of the problem, and telling them without consent would break the trust the product depends on.
@@ -47,9 +58,10 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 
 ### safety: any risk of harm to the person or someone else
 
-- Respond immediately with fixed wording, not a feedback question: take it seriously, give crisis resources (UK: Samaritans 116 123, free, 24 hours; emergency 999; organisation-specific resources from settings), and say a person from their organisation will be told so they can help.
-- Record: escalation of type `safety`, highest severity, alerting the named safety contact at once (email now, other channels later).
-- This is the one level where consent is not required. Standard practice; wording and route to be checked by an HR or clinical professional.
+- Includes ambiguous words that could mean not wanting to be alive ("I don't see the point in being here at all"); when unsure between wellbeing and safety, safety. Plain work frustration ("I don't see the point of this project") is not.
+- Respond with care in one or two sentences, then fixed wording: a named person at the organisation will check in (they are told only that a check-in may be welcome, never what was written), and one line about support outside work (Samaritans 116 123, **pending Nick's confirmation**). No emergency services.
+- Live escalation: alert the named safety contact at once (chat DM, email backup). Not yet wired.
+- Wording and route to be checked by an HR or clinical professional.
 - **DECISION S1:** who is the named safety contact per organisation? Proposed: a required setting before the product is enabled for real employees.
 - **DECISION S2:** false alarms (dark humour, "this deadline is killing me"). Proposed: the model must quote the phrase that triggered `safety`; the evaluation tests borderline cases and counts both misses and false alarms. A false alarm is recoverable; a miss is not.
 

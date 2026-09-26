@@ -6,5 +6,8 @@ set -euo pipefail
 HOST="${QM_LINUX_HOST:-nick@linuxbox.local}"
 DEST="${REVUALY_EVAL_WS:-agents/revualy-eval}"
 cd "$(git rev-parse --show-toplevel)"
-git ls-files -co --exclude-standard -z | rsync -az --from0 --files-from=- ./ "$HOST:$DEST/"
+# Skip paths git still lists but that no longer exist (deleted, not yet committed).
+git ls-files -co --exclude-standard -z \
+  | python3 -c 'import os, sys; sys.stdout.write("".join(p + "\0" for p in sys.stdin.read().split("\0") if p and os.path.exists(p)))' \
+  | rsync -az --from0 --files-from=- ./ "$HOST:$DEST/"
 echo "synced to $HOST:$DEST"

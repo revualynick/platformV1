@@ -5,9 +5,14 @@ import type { InteractionType } from "@revualy/shared";
  * The model reads these on demand through `read_reference`, the way Claude
  * Code loads skills: a short index in the prompt, the body only when needed.
  *
- * Fixed wording that must never be paraphrased (support routes, crisis
- * resources) is NOT here: code appends it to the reply (see fixedTail).
+ * Fixed wording that must never be paraphrased (support routes) is NOT
+ * here: code appends it to the reply (see fixedTail).
  * Playbook defaults W1-S2 are Nick's to confirm; they are marked PLAYBOOK.
+ *
+ * Nick, 2026-09-26: we never contact or refer people to emergency
+ * services; escalation is to a named person at the organisation. Wording
+ * stays work-relevant: we are not a crisis service. Do not over-flag a
+ * bad day.
  */
 
 export type Concern = "none" | "privacy" | "off_script" | "wellbeing" | "conduct" | "safety";
@@ -78,9 +83,11 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
     },
     {
       name: "wellbeing",
-      when: "The person is struggling themselves: exhaustion, burnout, stress, anxiety, thinking of quitting.",
+      when: "The person is struggling in a sustained or serious way: burnout, anxiety, crying at work, thinking of quitting.",
       body: [
-        "Acknowledge what they said in one or two sentences, specifically and plainly. No therapy language, no forced positivity, no silver linings.",
+        "Threshold: a bad day, a tough week, tiredness or frustration is NOT a wellbeing concern. For those, set concern to \"none\", acknowledge it in a few words, and ask the next question as usual.",
+        "It IS a wellbeing concern when it sounds sustained or serious: struggling most days, burnout, anxiety about coming in, crying at work, feeling unable to cope, thinking of leaving because of it.",
+        "Acknowledge what they said in one or two sentences, specifically and plainly, in the context of work. No therapy language, no forced positivity, no silver linings.",
         "Do NOT ask another feedback question in this conversation, and do not ask them to explain more.",
         "Do not give advice. Code adds the support options and the offer to pause or to let HR know (only with their yes).",
         "Set next to \"pause\".",
@@ -99,13 +106,14 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
     },
     {
       name: "safety",
-      when: "Any sign the person or someone else may be at risk of harm, including self-harm or threats.",
+      when: "Signs the person or someone else may be at risk of harm: not wanting to be alive, self-harm, or threats.",
       body: [
-        "Respond with care in one or two plain sentences: take it seriously, and say you are glad they said something.",
+        "It IS a safety concern when the words could mean not wanting to be alive or to harm themselves or someone else, even if ambiguous (\"I don't see the point in being here at all\"). When genuinely unsure between wellbeing and safety, choose safety: a gentle check-in costs little; missing it can cost a great deal.",
+        "It is NOT a safety concern when it is plainly about work or everyday frustration (\"I don't see the point of this project\", \"this deadline is killing me\", \"I could murder a coffee\"). Treat those as normal conversation.",
+        "Respond with care in one or two plain sentences: take it seriously, and say you are glad they said something. You are not a crisis service; do not counsel or ask them to explain.",
         "Do not ask feedback questions. Do not try to counsel them.",
         "Quote the exact words that raised the concern in trigger_quote.",
-        "Everyday exaggeration (\"this deadline is killing me\", \"I could murder a coffee\") is NOT a safety concern; treat it as normal conversation.",
-        "Code adds crisis resources and tells the organisation's safety contact.",
+        "Code adds the offer of a check-in from a named person at their organisation, and one line about support outside work.",
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -113,9 +121,11 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
 }
 
 /**
- * Fixed wording appended by code after the model's reply. PLAYBOOK defaults:
- * W1 (HR told only with consent), C1 (conduct passed on only with consent),
- * S1 (safety contact told without consent).
+ * Fixed wording appended by code after the model's reply, work-relevant.
+ * PLAYBOOK defaults: W1 (HR told only with consent), C1 (conduct passed on
+ * only with consent), S1 (a named contact is told a check-in may be
+ * welcome, never what was written; live escalation, not yet wired). The
+ * single outside-work line at the safety tier is pending Nick's decision.
  */
 export function fixedTail(concern: Concern, org: OrgResources): string {
   switch (concern) {
@@ -123,9 +133,9 @@ export function fixedTail(concern: Concern, org: OrgResources): string {
       return "You can carry on, skip this question, or reply stop at any time.";
     case "wellbeing":
       return (
-        `If it would help to talk to someone, ${org.hrContact} is there${org.eap ? `, and you can also use ${org.eap}` : ""}. ` +
-        `I can let ${org.hrContact.split(" (")[0]} know you'd welcome a chat, but only if you reply yes. ` +
-        "Otherwise we'll leave the check-in here, and you can pick it up another time."
+        `If work's weighing on you, ${org.hrContact} is there to talk it through${org.eap ? `, and there's also ${org.eap}` : ""}. ` +
+        `I can let ${firstName(org.hrContact)} know you'd welcome a chat, but only if you reply yes. ` +
+        "Otherwise we'll leave the check-in here for today."
       );
     case "conduct":
       return (
@@ -134,11 +144,17 @@ export function fixedTail(concern: Concern, org: OrgResources): string {
       );
     case "safety":
       return (
-        "If you're in danger or thinking about harming yourself, please call 999 now. " +
-        "You can talk to Samaritans any time on 116 123 (free, 24 hours). " +
-        `I'm letting ${org.safetyContact} know so someone can check in with you.`
+        `I'd like ${org.safetyContact} to check in with you, just to make sure you're OK. ` +
+        "I'll only tell them you might welcome a check-in, not what you wrote. " +
+        "If you'd rather talk to someone outside work, Samaritans are there any time on 116 123. " +
+        "We'll leave the check-in here for today."
       );
     default:
       return "";
   }
+}
+
+/** "Jo in People Team (jo@acme.test)" -> "Jo". */
+function firstName(contact: string): string {
+  return contact.split(/[\s(]/)[0] || contact;
 }
