@@ -209,9 +209,10 @@ describe.skipIf(!dbUp)("encryption backfill, check and rotation (integration)", 
     await expect(client.db.select().from(managerNotes).where(eq(managerNotes.subjectId, subject))).rejects.toThrow(
       /ENCRYPTION_LEGACY_READS=off/,
     );
-    useKeys(null);
+    useKeys(null, "on");
     const [row] = await client.db.select().from(managerNotes).where(eq(managerNotes.subjectId, subject));
     expect(row.content).toBe("not yet backfilled");
+    useKeys(null);
     await rewriteEncryptedColumns(client.sql, { target: "v1", only: ["manager_notes"], pauseMs: 0 });
   });
 

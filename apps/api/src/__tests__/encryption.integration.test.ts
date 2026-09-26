@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import crypto from "node:crypto";
+import { resetKeyringForTests } from "@revualy/shared/server";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   getTenantDb,
@@ -108,12 +109,20 @@ describe.skipIf(!dbUp)("encryption at rest (integration)", () => {
     expect(r.highlights).toBe("final highlights");
   });
 
-  it("reads legacy plaintext rows unchanged (before the backfill)", async () => {
+  it("reads legacy plaintext rows unchanged when legacy reads are on (before the backfill)", async () => {
+    process.env.ENCRYPTION_LEGACY_READS = "on";
+    resetKeyringForTests();
     await db.execute(
       sql`insert into manager_notes (manager_id, subject_id, content) values (${managerId}, ${employeeId}, 'legacy plaintext note')`,
     );
     const rows = await db.select().from(managerNotes).where(eq(managerNotes.managerId, managerId));
-    expect(rows.map((r) => r.content)).toContain("legacy plaintext note");
+    try {
+      expect(rows.map((r) => r.content)).toContain("legacy plaintext note");
+    } finally {
+      await db.execute(sql`delete from manager_notes where content = 'legacy plaintext note'`);
+      delete process.env.ENCRYPTION_LEGACY_READS;
+      resetKeyringForTests();
+    }
   });
 
   it("refuses ciphertext copied from another column", async () => {

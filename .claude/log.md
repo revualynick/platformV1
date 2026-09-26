@@ -367,3 +367,4 @@
 - 470 API tests, 17/17 typecheck; the web unsubscribe route isn't exercised end to end yet
 - Four Opus agents in worktrees: C3 step 7 (migration 0042), pseudonymous peer storage + audit log + export (0043), tickets + job-agent gate (0044), typed decision layer + calibration eval
 - Merged C3 step 7 (encryption backfill/check/rotate CLI, tier-2 jsonb encrypted, 0042, legacy reads switch, Redis 1on1 notes encrypted): 17/17 typecheck, 483/484 API tests with the known load-flaky crypto speed test passing 3/3 in isolation. Session limit hit twice with four Opus agents in parallel; now running two at a time
+- Nick: only demo data and his own test tenant exist, so legacy encrypted-format reads are now OFF by default (fail closed); local dev DB backfilled (check ok). Schema-sync test no longer reads rows (tests use a fixed key against the shared dev DB); crypto speed test takes the fastest of 7 runs (was flaky under parallel load). 485/485

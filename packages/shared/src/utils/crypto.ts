@@ -18,10 +18,10 @@ import crypto from "node:crypto";
  * key, every encrypt and decrypt throws (fail closed).
  *
  * Legacy reads: rows written before a column was encrypted (plaintext) and
- * secrets in the two pre-v1 formats stay readable while
- * ENCRYPTION_LEGACY_READS is "on" (the default). Once a tenant has run the
- * backfill and the check reports zero, set ENCRYPTION_LEGACY_READS=off: any
- * value that is not v1 then throws instead of being returned.
+ * secrets in the two pre-v1 formats are readable only while
+ * ENCRYPTION_LEGACY_READS=on. The default is off (fail closed): there is no
+ * customer data from before encryption (2026-09-26), so only the demo and
+ * test tenants ever need "on", briefly, until their backfill has run.
  */
 
 const ALGORITHM = "aes-256-gcm";
@@ -80,15 +80,15 @@ function keyring(): Keyring {
 
 function parseLegacyReads(): boolean {
   const raw = (process.env.ENCRYPTION_LEGACY_READS ?? "").trim().toLowerCase();
-  if (raw === "" || raw === "on") return true;
-  if (raw === "off") return false;
+  if (raw === "on") return true;
+  if (raw === "" || raw === "off") return false;
   throw new Error('ENCRYPTION_LEGACY_READS must be "on" or "off"');
 }
 
 /**
  * Whether values not in the v1 format may still be read (legacy plaintext
- * rows, pre-v1 secret formats). ENCRYPTION_LEGACY_READS: "on" by default,
- * "off" once the tenant's backfill check reports zero.
+ * rows, pre-v1 secret formats). ENCRYPTION_LEGACY_READS: "off" by default;
+ * "on" only for a tenant with pre-encryption rows until its backfill runs.
  */
 export function legacyReadsAllowed(): boolean {
   if (cachedLegacyReads === null) cachedLegacyReads = parseLegacyReads();

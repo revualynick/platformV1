@@ -63,9 +63,9 @@ I haven't tested this against Railway yet. If the service still uses a single `E
 
 ## Switching off legacy reads
 
-Until the backfill has run, the app still reads legacy values: plaintext rows, and the two pre-v1 secret formats. That read path stays on by default (`ENCRYPTION_LEGACY_READS` unset or `on`) because a tenant that has not run the backfill would otherwise fail on every old row.
+Legacy reads (plaintext rows and the two pre-v1 secret formats) are **off by default** (`ENCRYPTION_LEGACY_READS` unset or `off`): any value that is not v1 throws instead of being returned (fail closed). There is no customer data from before encryption, so new tenants never need them (decided 2026-09-26).
 
-Once `encryption check` passes for a tenant, set `ENCRYPTION_LEGACY_READS=off` on both the API and web services and redeploy. From then on any value that is not v1 throws instead of being returned (fail closed). New tenants can start with it off, since everything they write is v1 from day one.
+Only a database with rows from before encryption (the demo and Nick's test tenant) needs `ENCRYPTION_LEGACY_READS=on`, and only until `encryption backfill` and `encryption check` pass. Then remove the variable and redeploy. Reseeding the demo is an equally good alternative to backfilling it.
 
 The backfill itself always reads legacy values, whatever the setting.
 

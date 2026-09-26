@@ -40,7 +40,10 @@ describe.skipIf(!dbUp)("Drizzle schema matches the migrated database", () => {
   it.each(tables.map((t) => [getTableName(t), t] as const))(
     "every declared column of %s exists",
     async (_name, table) => {
-      await expect(db.select().from(table).limit(1)).resolves.toBeDefined();
+      // limit(0): Postgres still resolves every selected column, so a missing
+      // one fails, but no row is read. Rows in the shared dev database may be
+      // encrypted under the dev key rather than the tests' fixed key.
+      await expect(db.select().from(table).limit(0)).resolves.toBeDefined();
     },
   );
 
