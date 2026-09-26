@@ -1,6 +1,6 @@
 # Privacy, anonymity and agent access
 
-Status: **agreed in principle, not built** (2026-09-26). Decisions marked (Nick) were made in conversation on 2026-09-26; everything else is proposed and open to change. Open questions are listed at the end.
+Status: **steps 1 to 3 built** (2026-09-26; build notes in `docs/build/`), steps 4 to 6 not started. Agreed in principle 2026-09-26. Decisions marked (Nick) were made in conversation on 2026-09-26; everything else is proposed and open to change. Open questions are listed at the end.
 
 ## Why this exists
 
@@ -135,6 +135,9 @@ The job agent doesn't see live chat, but it does read stored text that people wr
 - **Tools never take a person id.** Any tool an agent has resolves the person from its ticket or session.
 
 ### What exists today
+
+*Updated 2026-09-26 after step 3:* tickets exist (`apps/api/src/lib/tickets/`), the chat side reads context only from its ticket, and the job agent's proposals pass a code gate. See `docs/build/2026-09-26-privacy-step-3-tickets.md` for where the build differs from this design. The paragraphs below describe the state before step 3.
+
 
 - The chat-facing model paths (`turn-planner.ts`, `reference-path.ts`) don't import the database. The reference path's only tool reads static playbook text. Code builds their input and writes their output. So the chat side is already outside the database.
 - What's missing is the ticket as a stored boundary. The orchestrator gathers context ad hoc for each turn with full database access. `checkin_jobs` from the calendar model is a rough first version of a ticket.

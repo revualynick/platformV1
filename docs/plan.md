@@ -300,3 +300,6 @@ Full design in `docs/design/privacy-and-agent-access.md`. In short (Nick): revie
 ### Docs tidy (2026-09-26)
 Outdated reviews and plans moved to `docs/archive/` (index in `docs/archive/README.md`); open items consolidated in `docs/backlog.md`; `docs/README.md` indexes what's current. The root README is now the running summary of the product, architecture and decisions.
 
+### Privacy build (2026-09-26, evening)
+Privacy steps 1 to 3, C3 step 7 (encryption backfill) and the typed decision layer are merged; see `docs/build/` for one reviewable note each. Built in parallel by Opus agents in worktrees, merged in migration order (0042, 0043, 0044). Merging exposed and fixed: tests sharing the dev database, a stale migrations copy in the built db package, and two migration commands that behaved differently. API suite: 558 tests, run one file at a time.
+

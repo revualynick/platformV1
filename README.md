@@ -2,13 +2,14 @@
 
 AI-powered peer feedback that happens in chat. Instead of annual review forms, a bot holds short check-ins with people in Google Chat, Slack or Teams, about colleagues they actually worked with and meetings they actually attended. Dashboards turn the results into themes, goals and coaching for employees, managers and admins.
 
-This README is the running summary. It is kept current: when something important changes, update the relevant section here and add a line to the decisions log. Detail lives in `docs/` (index in `docs/README.md`), open work in `docs/backlog.md`.
+This README is the running summary. It is kept current: when something important changes, update the relevant section here and add a line to the decisions log. Detail lives in `docs/` (index in `docs/README.md`), open work in `docs/backlog.md`, and what was built and how to review it in `docs/build/`.
 
 ## Where it stands (2026-09-26)
 
 - **Phase:** beta hardening on the `beta-hardening` branch, not yet merged or pushed. Roadmap in `docs/c3-plan.md`: steps 0 to 7 done, 8 onwards open.
 - **Beta platform:** Google Chat, one chat platform per tenant. The app isn't installed on the beta Workspace yet.
 - **Deployed:** a demo on Railway (`revualy-demo`, Europe West). No customer tenants yet.
+- **Review:** build notes for each merged piece are in `docs/build/`, with a checklist for human or agent review.
 - **Before real employees use it:** privacy steps 2 and 3 (`docs/design/privacy-and-agent-access.md`), running the encryption backfill on each tenant, and the beta gate (monitoring, real-Workspace checks, full review).
 - **Tests:** 464 API tests and a clean typecheck across 17 packages at the last merge, plus Playwright end-to-end specs and an LLM evaluation harness.
 

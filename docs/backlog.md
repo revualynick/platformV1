@@ -6,7 +6,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Before beta (real employees)
 
-- **Privacy steps 2 and 3** from `docs/design/privacy-and-agent-access.md`: pseudonymous peer storage (includes export blind by default) and tickets. In progress with agents (2026-09-26). The bot's "anonymised" promise depends on them. Step 1's other leaks are fixed.
+- **Set `REVIEWER_PSEUDONYM_SECRET` on Railway** (demo and test tenant) and backfill or reseed their databases (`ENCRYPTION_LEGACY_READS=on` until then) before deploying this branch.
 - **Encrypt existing data on each tenant** (C3 step 7 tooling merged 2026-09-26): run `pnpm --filter @revualy/db encryption check`, `backfill`, `check`, or simply reseed. Only the demo and Nick's test tenant hold pre-encryption rows; legacy reads are off by default. See `docs/key-rotation.md`.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
@@ -34,6 +34,17 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Paraphrases file** is only on the Linux box; copying it back needs Nick's permission.
 
 ## Features and later work
+
+- **Privacy follow-ups** (from `docs/build/2026-09-26-privacy-step-2-pseudonyms.md` and `...-step-3-tickets.md`):
+  - Move the peer feedback write from the analysis pipeline into ticket write-back (the pseudonym hook exists, deliberately unwired to avoid double writes).
+  - Pseudonym secret behind a KMS or signing service, so the API environment alone can't re-identify reviewers. Before the first real customer.
+  - Anchor the audit chain head outside the database, and a scheduled chain verify.
+  - Timing correlation: `feedback_entries.created_at`, behavioural signal times and engagement rows.
+  - Escalation screens and pulse triggers still show named data; `imported_feedback.source_key` includes the author id.
+  - Chat side still writes `conversation_theme_outcomes` and `checkin_jobs` status directly; personal-ticket goals unused in prompts; 1:1 follow-up tickets not created; reference path not yet called from the orchestrator.
+  - Re-run the topic grid on the box to check first-name prompts didn't shift bot quality.
+  - Privacy steps 4 to 6: raw transcript storage with per-person keys, row-level security, sharing grants and handover summaries.
+- **Typed decisions:** run the calibration on the Linux box (command in `docs/build/2026-09-26-typed-decisions.md`), then decide thresholds and tier; add specs for sensitivity and ticket context.
 
 - **Deterministic layer driven by a reasoning model** (Nick, 2026-09-26): a typed decision layer in the spirit of Jev, built on our own models. The reasoning model returns choices and scores against a fixed schema, and code decides what happens. For alpha and beta, quality comes before token cost.
 - C3 step 9: re-presentation engine (re-ask weak or unanswered themes), tuned with beta data.

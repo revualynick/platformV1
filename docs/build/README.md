@@ -1,0 +1,58 @@
+# Build notes
+
+One note per piece of work merged into `beta-hardening`, written at merge time. They exist so a person or an agent reviewing the branch can see what changed, why, where to look, how it was tested and what to check, without reconstructing it from commits.
+
+- **Design docs** (`docs/design/`) say what we intend. **Build notes** say what was actually built, including where it differs from the design.
+- **The backlog** (`docs/backlog.md`) holds follow-ups. A build note's "Not done" items are copied there.
+- **The session log** (`.claude/log.md`) is a short diary. Build notes are the reviewable record.
+
+## Rules
+
+- Every merge gets a note in the same commit series, named `YYYY-MM-DD-<topic>.md`, and a row below.
+- Use the template. "Review checklist" is written for a reviewer who knows the codebase but not the session: concrete things to open, run or try to break.
+- Agents building work must report in the template's shape, so their report becomes the note with light editing.
+- When a later change alters something a note describes, add a dated line to that note's "Later changes" rather than rewriting history.
+
+## Index
+
+| Date | Note | Commits | Migration | Review status |
+|---|---|---|---|---|
+| 2026-09-26 | [Privacy step 1: leaks closed](2026-09-26-privacy-step-1.md) | 2cc7628 | none | not reviewed |
+| 2026-09-26 | [Encryption backfill and legacy reads off (C3 step 7)](2026-09-26-encryption-backfill.md) | f9d724b, 528b3d5 | 0042 | not reviewed |
+| 2026-09-26 | [Privacy step 2: pseudonymous peer feedback](2026-09-26-privacy-step-2-pseudonyms.md) | 82b2d23 | 0043 | not reviewed |
+| 2026-09-26 | [Privacy step 3: tickets and the job-agent gate](2026-09-26-privacy-step-3-tickets.md) | 11e749c | 0044 | not reviewed |
+| 2026-09-26 | [Typed decision layer](2026-09-26-typed-decisions.md) | 1fda68e | none | not reviewed |
+| 2026-09-26 | [Test and migration infrastructure](2026-09-26-test-infrastructure.md) | ce5bdd6, 11e749c | none | not reviewed |
+
+## Template
+
+```markdown
+# <Title>
+
+Status: merged YYYY-MM-DD, not reviewed | reviewed by <who> on <date>
+Commits: <hashes> · Migration: <number or none> · Design: <doc link>
+
+## What and why
+Two or three sentences: the problem, and what now happens instead.
+
+## What changed
+Bullets by area, naming the main files.
+
+## Where it differs from the design
+Anything built differently from the design doc, and why.
+
+## How it was tested
+Commands, test counts, which tests prove which claim. What was NOT run (real models, real Workspace, Railway).
+
+## Review checklist
+- [ ] Concrete things to read, run or try to break.
+
+## Not done / limits
+Copied to docs/backlog.md.
+
+## Decisions pending
+Questions for Nick, with a recommendation.
+
+## Later changes
+- YYYY-MM-DD: ...
+```

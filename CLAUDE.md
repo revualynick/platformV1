@@ -64,6 +64,8 @@ docker compose up -d              # PostgreSQL, Redis (local dev)
 - `README.md` is the running summary: update "Where it stands" and add a line to its decisions log when something important is decided or lands.
 - `docs/backlog.md` is the single list of open work. Add findings with their source; delete items when done (and log them in `.claude/log.md`).
 - Every doc starts with a status line and date. Superseded docs go to `docs/archive/` via `git mv`, with a row in `docs/archive/README.md` and any open items copied to the backlog.
+- **Build notes:** every merge into the working branch gets a note in `docs/build/` (template and index in `docs/build/README.md`), written for human and agent reviewers: what changed and why, where it differs from the design, how it was tested and what wasn't, a review checklist, limits. Limits go to the backlog.
+- **Agent briefs** must ask for a report in the build-note shape, so the report becomes the note.
 - Merged agent worktrees are removed (`git worktree remove`, then delete the branch) once their merge is verified.
 
 ## Known gaps
