@@ -2,9 +2,19 @@ import type { ModelTier } from "@revualy/shared";
 
 export type LLMProvider = "anthropic" | "openai";
 
+/**
+ * An image or PDF sent alongside a user message (base64, no data: prefix).
+ * Anthropic only for now: other providers reject messages that carry them.
+ */
+export type LLMAttachment =
+  | { type: "image"; mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"; data: string }
+  | { type: "document"; mediaType: "application/pdf"; data: string };
+
 export interface LLMMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /** User messages only. Sent before the text, as the Anthropic docs advise. */
+  attachments?: LLMAttachment[];
 }
 
 /** How much the model thinks (Anthropic `output_config.effort`). */

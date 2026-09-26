@@ -68,6 +68,9 @@ export const users = pgTable(
     teamId: uuid("team_id").references(() => teams.id),
     managerId: uuid("manager_id"), // self-reference added via raw SQL in migration
     timezone: varchar("timezone", { length: 100 }).notNull().default("UTC"),
+    // Set by people imports (migration 0040).
+    jobTitle: varchar("job_title", { length: 255 }),
+    startDate: date("start_date"),
     isActive: boolean("is_active").notNull().default(true),
     onboardingCompleted: boolean("onboarding_completed")
       .notNull()
@@ -1556,6 +1559,8 @@ export const goals = pgTable(
     metricCurrentValue: doublePrecision("metric_current_value"),
     shareWithManager: boolean("share_with_manager").notNull().default(false),
     targetDate: date("target_date"),
+    // Stable identity of an imported goal (partial unique index, migration 0040).
+    importKey: varchar("import_key", { length: 128 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1720,5 +1725,95 @@ export const goalUpdateSuggestions = pgTable(
     unique("uq_goal_suggestion_goal_meeting").on(table.goalId, table.meetingId),
     index("idx_goal_suggestions_goal_status").on(table.goalId, table.status),
     index("idx_goal_suggestions_status").on(table.status),
+  ],
+);
+
+// ── Data imports ────────────────────────────────────────
+// Stage -> map -> dry run -> admin approves -> commit (migration 0040).
+// Staged rows are personal data: encrypted, and deleted 30 days after
+// commit (rowsPurgeAfter, swept by purgeExpiredImportRows).
+
+export const importRuns = pgTable(
+  "import_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: varchar("kind", { length: 20 }).notNull(), // people | goals | feedback | org_chart
+    status: varchar("status", { length: 20 }).notNull().default("staged"), // staged | mapped | dry_run | approved | committed | failed
+    sourceType: varchar("source_type", { length: 20 }).notNull().default("file"), // file | google_sheet
+    sourceSystem: varchar("source_system", { length: 50 }),
+    fileName: varchar("file_name", { length: 255 }),
+    contentType: varchar("content_type", { length: 100 }),
+    fileSize: integer("file_size"),
+    fileSha256: varchar("file_sha256", { length: 64 }),
+    columns: jsonb("columns").$type<string[]>().notNull().default([]),
+    rowCount: integer("row_count").notNull().default(0),
+    mapping: jsonb("mapping").$type<Record<string, unknown>>(),
+    mappingSource: varchar("mapping_source", { length: 20 }), // model | heuristic | admin
+    report: jsonb("report").$type<Record<string, unknown>>(),
+    error: text("error"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    rowsPurgeAfter: timestamp("rows_purge_after", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '30 days'`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_import_runs_created").on(table.createdAt),
+    index("idx_import_runs_purge").on(table.rowsPurgeAfter),
+  ],
+);
+
+export const importRows = pgTable(
+  "import_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => importRuns.id, { onDelete: "cascade" }),
+    rowIndex: integer("row_index").notNull(),
+    raw: encryptedText("import_rows", "raw").notNull(), // JSON
+    mapped: encryptedText("import_rows", "mapped"), // JSON
+    status: varchar("status", { length: 20 }).notNull().default("staged"), // staged | ready | invalid | applied | skipped
+    action: varchar("action", { length: 20 }), // create | update | none
+    error: text("error"), // field names and reasons only, never cell values
+    targetId: uuid("target_id"),
+  },
+  (table) => [unique("uq_import_rows_run_index").on(table.runId, table.rowIndex)],
+);
+
+// Historical feedback from a previous tool. Separate from feedback_entries
+// so it never feeds engagement scores, digests or calibration.
+export const importedFeedback = pgTable(
+  "imported_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id),
+    givenAt: timestamp("given_at", { withTimezone: true }).notNull(),
+    content: encryptedText("imported_feedback", "content").notNull(),
+    sourceSystem: varchar("source_system", { length: 50 }).notNull().default("import"),
+    importRunId: uuid("import_run_id").references(() => importRuns.id, { onDelete: "set null" }),
+    sourceKey: varchar("source_key", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_imported_feedback_source_key").on(table.sourceKey),
+    index("idx_imported_feedback_recipient").on(table.recipientId, table.givenAt),
   ],
 );

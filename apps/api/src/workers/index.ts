@@ -30,6 +30,7 @@ import {
 } from "../lib/conversation-orchestrator.js";
 import { handleInbound } from "../lib/inbound-router.js";
 import { runSweep } from "../lib/conversation-sweeper.js";
+import { purgeExpiredImportRows } from "../lib/imports/pipeline.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { runCalendarModelPass } from "../lib/calendar-model.js";
@@ -251,6 +252,12 @@ export function createWorkers(config: WorkerConfig) {
           const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
           const result = await runSweep(tenantDb(orgId), { ...deps, conversationQueue: queues.conversationQueue });
           job.log(`Sweep: ${JSON.stringify(result)}`);
+          // Staged import rows are personal data: delete them once retention passes.
+          const purged = await purgeExpiredImportRows(tenantDb(orgId)).catch((err) => {
+            console.error("[conversation] import row purge failed:", err);
+            return 0;
+          });
+          if (purged) job.log(`Purged ${purged} expired import rows`);
           break;
         }
 

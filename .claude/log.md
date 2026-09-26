@@ -337,3 +337,11 @@
 - Pipeline: MeetingSource interface (OAuth source today, automatic source to plug in), two-person manager/direct-report detection plus the marker; semi-auto waits for approval
 - Routes: upload (in memory, .txt/.md/.vtt/.docx/.html/.pdf best effort), import approve/decline, between-meeting goals GET/PATCH
 - 417 API tests, 16/16 typecheck. Open for Nick: default mode, suggestions still visible to skip-levels/admins, real PDF parser dependency, running notes docs re-extracted
+
+## 2026-09-26: Customer data import pipeline (stage, map, dry run, approve, commit)
+- 0040: `import_runs`, `import_rows` (raw + mapped encrypted JSON, purge 30 days after commit via the sweep job), `imported_feedback` (separate from feedback_entries, so never in engagement), `users.job_title/start_date`, `goals.import_key` (partial unique)
+- `lib/imports/`: CSV/XLSX reader (read-excel-file, new dep), Sonnet mapping proposal (header + 5 rows, schema-constrained to real headers) gated by code with a header-synonym fallback, pure planners for people/goals/feedback/org charts, commit re-plans and refuses on planHash drift
+- Org charts go to Claude as image/PDF attachments (new `LLMMessage.attachments`, Anthropic only); lines carry confidence, low ones held until accepted; nobody is created from a chart
+- Routes at `/api/v1/admin/imports` (admin only); POST /users/bulk now shares `insertUsersSkippingExisting`
+- 40 new tests (30 unit, 2 request-builder, 8 integration); 426 API tests, 16/16 typecheck
+- Open for Nick: auto "manager" role for new users with reports, goal parents only linked on the ladder, engagement aggregates not built, no web UI yet

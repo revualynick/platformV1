@@ -667,6 +667,27 @@ export const sessionItemParamSchema = z.object({
   itemId: uuid,
 });
 
+// ── Data imports ───────────────────────────────────────
+
+/** File uploads come as base64 JSON (no multipart plugin); 20 MB decoded is about 27 MB encoded. */
+export const importUploadSchema = z.object({
+  kind: z.enum(["people", "goals", "feedback", "org_chart"]),
+  fileName: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(100),
+  dataBase64: z.string().min(1).max(28_000_000),
+  sourceSystem: z.string().regex(/^[a-z0-9_-]{1,50}$/).optional(),
+});
+
+export const importMappingSchema = z.object({
+  mapping: z
+    .object({
+      columns: z.record(z.string().max(100), z.string().max(200)),
+      dateFormat: z.enum(["iso", "dmy", "mdy"]),
+    })
+    .optional(),
+  acceptLowConfidence: z.boolean().optional(),
+});
+
 // ── Helpers ────────────────────────────────────────────
 
 /**

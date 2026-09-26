@@ -27,6 +27,7 @@ import { themeRoutes } from "./modules/themes/routes.js";
 import { campaignRoutes } from "./modules/campaigns/routes.js";
 import { demoRoutes, setDemoAnalysisQueue } from "./modules/demo/routes.js";
 import { goalsRoutes } from "./modules/goals/routes.js";
+import { importRoutes } from "./modules/imports/routes.js";
 import { reflectionRoutes, setReflectionAnalysisQueue } from "./modules/reflections/routes.js";
 import { exportRoutes } from "./modules/export/routes.js";
 import { assessmentRoutes } from "./modules/assessments/routes.js";
@@ -144,6 +145,7 @@ export async function buildApp() {
   await app.register(profileRoutes, { prefix: "/api/v1/profiles" });
   await app.register(demoRoutes, { prefix: "/api/v1/demo" });
   await app.register(goalsRoutes, { prefix: "/api/v1/goals" });
+  await app.register(importRoutes, { prefix: "/api/v1/admin/imports" });
   await app.register(devRoutes, { prefix: "/api/v1/dev" });
 
   // WebSocket routes
