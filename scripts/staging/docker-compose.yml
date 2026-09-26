@@ -1,6 +1,17 @@
-# Staging data services on the Linux box. Bound to 127.0.0.1 only: nothing
-# is reachable from the network; you get in through an SSH tunnel.
-# Run by box-deploy.sh with project name revualy-staging and staging.env.
+# Staging on the Linux box, built from the same Dockerfiles Railway uses
+# (Dockerfile for the API, apps/web/Dockerfile for the web app), so a problem
+# in the production build shows up here first.
+#
+# Everything is bound to 127.0.0.1: nothing is reachable from the network;
+# you get in through an SSH tunnel (docs/staging.md). Run by box-deploy.sh
+# with project name revualy-staging and ~/revualy-staging/staging.env.
+x-app-env: &app-env
+  env_file:
+    - path: ${STAGING_ROOT:?}/staging.env
+    # The bot's Anthropic key, if present on the box. Not copied anywhere.
+    - path: ${HOME}/.config/revualy-eval/anthropic.env
+      required: false
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -27,11 +38,55 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in staging.env}
     volumes:
       - ${STAGING_ROOT:?}/data/redis:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: revualy-staging-api:${RELEASE_SHA:-local}
+    <<: *app-env
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # Inside the Docker network the databases are reached by service name.
+      DATABASE_URL: postgresql://revualy:${POSTGRES_PASSWORD}@postgres:5432/revualy_staging
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    cpus: 2
+    mem_limit: 2g
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    image: revualy-staging-web:${RELEASE_SHA:-local}
+    <<: *app-env
+    environment:
+      DATABASE_URL: postgresql://revualy:${POSTGRES_PASSWORD}@postgres:5432/revualy_staging
+      INTERNAL_API_URL: http://api:3000
+      PORT: "3001"
+      NODE_ENV: production
+      # Staging keeps the test login for automated tests; deploy with
+      # TEST_LOGIN=off to check production behaviour (endpoint gone).
+      TEST_LOGIN_ENABLED: ${TEST_LOGIN_ENABLED:-true}
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      - api
+    cpus: 2
+    mem_limit: 2g
     restart: unless-stopped

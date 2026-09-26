@@ -2,6 +2,7 @@
 # Deploy a committed revision of Revualy to staging on the Linux box.
 #   scripts/staging/deploy.sh            # deploys HEAD
 #   scripts/staging/deploy.sh <commit>   # deploys that commit
+#   TEST_LOGIN=off scripts/staging/deploy.sh   # as production: test login disabled
 # Only committed code goes: uncommitted changes are never deployed, so
 # staging always matches something in git history. Nothing here touches
 # Railway or GitHub. See docs/staging.md.
@@ -16,4 +17,4 @@ fi
 REL="revualy-staging/releases/$SHA"
 echo "Deploying $SHA to $HOST"
 git archive --format=tar "$SHA" | ssh "$HOST" "set -e; rm -rf ~/$REL; mkdir -p ~/$REL; tar -x -C ~/$REL"
-ssh "$HOST" "bash ~/$REL/scripts/staging/box-deploy.sh ~/$REL"
+ssh "$HOST" "TEST_LOGIN=${TEST_LOGIN:-on} bash ~/$REL/scripts/staging/box-deploy.sh ~/$REL"
