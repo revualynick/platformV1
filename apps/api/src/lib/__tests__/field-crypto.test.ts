@@ -8,7 +8,12 @@ import {
   isEncryptedValue,
   assertEncryptionReady,
   resetKeyringForTests,
+  decryptLegacySecret,
+  currentKeyId,
+  configuredKeyIds,
+  storedKeyId,
 } from "@revualy/shared/server";
+import { sealCachedNotes, openCachedNotes } from "../../modules/one-on-one/ws.js";
 
 // setup.ts sets ENCRYPTION_KEY to this value.
 const TEST_KEY = "0123456789abcdef".repeat(4);
@@ -24,7 +29,52 @@ function withEnv(vars: Record<string, string | undefined>) {
 }
 
 afterEach(() => {
-  withEnv({ ENCRYPTION_KEY: TEST_KEY, ENCRYPTION_KEYS: undefined });
+  withEnv({ ENCRYPTION_KEY: TEST_KEY, ENCRYPTION_KEYS: undefined, ENCRYPTION_LEGACY_READS: undefined });
+});
+
+describe("legacy-read switch (ENCRYPTION_LEGACY_READS)", () => {
+  it("reads legacy plaintext and pre-v1 secrets while on (the default)", () => {
+    expect(decryptField("old row", AAD)).toBe("old row");
+    expect(decrypt(legacySharedFormat("tok", TEST_KEY))).toBe("tok");
+  });
+
+  it("refuses them when off, but still reads v1 and empty values", () => {
+    const v1 = encryptField("new row", AAD);
+    const legacy = legacyApiFormat("tok", TEST_KEY);
+    withEnv({ ENCRYPTION_LEGACY_READS: "off" });
+    expect(() => decryptField("old row", AAD)).toThrow(/ENCRYPTION_LEGACY_READS=off/);
+    expect(() => decrypt(legacy)).toThrow(/ENCRYPTION_LEGACY_READS=off/);
+    expect(decryptField(v1, AAD)).toBe("new row");
+    expect(decryptField("", AAD)).toBe("");
+    // The backfill can still read pre-v1 secrets to rewrite them.
+    expect(decryptLegacySecret(legacy)).toBe("tok");
+  });
+
+  it("rejects an unknown setting at startup", () => {
+    withEnv({ ENCRYPTION_LEGACY_READS: "maybe" });
+    expect(() => assertEncryptionReady()).toThrow(/ENCRYPTION_LEGACY_READS/);
+  });
+
+  it("exposes key ids without the keys", () => {
+    withEnv({ ENCRYPTION_KEYS: `k2:${OTHER_KEY},k1:${TEST_KEY}` });
+    expect(currentKeyId()).toBe("k2");
+    expect(configuredKeyIds()).toEqual(["k2", "k1"]);
+    expect(storedKeyId(encryptField("x", AAD))).toBe("k2");
+    expect(storedKeyId("plain")).toBeNull();
+  });
+});
+
+describe("1:1 live notes cache (Redis)", () => {
+  it("stores ciphertext bound to the session and reads it back", () => {
+    const sealed = sealCachedNotes("s1", "agenda: pay review");
+    expect(sealed).not.toContain("pay review");
+    expect(openCachedNotes("s1", sealed)).toBe("agenda: pay review");
+    expect(openCachedNotes("s2", sealed)).toBeNull();
+  });
+
+  it("ignores plaintext left over from before encryption", () => {
+    expect(openCachedNotes("s1", "old plaintext notes")).toBeNull();
+  });
 });
 
 /** The two formats that existed before v1, reproduced for back-compat tests. */

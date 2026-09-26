@@ -180,6 +180,8 @@ export interface RewriteOptions {
   pauseMs?: number;
   only?: string[];
   onProgress?: (p: ColumnProgress) => void;
+  /** Test hook: runs after a batch is read, before it is written. */
+  beforeWrite?: () => Promise<void>;
 }
 
 export interface ColumnProgress {
@@ -335,6 +337,7 @@ async function rewriteColumn(sql: Sql, col: EncryptedColumn, opts: RewriteOption
       }
     }
 
+    if (opts.beforeWrite) await opts.beforeWrite();
     const cast = isJson ? "::jsonb" : "";
     const n = pk.length;
     const whereKeys = pk.map((k, i) => `${q(k)} = $${i + 2}`).join(" and ");

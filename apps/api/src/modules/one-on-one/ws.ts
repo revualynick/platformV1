@@ -5,6 +5,34 @@ import { Redis } from "ioredis";
 import { getTenantDb } from "@revualy/db";
 import { oneOnOneSessions, oneOnOneAgendaItems, oneOnOneActionItems } from "@revualy/db";
 import { verifyWsToken } from "../../lib/ws-auth.js";
+import { encryptField, decryptField, isEncryptedValue } from "@revualy/shared/server";
+
+/**
+ * Live notes cached in Redis are encrypted like the DB column. The AAD
+ * names the session, so a value copied to another session's key fails.
+ */
+function notesCacheAad(sessionId: string): string {
+  return `redis.1on1_content.${sessionId}`;
+}
+
+export function sealCachedNotes(sessionId: string, content: string): string {
+  return encryptField(content, notesCacheAad(sessionId));
+}
+
+/**
+ * Read a cached value. Returns null (so the caller falls back to the notes
+ * in Postgres) for anything that is not a readable v1 value: a plaintext
+ * entry from before this change (they expire within 24 h) or a value that
+ * fails to decrypt.
+ */
+export function openCachedNotes(sessionId: string, cached: string): string | null {
+  if (!isEncryptedValue(cached)) return null;
+  try {
+    return decryptField(cached, notesCacheAad(sessionId));
+  } catch {
+    return null;
+  }
+}
 
 function getTenantDbUrl(): string {
   const url = process.env.DATABASE_URL;
@@ -66,7 +94,7 @@ async function persistNotes(room: Room) {
     await wsRedis.setex(
       `${REDIS_KEY_PREFIX}${room.sessionId}`,
       REDIS_TTL,
-      room.lastContent,
+      sealCachedNotes(room.sessionId, room.lastContent),
     );
   }
 
@@ -231,8 +259,9 @@ export function registerOneOnOneWs(app: FastifyInstance, redisUrl: string) {
       // Restore content from Redis if room is fresh
       if (!room.lastContent && wsRedis) {
         const cached = await wsRedis.get(`${REDIS_KEY_PREFIX}${sessionId}`);
-        if (cached) {
-          room.lastContent = cached;
+        const opened = cached ? openCachedNotes(sessionId, cached) : null;
+        if (opened !== null) {
+          room.lastContent = opened;
         } else {
           room.lastContent = session.notes;
         }
