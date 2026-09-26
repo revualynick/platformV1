@@ -360,3 +360,9 @@
 - Docs tidy: 10 outdated docs to docs/archive/ (indexed), docs/README.md index, docs/backlog.md as the single open-work list, new running root README with decisions log (old README archived), stale facts fixed in plan.md, c3-plan status, key-rotation flagged, CLAUDE.md hygiene rules
 - Removed the three merged agent worktrees and branches; .claude/worktrees/ ignored
 - Checked still open: M3 unsubscribe links, H4 Slack bot_id filter. Untracked .claude/skills/railway-* left for Nick to decide
+
+## 2026-09-26 (night): privacy step 1 and parallel build started
+- 1:1 suggestions now visible only to the two meeting participants (API list/apply/dismiss and both web goal pages); skip-levels and admins excluded
+- Flag-alert emails no longer carry the flagged text; M3 fixed: signed one-click unsubscribe tokens (@revualy/shared/server), public web route /api/unsubscribe (POST unsubscribes, GET confirms), footer links to /dashboard/settings
+- 470 API tests, 17/17 typecheck; the web unsubscribe route isn't exercised end to end yet
+- Four Opus agents in worktrees: C3 step 7 (migration 0042), pseudonymous peer storage + audit log + export (0043), tickets + job-agent gate (0044), typed decision layer + calibration eval

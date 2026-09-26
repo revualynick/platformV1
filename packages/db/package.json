@@ -29,6 +29,10 @@
     "./context": {
       "types": "./dist/context.d.ts",
       "import": "./dist/context.js"
+    },
+    "./encryption-maintenance": {
+      "types": "./dist/encryption-maintenance.d.ts",
+      "import": "./dist/encryption-maintenance.js"
     }
   },
   "scripts": {
@@ -40,6 +44,7 @@
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "seed:defaults": "tsx src/seed-defaults.ts",
+    "encryption": "tsx src/encryption-cli.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

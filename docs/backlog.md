@@ -6,8 +6,8 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Before beta (real employees)
 
-- **Privacy steps 1 to 3** from `docs/design/privacy-and-agent-access.md`: close the leaks (export blind by default, 1:1 suggestions hidden from skip-levels and admins, no verbatim text in flag-alert emails), pseudonymous peer storage, tickets. The bot's "anonymised" promise depends on them.
-- **C3 step 7:** encrypt existing data (backfill, plaintext check, remove legacy formats, rewrite `scripts/rotate-encryption-key.ts` and `docs/key-rotation.md`).
+- **Privacy steps 2 and 3** from `docs/design/privacy-and-agent-access.md`: pseudonymous peer storage (includes export blind by default) and tickets. In progress with agents (2026-09-26). The bot's "anonymised" promise depends on them. Step 1's other leaks are fixed.
+- **C3 step 7** (in progress with an agent, 2026-09-26): encrypt existing data (backfill, plaintext check, remove legacy formats, rewrite `scripts/rotate-encryption-key.ts` and `docs/key-rotation.md`).
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
 - **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26).
@@ -15,7 +15,6 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Bugs
 
-- **M3 unsubscribe links broken** (checked 2026-09-26): emails link to `/settings/notifications`, which doesn't exist for employees. The one-click `List-Unsubscribe-Post` header is advertised but nothing handles the POST. `apps/api/src/lib/email-templates.ts:40`, `apps/api/src/workers/index.ts:500,562`.
 - **H4 Slack bot may process its own messages** (checked 2026-09-26: no `bot_id` filter in the Slack adapter). Only matters once Slack is a tenant platform (C3 step 10).
 - **M4 demo LLM spend** (not re-checked): the 3-a-day limit is per unverified email; on real tenants the authenticated `/demo/start` creates real conversations about a real colleague.
 - **B17 `next build` prerender failure on /404** (not re-checked; Railway builds may have since passed).

@@ -16,6 +16,12 @@ import crypto from "node:crypto";
  * parsed once and cached: no per-call key derivation, so encryption adds
  * microseconds, not milliseconds. There is no plaintext fallback: without a
  * key, every encrypt and decrypt throws (fail closed).
+ *
+ * Legacy reads: rows written before a column was encrypted (plaintext) and
+ * secrets in the two pre-v1 formats stay readable while
+ * ENCRYPTION_LEGACY_READS is "on" (the default). Once a tenant has run the
+ * backfill and the check reports zero, set ENCRYPTION_LEGACY_READS=off: any
+ * value that is not v1 then throws instead of being returned.
  */
 
 const ALGORITHM = "aes-256-gcm";
@@ -31,6 +37,7 @@ interface Keyring {
 }
 
 let cachedKeyring: Keyring | null = null;
+let cachedLegacyReads: boolean | null = null;
 
 function parseKeyring(): Keyring {
   const multi = process.env.ENCRYPTION_KEYS?.trim();
@@ -71,17 +78,54 @@ function keyring(): Keyring {
   return cachedKeyring;
 }
 
+function parseLegacyReads(): boolean {
+  const raw = (process.env.ENCRYPTION_LEGACY_READS ?? "").trim().toLowerCase();
+  if (raw === "" || raw === "on") return true;
+  if (raw === "off") return false;
+  throw new Error('ENCRYPTION_LEGACY_READS must be "on" or "off"');
+}
+
+/**
+ * Whether values not in the v1 format may still be read (legacy plaintext
+ * rows, pre-v1 secret formats). ENCRYPTION_LEGACY_READS: "on" by default,
+ * "off" once the tenant's backfill check reports zero.
+ */
+export function legacyReadsAllowed(): boolean {
+  if (cachedLegacyReads === null) cachedLegacyReads = parseLegacyReads();
+  return cachedLegacyReads;
+}
+
 /**
  * Validate the key configuration now, so a misconfigured deployment fails
  * at startup instead of on the first request that touches encrypted data.
  */
 export function assertEncryptionReady(): void {
   keyring();
+  legacyReadsAllowed();
 }
 
-/** Test hook: forget cached keys so a test can change the env. */
+/** Test hook: forget cached keys and settings so a test can change the env. */
 export function resetKeyringForTests(): void {
   cachedKeyring = null;
+  cachedLegacyReads = null;
+}
+
+/** Id of the key new values are encrypted with (first in ENCRYPTION_KEYS). */
+export function currentKeyId(): string {
+  return keyring().currentId;
+}
+
+/** Every configured key id, current first. */
+export function configuredKeyIds(): string[] {
+  return [...keyring().keys.keys()];
+}
+
+/** Key id of a v1 value, or null if the value is not in the v1 format. */
+export function storedKeyId(stored: string): string | null {
+  if (!stored.startsWith(PREFIX)) return null;
+  const rest = stored.slice(PREFIX.length);
+  const sep = rest.indexOf(":");
+  return sep < 1 ? null : rest.slice(0, sep);
 }
 
 // ── Field encryption (with associated data) ──────────────
@@ -103,12 +147,17 @@ export function encryptField(plaintext: string, aad: string): string {
 
 /**
  * Decrypt a stored value. Values without the `enc:v1:` prefix are legacy
- * plaintext written before the column was encrypted and are returned
- * unchanged until the backfill rewrites them. Tampered values, wrong AAD
- * or an unknown key id throw.
+ * plaintext written before the column was encrypted: returned unchanged
+ * while legacy reads are allowed, refused once ENCRYPTION_LEGACY_READS=off.
+ * Tampered values, wrong AAD or an unknown key id always throw.
  */
 export function decryptField(stored: string, aad: string): string {
-  if (!stored.startsWith(PREFIX)) return stored;
+  if (!stored.startsWith(PREFIX)) {
+    if (stored === "" || legacyReadsAllowed()) return stored;
+    throw new Error(
+      `Refusing an unencrypted value in ${aad || "a secret field"} (ENCRYPTION_LEGACY_READS=off). Run the encryption backfill.`,
+    );
+  }
   const rest = stored.slice(PREFIX.length);
   const sep = rest.indexOf(":");
   const keyId = rest.slice(0, sep);
@@ -146,15 +195,27 @@ export function encrypt(plaintext: string): string {
 }
 
 /**
- * Decrypt a secret. Reads the v1 format and both legacy formats:
- *  - `@revualy/shared` legacy: base64(iv | tag | ciphertext)
- *  - `apps/api` legacy: base64(iv):base64(tag):base64(ciphertext)
- * Legacy values are tried against every configured key (the GCM tag
- * proves which one is right). Throws if nothing decrypts.
+ * Decrypt a secret. Reads the v1 format and, while legacy reads are
+ * allowed, both pre-v1 formats (see decryptLegacySecret). Throws if nothing
+ * decrypts, or on a pre-v1 value once ENCRYPTION_LEGACY_READS=off.
  */
 export function decrypt(stored: string): string {
   if (stored.startsWith(PREFIX)) return decryptField(stored, "");
+  if (!legacyReadsAllowed()) {
+    throw new Error("Refusing a pre-v1 secret (ENCRYPTION_LEGACY_READS=off). Run the encryption backfill.");
+  }
+  return decryptLegacySecret(stored);
+}
 
+/**
+ * Read a secret in one of the two pre-v1 formats, whatever the legacy-reads
+ * setting (the backfill needs it to rewrite them):
+ *  - `@revualy/shared` legacy: base64(iv | tag | ciphertext)
+ *  - `apps/api` legacy: base64(iv):base64(tag):base64(ciphertext)
+ * Tried against every configured key (the GCM tag proves which one is
+ * right). Throws if nothing decrypts.
+ */
+export function decryptLegacySecret(stored: string): string {
   let packed: Buffer;
   const parts = stored.split(":");
   if (parts.length === 3) {

@@ -8,8 +8,14 @@ export {
   encryptField,
   decryptField,
   isEncryptedValue,
+  decryptLegacySecret,
+  legacyReadsAllowed,
+  currentKeyId,
+  configuredKeyIds,
+  storedKeyId,
   assertEncryptionReady,
   resetKeyringForTests,
   isEncryptionConfigured,
   generateId,
 } from "./utils/crypto.js";
+export { createUnsubscribeToken, verifyUnsubscribeToken } from "./utils/unsubscribe.js";

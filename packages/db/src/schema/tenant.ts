@@ -19,7 +19,13 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { encryptField, decryptField } from "@revualy/shared/server";
+import {
+  encryptField,
+  decryptField,
+  isEncryptedValue,
+  legacyReadsAllowed,
+} from "@revualy/shared/server";
+import { registerEncryptedColumn } from "../encrypted-columns.js";
 
 /**
  * A `text` column encrypted at rest (AES-256-GCM, see @revualy/shared
@@ -27,7 +33,8 @@ import { encryptField, decryptField } from "@revualy/shared/server";
  * and select through Drizzle is covered in both the API and the web app,
  * and no call site can forget. The Postgres type stays `text`, so switching
  * a column needs no migration; legacy plaintext rows read back unchanged
- * until the backfill rewrites them.
+ * until the backfill rewrites them (and are refused once
+ * ENCRYPTION_LEGACY_READS=off).
  *
  * The associated data is "table.column", so a value copied into another
  * column will not decrypt.
@@ -38,6 +45,7 @@ import { encryptField, decryptField } from "@revualy/shared/server";
  */
 export function encryptedText(table: string, column: string) {
   const aad = `${table}.${column}`;
+  registerEncryptedColumn({ table, column, kind: "text", aad });
   return customType<{ data: string; driverData: string }>({
     dataType() {
       return "text";
@@ -47,6 +55,52 @@ export function encryptedText(table: string, column: string) {
     },
     fromDriver(value) {
       return decryptField(value, aad);
+    },
+  })(column);
+}
+
+/** Empty JSON hides nothing, so {} and [] are stored as they are (like ''). */
+export function isEmptyJson(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length === 0;
+  return (
+    typeof value === "object" && value !== null && Object.keys(value as object).length === 0
+  );
+}
+
+/**
+ * A `jsonb` column encrypted at rest. The whole value is serialised,
+ * encrypted with AAD "table.column" and stored as a JSON string
+ * (`"enc:v1:..."`), so the Postgres type stays `jsonb` and switching a
+ * column needs no migration. Legacy rows (plain JSON) read back unchanged
+ * until the backfill rewrites them, and are refused once
+ * ENCRYPTION_LEGACY_READS=off. {} and [] are stored as they are.
+ *
+ * Limits: as encryptedText, plus no jsonb operators (->, @>) in SQL.
+ */
+export function encryptedJson<T>(table: string, column: string) {
+  const aad = `${table}.${column}`;
+  registerEncryptedColumn({ table, column, kind: "json", aad });
+  return customType<{ data: T; driverData: unknown }>({
+    dataType() {
+      return "jsonb";
+    },
+    toDriver(value) {
+      // postgres.js sends jsonb parameters as given (drizzle sets a
+      // pass-through serialiser), so this must be JSON text.
+      if (value === null || value === undefined || isEmptyJson(value)) return JSON.stringify(value ?? null);
+      return JSON.stringify(encryptField(JSON.stringify(value), aad));
+    },
+    fromDriver(value) {
+      // postgres.js parses jsonb, so an encrypted value arrives as a string.
+      if (typeof value === "string" && isEncryptedValue(value)) {
+        return JSON.parse(decryptField(value, aad)) as T;
+      }
+      if (value !== null && !isEmptyJson(value) && !legacyReadsAllowed()) {
+        throw new Error(
+          `Refusing an unencrypted value in ${aad} (ENCRYPTION_LEGACY_READS=off). Run the encryption backfill.`,
+        );
+      }
+      return value as T;
     },
   })(column);
 }
@@ -714,9 +768,8 @@ export const feedbackDigests = pgTable(
       .notNull()
       .references(() => users.id),
     monthStarting: date("month_starting").notNull(),
-    data: jsonb("data")
-      .notNull()
-      .$type<{
+    // Encrypted (tier 2: derived from feedback).
+    data: encryptedJson<{
         memberSummaries: Array<{
           userId: string;
           name: string;
@@ -737,7 +790,7 @@ export const feedbackDigests = pgTable(
           };
         };
         feedbackEntryIds: string[];
-      }>(),
+      }>("feedback_digests", "data").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1112,7 +1165,7 @@ export const calibrationReports = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: text("org_id").notNull(),
     weekStarting: date("week_starting").notNull(),
-    data: jsonb("data").notNull(),
+    data: encryptedJson<unknown>("calibration_reports", "data").notNull(), // encrypted (tier 2)
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1138,7 +1191,7 @@ export const threeSixtyReviews = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("collecting"),
     targetReviewerCount: integer("target_reviewer_count").notNull().default(5),
     completedReviewerCount: integer("completed_reviewer_count").default(0),
-    aggregatedData: jsonb("aggregated_data"),
+    aggregatedData: encryptedJson<unknown>("three_sixty_reviews", "aggregated_data"), // encrypted (tier 2)
     startedAt: timestamp("started_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1202,7 +1255,7 @@ export const discoveredThemes = pgTable(
       () => coreValues.id,
       { onDelete: "set null" },
     ),
-    sampleEvidence: jsonb("sample_evidence").$type<string[]>().default([]),
+    sampleEvidence: encryptedJson<string[]>("discovered_themes", "sample_evidence").default([]), // encrypted (tier 2)
     status: varchar("status", { length: 20 }).default("suggested"), // suggested | accepted | rejected | archived
     acceptedAsThemeId: uuid("accepted_as_theme_id").references(
       () => questionnaireThemes.id,
@@ -1435,8 +1488,8 @@ export const assessmentSessions = pgTable(
       .references(() => users.id),
     framework: varchar("framework", { length: 20 }).notNull(),
     context: varchar("context", { length: 30 }).notNull().default("onboarding"),
-    responses: jsonb("responses")
-      .$type<Record<string, string>>() // questionId → selected option key
+    // questionId → selected option key. Encrypted (tier 2).
+    responses: encryptedJson<Record<string, string>>("assessment_sessions", "responses")
       .notNull()
       .default({}),
     startedAt: timestamp("started_at", { withTimezone: true })
@@ -1539,7 +1592,7 @@ export const profileDevelopmentGoals = pgTable(
       () => profileSnapshots.id,
     ),
     status: varchar("status", { length: 20 }).notNull().default("active"),
-    notes: text("notes"),
+    notes: encryptedText("profile_development_goals", "notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

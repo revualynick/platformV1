@@ -72,6 +72,19 @@ export function canManageGoal(
 }
 
 /**
+ * Suggestions come from a 1:1, and what is said in a 1:1 stays in that
+ * 1:1: only the two people in the meeting may see, apply or dismiss them.
+ * Skip-levels and admins are excluded even when they can manage the goal
+ * (docs/design/privacy-and-agent-access.md, tier C).
+ */
+export function isMeetingParticipant(
+  ctx: Pick<GoalPermissionContext, "userId">,
+  meeting: { organizerId: string; subjectUserId: string | null },
+): boolean {
+  return ctx.userId === meeting.organizerId || ctx.userId === meeting.subjectUserId;
+}
+
+/**
  * Creation follows the manage matrix, with one extra rule: personal
  * goals can only ever be created for oneself.
  */

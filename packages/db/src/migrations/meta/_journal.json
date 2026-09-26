@@ -297,6 +297,13 @@
       "breakpoints": true
     },
     {
+      "idx": 42,
+      "version": "7",
+      "when": 1790460000000,
+      "tag": "0042_encryption_backfill",
+      "breakpoints": true
+    },
+    {
       "idx": 44,
       "version": "7",
       "when": 1790480000000,
