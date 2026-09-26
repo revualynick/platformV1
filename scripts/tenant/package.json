@@ -1,0 +1,22 @@
+{
+  "name": "@revualy/tenant-tools",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "provision": "tsx provision.ts",
+    "fleet": "tsx fleet.ts",
+    "encryption-check": "tsx encryption-check.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@revualy/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

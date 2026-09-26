@@ -16,6 +16,7 @@ COPY packages/chat-adapter-slack/package.json packages/chat-adapter-slack/
 COPY packages/chat-adapter-gchat/package.json packages/chat-adapter-gchat/
 COPY packages/chat-adapter-teams/package.json packages/chat-adapter-teams/
 COPY packages/ai-core/package.json packages/ai-core/
+COPY scripts/tenant/package.json scripts/tenant/
 
 RUN pnpm install --frozen-lockfile --prod=false
 
@@ -53,6 +54,7 @@ COPY --from=build /app/packages/chat-adapter-slack/package.json ./packages/chat-
 COPY --from=build /app/packages/chat-adapter-gchat/package.json ./packages/chat-adapter-gchat/
 COPY --from=build /app/packages/chat-adapter-teams/package.json ./packages/chat-adapter-teams/
 COPY --from=build /app/packages/ai-core/package.json ./packages/ai-core/
+COPY --from=build /app/scripts/tenant/package.json ./scripts/tenant/
 
 # Fresh production-only install (avoids broken pnpm prune in incomplete workspace)
 RUN pnpm install --frozen-lockfile --prod
