@@ -2,7 +2,7 @@
 
 ## Brief
 
-Revualy is an AI-powered peer review platform. Feedback interactions happen via chat (Slack, Google Chat, Microsoft Teams). The system is **chat-platform agnostic** — core logic is fully decoupled from any specific platform via an adapter pattern. It continuously collects feedback (2-3 micro-interactions per week, 1-5 messages each), scores engagement quality, maps feedback to company core values, and surfaces insights through role-based dashboards.
+Revualy is an AI-powered peer review platform. Feedback interactions happen via chat (Slack, Google Chat, Microsoft Teams). The system is **chat-platform agnostic** — core logic is fully decoupled from any specific platform via an adapter pattern. It continuously collects feedback in short chat check-ins (each week at most one peer check-in and one or two personal ones, up to 3 exchanges each, anchored to real calendar meetings where possible), scores engagement quality, maps feedback to company core values, and surfaces insights through role-based dashboards.
 
 **Business model:** $30/mo base + $3/employee/month. ~$49/mo inference cost per 100 employees. Per-tenant infrastructure ~$20-25/mo on Railway.
 
@@ -35,9 +35,9 @@ interface ChatAdapter {
 }
 ```
 
-**Message flow:** Platform webhook → Adapter (verify, normalize) → InboundMessage → BullMQ → Conversation Manager → AI Pipeline → OutboundMessage → AdapterRegistry → correct adapter → platform API
+**Message flow:** Platform webhook → Adapter (verify, normalize) → stored in `inbound_messages` (encrypted) → BullMQ job carrying only the id → inbound router (identity, keywords, open conversation) → turn engine (Postgres, one structured LLM call per turn, reference path for sensitive turns) → outbox → AdapterRegistry → correct adapter → platform API
 
-**LLM tiers:** Fast (Haiku/GPT-4o-mini) for scoring/classification, Standard (Sonnet/GPT-4o) for questions/follow-ups, Advanced (Opus/GPT-4o) for calibration/analysis.
+**LLM tiers (Anthropic, latest models; pin once stable):** fast `claude-haiku-4-5` (calendar model, classification), standard `claude-sonnet-5` (turn planner, analysis), advanced `claude-opus-5-5` (serious concerns on the reference path). `LLM_MODEL_*` env vars pin a tier. For alpha and beta, quality comes before token cost (Nick, 2026-09-26).
 
 | Layer | Technology |
 |-------|-----------|
@@ -52,7 +52,7 @@ interface ChatAdapter {
 | **Email** | Resend |
 | **Calendar** | Google Calendar API (`googleapis`) |
 
-**Data:** Single Postgres per instance (auth tables + business data). Redis for conversation state (24h TTL), WebSocket notes, rate limiter, leaderboard. No separate control plane DB needed for tenant instances — only for the marketing/demo site (leads, analytics).
+**Data:** Single Postgres per instance (auth tables + business data), including all conversation state. Redis for BullMQ jobs, the Teams store, WebSocket notes, rate limiter, leaderboard. Sensitive columns encrypted at rest (AES-256-GCM, v1 format, keyring). No separate control plane DB needed for tenant instances — only for the marketing/demo site (leads, analytics).
 
 ---
 
@@ -64,7 +64,7 @@ interface ChatAdapter {
 revualy/
 ├── packages/
 │   ├── shared/                 # Domain types, crypto utils
-│   ├── db/                     # Drizzle schema + migrations (22 migrations)
+│   ├── db/                     # Drizzle schema + migrations (0000 to 0041)
 │   ├── chat-core/              # ChatAdapter interface + AdapterRegistry
 │   ├── chat-adapter-slack/     # Slack adapter (complete)
 │   ├── chat-adapter-gchat/     # Google Chat adapter (complete)
@@ -73,6 +73,7 @@ revualy/
 ├── apps/
 │   ├── api/                    # Fastify server (22 route modules) + BullMQ workers (5 queues)
 │   └── web/                    # Next.js 15 dashboards (employee, manager, admin, marketing)
+├── scripts/tenant/             # Tenant provisioning + fleet tooling (dry run by default)
 ├── docker-compose.yml          # PostgreSQL+pgvector, Redis 7 (local dev)
 ├── Dockerfile                  # API multi-stage build (Railway)
 └── .env.example                # Required env vars per instance
@@ -189,7 +190,7 @@ revualy/
 
 **Code quality:** Three code review rounds (130+ findings, all resolved). TOCTOU race prevention, timing-safe secret comparison, OAuth state HMAC validation, input validation (Zod schemas on all endpoints), DB constraints, error boundaries, prompt injection sanitization, fail-closed defaults. 64 unit tests (vitest). Post-Phase 6 full codebase audit confirmed zero critical/high issues, no unused dependencies, no stale Neo4j or TENANT_DATABASE_URL references.
 
-### Architecture Refresh (Phase 6 — in progress)
+### Architecture Refresh (Phase 6, complete)
 
 **Decision:** Shift from shared multi-tenant app to per-tenant isolated deployments.
 
@@ -268,7 +269,7 @@ Whole-codebase review of the uncommitted work. Full notes in `.claude/log.md`.
 - [ ] Member detail page allows direct reports only; API allows full tree + admins
 - [ ] `test-login` open redirect via `redirect` param, `secure: false` cookie, key accepted in query string
 
-**Deep review (same day):** see `docs/review-2026-09-23-deep.md`. Open: C3 chat replies never reach their conversation (Redis key mismatch), H1 deactivated users keep access, H2 rate limiter keyed on web-server IP, H3 admin pages rely on layout-only auth, H4 Slack bot self-messages, H5 Google Chat JWT verification, plus M1–M6.
+**Deep review (same day):** see `docs/archive/review-2026-09-23-deep.md`. C3, H1 to H3, H5, M1, M2, M5 and M6 are fixed; H4, M3 and M4 are in `docs/backlog.md`.
 
 ### Decision: chat identity + routing (2026-09-23, fixes review C3)
 - **One chat platform per tenant** (Google Chat OR Slack OR Teams). Replaces `SCHEDULER_PLATFORM` env; only one `integrations` row may be connected.
@@ -282,3 +283,20 @@ Whole-codebase review of the uncommitted work. Full notes in `.claude/log.md`.
 - **Per-theme outcome** (answered / weak / unanswered) recorded, as the foundation for the planned re-presentation feature: weak or unanswered themes get re-asked in a later conversation with different wording. Also fix `decideNextAction` judging replies without seeing the question.
 - **Resolved (Nick):** managers can link (scoped to their reporting tree); Google Chat app not yet installed on the beta Workspace, so M1 is proved locally with signed event fixtures; the re-presentation engine is in C3 scope.
 - **Implementation plan:** `docs/c3-plan.md` (M1 Google Chat beta path, M2 re-presentation, M3 Slack/Teams linking).
+
+### Beta hardening progress (2026-09-24 to 2026-09-26)
+- **C3 steps 5 and 6 done:** conversation engine on Postgres (seq ordering, row locks, atomic turn claim, outbox, inbound ledger), sweeper every 5 minutes, partial feedback, per-theme outcomes, one structured LLM call per turn. Details in `docs/c3-plan.md`.
+- **Bot design:** script path for routine turns; a harness-shaped reference path (reads playbook references with a tool) for concerns. Serious concerns (wellbeing, conduct, safety) go to Opus 5.5, confirmed by experiments 3 and 4 and the topic grid: 100% of safety cases caught, no false alarms on everyday turns, and Opus avoided Sonnet's over-escalation of ordinary criticism. Never refer to emergency services; live escalation to a named person instead.
+- **Evaluation harness** (`apps/api/eval/`): frozen snapshots, hard-rule checks, blind two-judge panel, local-model paraphrases, 93-case topic grid; runs on the Linux box.
+- **Contact limits:** at most one peer and one or two personal check-ins a week, 3 exchanges each; a 3-day gap, and a rest after a rich check-in.
+- **Meeting anchors and the calendar model:** check-ins refer to a real shared meeting; Haiku proposes check-in jobs from calendar metadata and a code gate rejects invented references, 1:1s and sensitive meetings (migrations 0038, 0039).
+- **1:1 ingestion v2** (0041): automatic, semi-automatic (default) and manual modes; tasks, between-meeting goals and goal suggestions from Gemini notes; sensitive items withheld.
+- **Customer data imports** (0040): stage, map, dry run, approve, commit; CSV, Sheets, XLSX and unordered text.
+- **Tenant provisioning** (`scripts/tenant/`, skill `revualy-tenant`): dry run by default.
+
+### Decision: privacy, anonymity and agent access (2026-09-26)
+Full design in `docs/design/privacy-and-agent-access.md`. In short (Nick): reviews of others are pseudonymous, aggregated and released with a lag, and re-identification needs a super-admin secret and is immutably logged; self data is plain id-to-name and two-party (subject and manager), with wider sharing needing the subject's approval; raw inputs such as Gemini transcripts are kept, encrypted; chat agents never touch the database and work from tickets prepared by a job agent whose proposals pass a code gate. Not built yet; steps 1 to 3 come before real employees.
+
+### Docs tidy (2026-09-26)
+Outdated reviews and plans moved to `docs/archive/` (index in `docs/archive/README.md`); open items consolidated in `docs/backlog.md`; `docs/README.md` indexes what's current. The root README is now the running summary of the product, architecture and decisions.
+

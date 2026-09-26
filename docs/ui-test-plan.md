@@ -20,7 +20,7 @@ interactive surface (employee / manager / admin / marketing+auth+shared).
 - Phase 2 marketing/demo ✅ — `marketing.spec.ts` (26): landing/features/pricing/demo routes, nav, FAQ accordion, footer #-links, Slack mock, live demo chat via `claude -p` shim.
 - Phase 3 onboarding wizard ✅ — `onboarding.spec.ts` (9): 3-step flow, back-nav, validation, full happy path → /dashboard + onboardingComplete=true in DB.
 
-**RESOLVED — the "3 flakes" were a REAL app bug, not test flakiness (see local-hardening.md B18):**
+**RESOLVED — the "3 flakes" were a REAL app bug, not test flakiness (see archive/local-hardening.md B18):**
 apiFetch attached `Content-Type: application/json` to bodyless POST/DELETE, which Fastify 5 rejected with 400 — silently breaking deactivate, note-delete, AND the realtime ws-token endpoint. Fixed in `apps/web/src/lib/api.ts` (only set Content-Type when a body is present). All 3 tests un-fixme'd and green. Verbatim toggle's residual flake was a genuine hydration race in the harness (B19) — fixed with a re-click-until-persisted helper. A latent WS message-listener race (B20) is documented (no real client can hit it).
 
 **Phase 8 shared components ✅** — `components.spec.ts` (4): Modal (aria-modal/labelledby, focus-in, body-scroll-lock, Escape/✕/overlay-click close, top-most z-order), InfoHint (tooltip toggle + aria-expanded + Escape/outside-click), EngagementRing (sr-only status ↔ score band), DismissibleCard (localStorage dismiss persists + restores). FAQAccordion (8.5) covered in marketing; kudos/questionnaire modals (8.3) in mutations.
@@ -34,7 +34,7 @@ apiFetch attached `Content-Type: application/json` to bodyless POST/DELETE, whic
 **Demo LLM flow** needs a `DEMO_MODE=true` instance + `claude -p` shim to exercise end-to-end (skipped in this tenant-instance suite — see B21).
 
 **HARNESS NOTE:** run the suite at the config default `workers: 1` against `next dev`. `--workers>1` causes dev-server contention (compile-on-demand + polling) → false failures. Always read the final `N passed/failed/skipped` summary line, never a truncated `tail`.
-**OPEN BUILD BUG:** B17 — `next build` static prerender fails (useState null on /404, likely dual-React); tracked in local-hardening.md. Suite runs against `next dev` (polling, to avoid EMFILE).
+**OPEN BUILD BUG:** B17 — `next build` static prerender fails (useState null on /404, likely dual-React); tracked in archive/local-hardening.md. Suite runs against `next dev` (polling, to avoid EMFILE).
 
 ---
 

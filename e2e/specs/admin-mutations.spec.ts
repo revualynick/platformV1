@@ -96,7 +96,7 @@ test("admin: Add Person — create then Deactivate", async ({ page }) => {
   // Deactivation persistence is asserted after reload — the durable outcome of the
   // server action (row status badge → "Inactive"). Previously believed flaky; the
   // real cause was apiFetch attaching Content-Type to bodyless requests, which
-  // Fastify rejected with 400 (see docs/local-hardening.md B18). Now fixed.
+  // Fastify rejected with 400 (see docs/archive/local-hardening.md B18). Now fixed.
   const errors = collectErrors(page);
   const personEmail = `e2e-${ts}@acmecorp.com`;
   const personName = `E2E Person ${ts}`;

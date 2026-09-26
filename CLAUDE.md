@@ -2,7 +2,7 @@
 
 ## Context Recovery (post-compaction / clear / startup)
 Before doing any work after compaction, `/clear`, or session start, re-orient:
-1. Read `docs/plan.md` lines 1-50 (brief + spec) and last 50 lines (active context)
+1. Read `README.md` (running summary + decisions log), `docs/backlog.md` (open work), and `docs/plan.md` lines 1-50 (spec) and last 50 lines (active context)
 2. Run `git log --oneline -10` and `git diff --stat` to see recent work + uncommitted changes
 3. Check task list (`TaskList`) if one exists
 4. Only then proceed with the user's request
@@ -13,7 +13,7 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phases 1-6 complete.** See `docs/plan.md` for full details.
+**Phases 1-6 complete; beta hardening in progress** (`docs/c3-plan.md`, steps 0-6 done). See `README.md` for the current summary.
 
 **Architecture:** Per-tenant isolated deployments on Railway. Each customer gets `subdomain.revualy.com` with own Postgres + Redis. Marketing/demo site at apex domain with `DEMO_MODE=true`. Single DB per instance (auth + business data). No Neo4j.
 
@@ -27,8 +27,9 @@ packages/chat-adapter-slack/ — Slack adapter (complete)
 packages/chat-adapter-gchat/ — Google Chat adapter (complete)
 packages/chat-adapter-teams/ — Teams adapter (complete — Bot Framework + Adaptive Cards)
 packages/ai-core/           — LLM gateway + Anthropic provider
-packages/db/                — Drizzle schema + 23 migrations, seed
-docs/plan.md                — Full architecture + phase checklist
+packages/db/                — Drizzle schema + migrations (0000-0041), seed
+scripts/tenant/             — Tenant provisioning + fleet tooling (dry run by default)
+docs/                       — Index in docs/README.md; open work in docs/backlog.md; superseded docs in docs/archive/
 ```
 
 ## Key commands
@@ -59,9 +60,11 @@ docker compose up -d              # PostgreSQL, Redis (local dev)
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
 
+## Documentation hygiene
+- `README.md` is the running summary: update "Where it stands" and add a line to its decisions log when something important is decided or lands.
+- `docs/backlog.md` is the single list of open work. Add findings with their source; delete items when done (and log them in `.claude/log.md`).
+- Every doc starts with a status line and date. Superseded docs go to `docs/archive/` via `git mv`, with a row in `docs/archive/README.md` and any open items copied to the backlog.
+- Merged agent worktrees are removed (`git worktree remove`, then delete the branch) once their merge is verified.
+
 ## Known gaps
-- GChat adapter: needs Google Workspace admin setup to test end-to-end
-- Outlook calendar integration not built (Google Calendar done)
-- Curated demo seed data not yet created
-- Stripe billing integration not built
-- Production monitoring + alerting not configured
+See `docs/backlog.md` (single source; don't duplicate the list here).

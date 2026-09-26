@@ -353,3 +353,10 @@
 - Re-judges queued on the box: rejudge-1 (experiment 3, 15:52) then rejudge-2 (grid, --only-missing)
 - Re-judges done (189/189 exp 3, 56/56 grid, 0 failed calls): both judges score Opus ahead on serious flags in both sets (exp 3 +0.09/+0.07, grid +0.14/+0.14); Opus also avoided Sonnet's over-escalation of ordinary criticism. Keep option 1 (serious flags on Opus), ~2s slower
 - Experiment 4 ($1.39): 35-word cap on reference-path replies, Opus length failures 7/70 -> 1/35, decisions 47/47; "don't invite more when pausing" reverted because the conduct reference asks for "share only what you're comfortable with" (playbook wording for Nick)
+
+## 2026-09-26 (evening): privacy design, docs tidy
+- Nick's decisions: peer reviews pseudonymous (HMAC, super-admin re-identification, immutable log), aggregated, released with lag; self data plain id and two-party; raw Gemini transcripts kept encrypted; chat agents work only from tickets prepared by a job agent behind a code gate; semi-auto 1:1 default; calendar sliders; quality before token cost for alpha/beta; Jev not adopted, build a similar deterministic layer ourselves
+- Wrote docs/design/privacy-and-agent-access.md (agreed in principle, not built; 5 open questions)
+- Docs tidy: 10 outdated docs to docs/archive/ (indexed), docs/README.md index, docs/backlog.md as the single open-work list, new running root README with decisions log (old README archived), stale facts fixed in plan.md, c3-plan status, key-rotation flagged, CLAUDE.md hygiene rules
+- Removed the three merged agent worktrees and branches; .claude/worktrees/ ignored
+- Checked still open: M3 unsubscribe links, H4 Slack bot_id filter. Untracked .claude/skills/railway-* left for Nick to decide

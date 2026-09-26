@@ -1,6 +1,6 @@
 # C3 implementation plan: chat identity, routing, lifecycle and re-presentation
 
-Status: **proposed, awaiting approval** (2026-09-23). Background: `docs/review-2026-09-23-deep.md` (C3), decisions in `docs/plan.md` ("Decision: chat identity + routing").
+Status: **in progress** (updated 2026-09-26): steps 0 to 6 done, 7 onwards open (also tracked in `docs/backlog.md`). Approved 2026-09-23. Background: `docs/archive/review-2026-09-23-deep.md` (C3), decisions in `docs/plan.md` ("Decision: chat identity + routing").
 
 ## Decisions this plan implements
 

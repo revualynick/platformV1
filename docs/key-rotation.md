@@ -1,5 +1,7 @@
 # Encryption Key Rotation
 
+> **Partly outdated (2026-09-26).** Encryption now uses the v1 format with a keyring (`ENCRYPTION_KEYS="k2:<hex>,k1:<hex>"`, first is current; see `packages/shared/src/utils/crypto.ts`) and covers many more columns than the table below. This procedure is rewritten in C3 step 7.
+
 ## Overview
 
 Revualy encrypts sensitive data at rest using AES-256-GCM with a single `ENCRYPTION_KEY` (64-character hex string = 32 bytes). This document covers when and how to rotate it.

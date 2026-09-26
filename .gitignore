@@ -52,3 +52,6 @@ apps/api/eval/results/
 
 # Tenant provisioning state (identifiers and progress, no secrets)
 scripts/tenant/state/
+
+# Agent worktrees (removed after merge)
+.claude/worktrees/
