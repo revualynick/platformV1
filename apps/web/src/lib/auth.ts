@@ -9,7 +9,7 @@ import {
   authSessions,
   authVerificationTokens,
 } from "@revualy/db/schema";
-import { encrypt, decrypt, assertEncryptionReady } from "@revualy/shared/server";
+import { encrypt, decrypt, assertEncryptionReady, legacyReadsAllowed } from "@revualy/shared/server";
 import { getDb } from "./db";
 
 /**
@@ -147,8 +147,10 @@ function decryptTokenFields<T extends Record<string, unknown>>(account: T): T {
     if (typeof val === "string" && val.length > 0) {
       try {
         (copy as Record<string, unknown>)[field] = decrypt(val);
-      } catch {
-        // Token may not be encrypted (pre-migration data) — leave as-is
+      } catch (err) {
+        // Pre-encryption plaintext token: readable only while legacy reads
+        // are on. With ENCRYPTION_LEGACY_READS=off, fail closed.
+        if (!legacyReadsAllowed()) throw err;
       }
     }
   }
