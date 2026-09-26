@@ -322,3 +322,11 @@
 - Cron 03:00 UTC on the scheduler queue (single worker, so the 04:00 pass waits); scheduler claims best proposed job first; focus loaded by job id at send time, used only when the title is safe too
 - 22 new tests (gate rules mutation-checked); 375 API tests, 16/16 typecheck; eval/calendar-model.ts written, not run
 - Open for Nick: jobs per person per week, priority rules, whether focus should be dropped when title is hidden
+
+## 2026-09-26 (afternoon): experiments 2-3, meeting anchors, calendar model, contact limits
+- Experiment 3 (208 cases, $3.44): safety caught 25/25, no serious concern missed, bad days left alone 50/50; with the safety cross-check Sonnet matched Opus on routing; judges blocked by the Pro session limit (re-judge scheduled on the box)
+- Built: meeting-anchored check-ins (0038), calendar model + checkin_jobs (0039, Opus agent), weekly quota (1 peer + 1-2 personal, 3 exchanges), contact guard (3-day gap, rest after a rich check-in), follow-up count bug fixed
+- Research saved in docs/research/migration-sources.md (Culture Amp, 15Five, Lattice, Leapsome, Betterworks, Peakon, Meet API); admin assistant design in docs/admin-assistant.md
+- Found: /export/feedback names reviewers next to raw feedback by default (blind is opt-in): needs Nick's decision
+- In flight: import pipeline (0040), 1:1 ingestion v2 (0041), tenant provisioning (worktree agents); topic grid run and re-judge on the box
+- Nick decisions pending: playbook W1-C2, Samaritans line, calendar model questions, topic grid borderlines, admin assistant questions, export privacy
