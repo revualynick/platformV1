@@ -375,3 +375,10 @@
 - Staging on the Linux box (Nick: option 1, SSH tunnel): scripts/staging/deploy.sh ships a commit, builds on the box, migrates, seeds an empty DB, runs API + web as user services on 127.0.0.1, Postgres/Redis in Docker on 127.0.0.1. First deploy bf67c74 healthy; checked through the tunnel with Playwright; a 1:1 notes upload worked end to end with the real model (2 tasks, 1 goal, 1 suggestion). docs/staging.md
 - Google OAuth configured on staging (client ID/secret from the laptop's client file, never printed; secret verified against the console by last 4 chars); Nick registered the localhost:3001 return addresses
 - Staging switched to Railway's Dockerfiles; found and fixed redirects built from the bind address (publicUrl); test login off verified (404); NEXT_PUBLIC_WS_URL not a bug; Playwright vs staging 172 passed / 27 failed, all classified (11 known mobile, 16 test-environment or stale, none from today's work)
+
+## 2026-09-26 (night): handoff
+- State: `beta-hardening` at the latest commit, 31 commits since ba6c303, never pushed; Railway untouched. API suite 570/570, typecheck 17/17
+- Built today: privacy steps 1 to 3 (leaks, pseudonymous peer storage 0043, tickets 0044), C3 step 7 encryption backfill (0042), typed decision layer, 1:1 notes screens with per-manager mode (0045), staging on the Linux box on Railway's Dockerfiles; build notes for each in docs/build/
+- Fixed along the way: stale migrations in the db build, one migration path, dedicated test DB, serial test files, redirects built from the bind address (likely affected Railway)
+- Next (agreed order): make the browser suite environment-aware and add a smoke run after staging deploys; wire the reference path into live conversations (tested safety wording as the beta version, pending Nick's yes); then the beta gate (C3 step 8). Nick to confirm: sign in to staging with Google and be made a manager to try real calendar 1:1s
+- Open decisions and all follow-ups: docs/backlog.md. Eval API key on the box expires about 7 days after 2026-09-26; staging's model calls stop then
