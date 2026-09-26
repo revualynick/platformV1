@@ -34,6 +34,7 @@ import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac
 import {
   canViewGoal,
   canManageGoal,
+  isMeetingParticipant,
   canCreateGoal,
   type GoalPermissionContext,
   type Role,
@@ -497,19 +498,25 @@ export const goalsRoutes: FastifyPluginAsync = async (app) => {
         id: checkInMeetings.id,
         title: checkInMeetings.title,
         eventStart: checkInMeetings.eventStart,
+        organizerId: checkInMeetings.organizerId,
+        subjectUserId: checkInMeetings.subjectUserId,
       })
       .from(checkInMeetings)
       .where(inArray(checkInMeetings.id, meetingIds));
     const meetingMap = new Map(meetings.map((m) => [m.id, m]));
 
-    // Only suggestions on goals the caller can manage — that is who may
-    // apply them. Personal-goal privacy rides along: canManageGoal for
-    // personal goals is owner-only.
+    // Only suggestions from 1:1s the caller was in, on goals the caller can
+    // manage (that is who may apply them). Personal-goal privacy rides
+    // along: canManageGoal for personal goals is owner-only.
     const data = rows
       .filter((s) => {
         const goal = goalMap.get(s.goalId);
+        const meeting = meetingMap.get(s.meetingId);
         return (
-          goal && canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })
+          goal &&
+          meeting &&
+          isMeetingParticipant(ctx, meeting) &&
+          canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })
         );
       })
       .map((s) => ({
@@ -527,7 +534,10 @@ export const goalsRoutes: FastifyPluginAsync = async (app) => {
             metricTargetValue: g.metricTargetValue,
           };
         })(),
-        meeting: meetingMap.get(s.meetingId) ?? null,
+        meeting: (() => {
+          const m = meetingMap.get(s.meetingId)!;
+          return { id: m.id, title: m.title, eventStart: m.eventStart };
+        })(),
       }));
 
     return reply.send({ data });
@@ -555,7 +565,16 @@ export const goalsRoutes: FastifyPluginAsync = async (app) => {
         .select()
         .from(goals)
         .where(eq(goals.id, suggestion.goalId));
-      if (!goal || !canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })) {
+      const [meeting] = await db
+        .select({ organizerId: checkInMeetings.organizerId, subjectUserId: checkInMeetings.subjectUserId })
+        .from(checkInMeetings)
+        .where(eq(checkInMeetings.id, suggestion.meetingId));
+      if (
+        !goal ||
+        !meeting ||
+        !isMeetingParticipant(ctx, meeting) ||
+        !canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })
+      ) {
         return reply.code(403).send({ error: "Insufficient permissions" });
       }
 
@@ -644,7 +663,16 @@ export const goalsRoutes: FastifyPluginAsync = async (app) => {
         .select()
         .from(goals)
         .where(eq(goals.id, suggestion.goalId));
-      if (!goal || !canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })) {
+      const [meeting] = await db
+        .select({ organizerId: checkInMeetings.organizerId, subjectUserId: checkInMeetings.subjectUserId })
+        .from(checkInMeetings)
+        .where(eq(checkInMeetings.id, suggestion.meetingId));
+      if (
+        !goal ||
+        !meeting ||
+        !isMeetingParticipant(ctx, meeting) ||
+        !canManageGoal(ctx, { ...goal, level: goal.level as GoalLevel })
+      ) {
         return reply.code(403).send({ error: "Insufficient permissions" });
       }
 

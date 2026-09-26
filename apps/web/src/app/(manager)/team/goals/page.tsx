@@ -78,7 +78,7 @@ async function TeamGoalsContent({ userId, isDemo }: { userId: string; isDemo: bo
         const raw = await getPendingSuggestionsForGoals(db, [
           ...view.teamGoals.map((g) => g.id),
           ...view.individualGoals.map((g) => g.id),
-        ]).catch(
+        ], userId).catch(
           () => new Map() as Awaited<ReturnType<typeof getPendingSuggestionsForGoals>>,
         );
         suggestionsByGoal = new Map(

@@ -38,7 +38,7 @@ import { buildJobId } from "../lib/job-ids.js";
 import { getActivePlatform } from "../lib/active-platform.js";
 import { discoverGoogleChatDm } from "../lib/chat-identity.js";
 import { selectNudgeTargets } from "../lib/engagement-aggregation.js";
-import { sendEmail } from "../lib/email.js";
+import { sendEmail, unsubscribeUrlFor } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
 import { replaceProfileSignals } from "../lib/profile-signal-store.js";
@@ -497,14 +497,15 @@ export function createWorkers(config: WorkerConfig) {
             to: data.email,
             subject: `Your weekly review digest — ${digestData.weekLabel}`,
             html,
-            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+            unsubscribeUrl: unsubscribeUrlFor(data.userId, "weekly_digest"),
           });
           break;
         }
 
         case "flag_alert": {
-          // Only the escalation id travels through Redis; everything else,
-          // including the (encrypted) flagged content, is read here.
+          // Only the escalation id travels through Redis. The flagged text
+          // itself never goes into the email: the manager reads it in the
+          // dashboard, where access is checked and logged.
           const data = job.data as { orgId: string; escalationId: string };
           const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
 
@@ -512,7 +513,6 @@ export function createWorkers(config: WorkerConfig) {
             .select({
               severity: escalations.severity,
               reason: escalations.reason,
-              flaggedContent: escalations.flaggedContent,
               subjectId: escalations.subjectId,
             })
             .from(escalations)
@@ -551,7 +551,6 @@ export function createWorkers(config: WorkerConfig) {
             subjectName: subject.name ?? "a team member",
             severity: esc.severity,
             reason: esc.reason,
-            flaggedContent: esc.flaggedContent,
             escalationId: data.escalationId,
           };
 
@@ -559,7 +558,7 @@ export function createWorkers(config: WorkerConfig) {
             to: manager.email,
             subject: `Flag alert: ${alertData.subjectName} (${esc.severity})`,
             html: flagAlertTemplate(alertData),
-            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+            unsubscribeUrl: unsubscribeUrlFor(subject.managerId, "flag_alert"),
           });
           break;
         }
@@ -604,7 +603,7 @@ export function createWorkers(config: WorkerConfig) {
             to: recipient.email,
             subject: `Friendly reminder: ${data.interactionsPending} review${data.interactionsPending !== 1 ? "s" : ""} this week`,
             html: nudgeTemplate(nudgeData),
-            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+            unsubscribeUrl: unsubscribeUrlFor(data.userId, "nudge"),
           });
           break;
         }
@@ -872,7 +871,7 @@ export function createWorkers(config: WorkerConfig) {
               userName: data.userName.split(" ")[0],
               managerName: data.managerName,
             }),
-            unsubscribeUrl: `${process.env.APP_URL ?? "http://localhost:3001"}/settings/notifications`,
+            unsubscribeUrl: unsubscribeUrlFor(data.userId, "assessment_invite"),
           });
           job.log(`Assessment invite sent to ${data.userId}`);
           break;

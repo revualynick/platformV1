@@ -13,3 +13,4 @@ export {
   isEncryptionConfigured,
   generateId,
 } from "./utils/crypto.js";
+export { createUnsubscribeToken, verifyUnsubscribeToken } from "./utils/unsubscribe.js";

@@ -37,7 +37,7 @@ ${body}
 </td></tr>
 <!-- Footer -->
 <tr><td style="padding:16px 32px;border-top:1px solid ${BRAND.light};text-align:center;">
-<span style="color:#A8A29E;font-size:12px;">Sent by Revualy &middot; <a href="${APP_URL}/settings/notifications" style="color:${BRAND.terracotta};text-decoration:none;">Notification preferences</a></span>
+<span style="color:#A8A29E;font-size:12px;">Sent by Revualy &middot; <a href="${APP_URL}/dashboard/settings" style="color:${BRAND.terracotta};text-decoration:none;">Notification preferences</a></span>
 </td></tr>
 </table>
 </td></tr>
@@ -102,7 +102,6 @@ export interface FlagAlertData {
   subjectName: string;
   severity: string;
   reason: string;
-  flaggedContent: string;
   escalationId: string;
 }
 
@@ -118,7 +117,7 @@ export function flagAlertTemplate(data: FlagAlertData): string {
 <div style="font-size:12px;font-weight:700;color:${severityColor};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${severityLabel}</div>
 <p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Subject:</strong> ${escapeHtml(data.subjectName)}</p>
 <p style="color:${BRAND.stone};font-size:14px;margin:0 0 8px;"><strong>Reason:</strong> ${escapeHtml(data.reason)}</p>
-${data.flaggedContent ? `<p style="color:#78716C;font-size:13px;font-style:italic;margin:8px 0 0;border-top:1px solid #E7E5E4;padding-top:8px;">"${escapeHtml(data.flaggedContent)}"</p>` : ""}
+<p style="color:#78716C;font-size:13px;margin:8px 0 0;">The details are in your dashboard. We don't include what was written in emails.</p>
 </div>
 
 <table cellpadding="0" cellspacing="0">

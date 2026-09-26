@@ -373,6 +373,8 @@ export async function getOrgGoalsForCycle(db: TenantDb, cycleId: string) {
 export async function getPendingSuggestionsForGoals(
   db: TenantDb,
   goalIds: string[],
+  /** Suggestions come from a 1:1: only its two participants see them. */
+  viewerId: string,
 ) {
   if (goalIds.length === 0)
     return new Map<
@@ -412,6 +414,10 @@ export async function getPendingSuggestionsForGoals(
       and(
         inArray(goalUpdateSuggestions.goalId, goalIds),
         eq(goalUpdateSuggestions.status, "pending"),
+        or(
+          eq(checkInMeetings.organizerId, viewerId),
+          eq(checkInMeetings.subjectUserId, viewerId),
+        ),
       ),
     )
     .orderBy(desc(goalUpdateSuggestions.createdAt));

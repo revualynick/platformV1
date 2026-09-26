@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { createUnsubscribeToken } from "@revualy/shared/server";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? "Revualy <notifications@revualy.com>";
@@ -11,6 +12,20 @@ function getResend(): Resend | null {
     resend = new Resend(RESEND_API_KEY);
   }
   return resend;
+}
+
+const APP_URL = process.env.APP_URL ?? "http://localhost:3001";
+
+/**
+ * One-click unsubscribe link for one notification type. Points at the web
+ * app's public /api/unsubscribe route (the API itself isn't public), which
+ * verifies the signed token. Returns undefined without a secret, so the
+ * email goes out without the header rather than with a broken link.
+ */
+export function unsubscribeUrlFor(userId: string, type: string): string | undefined {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) return undefined;
+  return `${APP_URL}/api/unsubscribe?token=${encodeURIComponent(createUnsubscribeToken(secret, userId, type))}`;
 }
 
 export interface SendEmailOptions {

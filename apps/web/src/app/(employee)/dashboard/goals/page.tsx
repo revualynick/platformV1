@@ -53,6 +53,7 @@ async function GoalsContent({ userId, isDemo }: { userId: string; isDemo: boolea
         const raw = await getPendingSuggestionsForGoals(
           db,
           myGoals.map((g) => g.id),
+          userId,
         ).catch(
           () => new Map() as Awaited<ReturnType<typeof getPendingSuggestionsForGoals>>,
         );
