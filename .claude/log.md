@@ -345,3 +345,9 @@
 - Routes at `/api/v1/admin/imports` (admin only); POST /users/bulk now shares `insertUsersSkippingExisting`
 - 40 new tests (30 unit, 2 request-builder, 8 integration); 426 API tests, 16/16 typecheck
 - Open for Nick: auto "manager" role for new users with reports, goal parents only linked on the ladder, engagement aggregates not built, no web UI yet
+
+## 2026-09-26 (late afternoon): merges and topic grid
+- Merged provisioning (9a18bea) and data imports (75777c8) into beta-hardening; journal ordered 0040 then 0041; 464 API tests, 17/17 typecheck, lockfile validates frozen
+- Topic grid (93 cases x 2, no judge): 186/186 final concern as expected, 0/160 false alarms, 4/4 safety; script path alone flagged 2 everyday as conduct and 4 safety as wellbeing, both corrected downstream
+- Sonnet-only reference path escalated "he talks over people on the client call" to conduct 2/2; Opus stood it down: evidence for keeping option 1
+- Re-judges queued on the box: rejudge-1 (experiment 3, 15:52) then rejudge-2 (grid, --only-missing)
