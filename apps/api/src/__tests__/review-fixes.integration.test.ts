@@ -14,6 +14,7 @@ import {
 } from "@revualy/db";
 import { getCompletedThreeSixtyReviews } from "@revualy/db/queries";
 import { buildApp } from "../server.js";
+import { tenantReviewerRef } from "../lib/pseudonym.js";
 import { createMockLLM } from "../lib/__tests__/test-utils.js";
 
 /**
@@ -121,31 +122,34 @@ describe.skipIf(!dbUp)("branch review fixes (integration)", () => {
   });
 
   it("B8: completing a 360 uses the LLM for strengths and growth areas", async () => {
-    const [conv] = await db
-      .insert(conversations)
-      .values({ reviewerId: ids.a, subjectId: ids.b, interactionType: "three_sixty", platform: "internal", platformChannelId: "t", scheduledAt: new Date() })
-      .returning({ id: conversations.id });
-    const [entry] = await db
-      .insert(feedbackEntries)
-      .values({
-        conversationId: conv.id,
-        reviewerId: ids.a,
-        subjectId: ids.b,
-        interactionType: "three_sixty",
-        rawContent: "Bo unblocks the team",
-        aiSummary: "Bo unblocks the team quickly but could delegate more.",
-      })
-      .returning({ id: feedbackEntries.id });
+    // Three distinct reviewers: the tier A minimum for themes to be released.
     const [review] = await db
       .insert(threeSixtyReviews)
       .values({ subjectId: ids.b, initiatedById: ids.admin, status: "collecting" })
       .returning({ id: threeSixtyReviews.id });
-    await db.insert(threeSixtyResponses).values({
-      reviewId: review.id,
-      reviewerId: ids.a,
-      status: "completed",
-      feedbackEntryId: entry.id,
-    });
+    for (const reviewer of [ids.a, ids.manager, ids.admin]) {
+      const [conv] = await db
+        .insert(conversations)
+        .values({ reviewerId: reviewer, subjectId: ids.b, interactionType: "three_sixty", platform: "internal", platformChannelId: "t", scheduledAt: new Date() })
+        .returning({ id: conversations.id });
+      const [entry] = await db
+        .insert(feedbackEntries)
+        .values({
+          conversationId: conv.id,
+          reviewerRef: tenantReviewerRef(reviewer),
+          subjectId: ids.b,
+          interactionType: "three_sixty",
+          rawContent: "Bo unblocks the team",
+          aiSummary: "Bo unblocks the team quickly but could delegate more.",
+        })
+        .returning({ id: feedbackEntries.id });
+      await db.insert(threeSixtyResponses).values({
+        reviewId: review.id,
+        reviewerRef: tenantReviewerRef(reviewer),
+        status: "completed",
+        feedbackEntryId: entry.id,
+      });
+    }
 
     llmCalls.length = 0;
     const res = await app.inject({ method: "POST", url: `/api/v1/three-sixty/${review.id}/complete`, headers: as(ids.admin), payload: {} });

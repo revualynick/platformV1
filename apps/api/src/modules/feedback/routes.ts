@@ -8,6 +8,7 @@ import {
 } from "@revualy/db";
 import { parseBody, idParamSchema } from "../../lib/validation.js";
 import { requireAuth, requireRole, assertCanAccessUser } from "../../lib/rbac.js";
+import { getFeedbackForSubject } from "@revualy/db/queries";
 import { z } from "zod";
 
 const feedbackLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
@@ -28,31 +29,9 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     await assertCanAccessUser(request, id);
 
     const { limit } = feedbackLimitSchema.parse(request.query);
-    const entries = await db
-      .select()
-      .from(feedbackEntries)
-      .where(eq(feedbackEntries.subjectId, id))
-      .orderBy(desc(feedbackEntries.createdAt))
-      .limit(limit);
-
-    // Fetch value scores for the entries on this page
-    const entryIds = entries.map((e) => e.id);
-    const allScores =
-      entryIds.length > 0
-        ? await db.select().from(feedbackValueScores).where(inArray(feedbackValueScores.feedbackEntryId, entryIds))
-        : [];
-
-    const scoresByEntry = new Map<string, typeof allScores>();
-    allScores.forEach((s) => {
-      const list = scoresByEntry.get(s.feedbackEntryId) ?? [];
-      list.push(s);
-      scoresByEntry.set(s.feedbackEntryId, list);
-    });
-
-    const result = entries.map((e) => ({
-      ...e,
-      valueScores: scoresByEntry.get(e.id) ?? [],
-    }));
+    // Tier A: only released batches (3+ reviewers, fortnightly), as
+    // paraphrased summaries dated by release. No raw text, no reviewer.
+    const result = await getFeedbackForSubject(db, id, limit);
 
     return reply.send({ data: result, userId: id });
   });
@@ -157,13 +136,10 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     const EXPORT_PAGE_SIZE = 1000;
     const { offset } = exportQuerySchema.parse(request.query);
 
-    const entries = await db
-      .select()
-      .from(feedbackEntries)
-      .where(eq(feedbackEntries.subjectId, id))
-      .orderBy(desc(feedbackEntries.createdAt))
-      .limit(EXPORT_PAGE_SIZE + 1)
-      .offset(offset);
+    // The subject's (or their manager's) export is the released view too:
+    // raw peer text and arrival times would identify reviewers.
+    const released = await getFeedbackForSubject(db, id, Number.MAX_SAFE_INTEGER);
+    const entries = released.slice(offset, offset + EXPORT_PAGE_SIZE + 1);
 
     const hasMore = entries.length > EXPORT_PAGE_SIZE;
 

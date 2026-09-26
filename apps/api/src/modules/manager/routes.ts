@@ -12,7 +12,7 @@ import {
   feedbackValueScores,
   coreValues,
 } from "@revualy/db";
-import { getReportingTree } from "@revualy/db/queries";
+import { getReportingTree, getReleasedFeedbackIds } from "@revualy/db/queries";
 import { requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
@@ -449,16 +449,16 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
       );
 
     // Fetch feedback entries for direct reports this month (as subjects)
-    const monthEntries = await db
-      .select()
-      .from(feedbackEntries)
-      .where(
-        and(
-          inArray(feedbackEntries.subjectId, reportIds),
-          gte(feedbackEntries.createdAt, monthStart),
-          lt(feedbackEntries.createdAt, monthEnd),
-        ),
-      );
+    // Tier A: the month's feedback is what was released to the team in
+    // the month (batches of 3+ reviewers, fortnightly), not what arrived.
+    const monthReleases = await getReleasedFeedbackIds(db, reportIds);
+    const monthIds = [...monthReleases].filter(([, at]) => at >= monthStart && at < monthEnd).map(([id]) => id);
+    const monthEntries = monthIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(feedbackEntries)
+          .where(inArray(feedbackEntries.id, monthIds));
 
     // Get value scores for these entries
     const entryIds = monthEntries.map((e) => e.id);

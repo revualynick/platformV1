@@ -307,7 +307,9 @@ export const userIdParamSchema = z.object({
 
 export const exportQuerySchema = z.object({
   format: z.enum(["csv", "json"]).default("json"),
-  blind: z.preprocess((v) => v === "true" || v === true, z.boolean()).default(false),
+  // Blind by default (privacy step 2): only an explicit blind=false shows
+  // subject names and raw text. Reviewers are never named either way.
+  blind: z.preprocess((v) => (v === undefined ? undefined : !(v === "false" || v === false)), z.boolean()).default(true),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });

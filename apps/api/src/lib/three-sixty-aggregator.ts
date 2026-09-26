@@ -9,6 +9,7 @@ import {
   users,
 } from "@revualy/db";
 import type { ThreeSixtyAggregation } from "@revualy/shared";
+import { MIN_DISTINCT_REVIEWERS, stripMeetingReferences } from "@revualy/shared";
 import type { LLMGateway } from "@revualy/ai-core";
 
 export async function aggregateThreeSixtyReview(
@@ -51,6 +52,25 @@ export async function aggregateThreeSixtyReview(
         eq(threeSixtyResponses.status, "completed"),
       ),
     );
+
+  // Tier A minimum group size: below it, nothing thematic is released (a
+  // 360 with two reviewers lets the subject guess each one).
+  const distinctReviewers = new Set(
+    completedResponses.filter((r) => r.feedbackEntry).map((r) => r.response.reviewerRef),
+  ).size;
+  if (distinctReviewers < MIN_DISTINCT_REVIEWERS) {
+    return {
+      subjectId: review.subjectId,
+      subjectName,
+      reviewerCount: completedResponses.length,
+      avgEngagementScore: 0,
+      sentimentDistribution: {},
+      valueScores: [],
+      strengths: [],
+      growthAreas: [],
+      overallSummary: `Not enough reviewers to share themes: at least ${MIN_DISTINCT_REVIEWERS} are needed so no one can be singled out.`,
+    };
+  }
 
   // 3. Aggregate engagement scores and sentiment distribution
   let totalEngagement = 0;
@@ -146,10 +166,15 @@ export async function aggregateThreeSixtyReview(
 
   // 5. Extract strengths and growth areas from summaries via LLM (or keyword
   // fallback when no gateway is provided).
-  const [strengths, growthAreas] = await Promise.all([
-    extractThemes(summaries, "positive", llm),
-    extractThemes(summaries, "constructive", llm),
-  ]);
+  // Subject-facing: meeting references stripped from every theme.
+  const clean = (themes: string[]) =>
+    themes.map((t) => stripMeetingReferences(t)).filter((t) => t.length > 0);
+  const [strengths, growthAreas] = (
+    await Promise.all([
+      extractThemes(summaries, "positive", llm),
+      extractThemes(summaries, "constructive", llm),
+    ])
+  ).map(clean);
 
   // 6. Generate overall summary
   const overallSummary = generateSummary(
@@ -194,6 +219,7 @@ async function extractThemes(
           {
             role: "system",
             content: `You are summarizing 360-review feedback. Extract up to 3 distinct ${label} mentioned across these summaries. Return a JSON array of strings — each string is a concise 1-sentence theme (no more than 20 words). If none are present, return [].
+The subject reads these themes, so they must not identify any reviewer: paraphrase in your own words (never quote), only include a theme that more than one summary supports, and leave out meeting names, days, dates and other people's names.
 
 <feedback_summaries>
 ${combined}

@@ -29,22 +29,25 @@ export async function getCompletedThreeSixtyReviews(
 
   if (reviews.length === 0) return [];
 
+  // Subject-facing: counts only. Per-response rows (pseudonym, completion
+  // time) would let the subject line responses up with people.
   const reviewIds = reviews.map((r) => r.id);
   const responses = await db
-    .select()
+    .select({ reviewId: threeSixtyResponses.reviewId, status: threeSixtyResponses.status })
     .from(threeSixtyResponses)
     .where(inArray(threeSixtyResponses.reviewId, reviewIds));
 
-  const responsesByReview = new Map<string, typeof responses>();
+  const counts = new Map<string, { invited: number; completed: number }>();
   for (const resp of responses) {
-    const list = responsesByReview.get(resp.reviewId) ?? [];
-    list.push(resp);
-    responsesByReview.set(resp.reviewId, list);
+    const c = counts.get(resp.reviewId) ?? { invited: 0, completed: 0 };
+    c.invited++;
+    if (resp.status === "completed") c.completed++;
+    counts.set(resp.reviewId, c);
   }
 
   return reviews.map((r) => ({
     ...r,
-    responses: responsesByReview.get(r.id) ?? [],
+    responseCounts: counts.get(r.id) ?? { invited: 0, completed: 0 },
   }));
 }
 

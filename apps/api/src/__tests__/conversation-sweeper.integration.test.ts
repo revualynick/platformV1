@@ -29,6 +29,7 @@ import {
 import { runSweep, type SweeperDeps } from "../lib/conversation-sweeper.js";
 import { handleInbound } from "../lib/inbound-router.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
+import { tenantReviewerRef } from "../lib/pseudonym.js";
 import { recomputeWeeklyEngagement } from "../lib/engagement-aggregation.js";
 
 /**
@@ -352,7 +353,7 @@ describe.skipIf(!dbUp)("conversation lifecycle and sweeper (integration)", () =>
     const completeThisWeek = await db
       .select({ id: feedbackEntries.id })
       .from(feedbackEntries)
-      .where(and(eq(feedbackEntries.reviewerId, ids.reviewer), eq(feedbackEntries.isPartial, false)));
+      .where(and(eq(feedbackEntries.reviewerRef, tenantReviewerRef(ids.reviewer)), eq(feedbackEntries.isPartial, false)));
     expect(score.interactionsCompleted).toBe(completeThisWeek.length);
   });
 

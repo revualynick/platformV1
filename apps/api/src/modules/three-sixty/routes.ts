@@ -14,6 +14,7 @@ import {
   threeSixtyCompleteSchema,
 } from "../../lib/validation.js";
 import { aggregateThreeSixtyReview } from "../../lib/three-sixty-aggregator.js";
+import { tenantReviewerRef } from "../../lib/pseudonym.js";
 
 const reviewIdParamSchema = idParamSchema;
 const responseIdParamSchema = idParamSchema;
@@ -65,7 +66,7 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
 
       // Create response entries for each reviewer (batch insert)
       await tx.insert(threeSixtyResponses).values(
-        reviewerIds.map((reviewerId) => ({ reviewId: review.id, reviewerId })),
+        reviewerIds.map((reviewerId) => ({ reviewId: review.id, reviewerRef: tenantReviewerRef(reviewerId) })),
       );
 
       return review;
@@ -115,7 +116,7 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
       .leftJoin(users, eq(threeSixtyReviews.subjectId, users.id))
       .where(
         and(
-          eq(threeSixtyResponses.reviewerId, userId),
+          eq(threeSixtyResponses.reviewerRef, tenantReviewerRef(userId)),
           eq(threeSixtyResponses.status, "pending"),
           eq(threeSixtyReviews.status, "collecting"),
         ),
@@ -154,29 +155,24 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
       .from(users)
       .where(eq(users.id, review.subjectId));
 
-    // Get all responses with reviewer names
+    // Tier A: responses are held by pseudonym, so admins see progress
+    // counts, not who has answered.
     const responses = await db
-      .select({
-        response: threeSixtyResponses,
-        reviewerName: users.name,
-      })
+      .select({ status: threeSixtyResponses.status })
       .from(threeSixtyResponses)
-      .leftJoin(users, eq(threeSixtyResponses.reviewerId, users.id))
-      .where(eq(threeSixtyResponses.reviewId, id))
-      .orderBy(threeSixtyResponses.invitedAt);
+      .where(eq(threeSixtyResponses.reviewId, id));
 
-    const completedCount = responses.filter(
-      (r) => r.response.status === "completed",
-    ).length;
+    const completedCount = responses.filter((r) => r.status === "completed").length;
 
     return reply.send({
       ...review,
       subjectName: subject?.name ?? null,
       completedReviewerCount: completedCount,
-      responses: responses.map((r) => ({
-        ...r.response,
-        reviewerName: r.reviewerName,
-      })),
+      responseCounts: {
+        invited: responses.length,
+        completed: completedCount,
+        pending: responses.filter((r) => r.status === "pending" || r.status === "in_progress").length,
+      },
     });
   });
 
@@ -292,7 +288,7 @@ export const threeSixtyRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Response not found" });
       }
 
-      if (response.reviewerId !== userId) {
+      if (response.reviewerRef !== tenantReviewerRef(userId)) {
         // Check if admin
         const [user] = await db
           .select({ role: users.role })

@@ -16,6 +16,7 @@ import {
   customType,
   uniqueIndex,
   bigint,
+  char,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -403,12 +404,12 @@ export const feedbackEntries = pgTable(
   "feedback_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    conversationId: uuid("conversation_id")
-      .notNull()
-      .references(() => conversations.id),
-    reviewerId: uuid("reviewer_id")
-      .notNull()
-      .references(() => users.id),
+    // Null once the (named) conversation is deleted after its retention
+    // window (migration 0043).
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    // Tier A: HMAC pseudonym of the reviewer (apps/api/src/lib/pseudonym.ts),
+    // never their user id (migration 0043).
+    reviewerRef: varchar("reviewer_ref", { length: 64 }).notNull(),
     subjectId: uuid("subject_id")
       .notNull()
       .references(() => users.id),
@@ -432,7 +433,7 @@ export const feedbackEntries = pgTable(
   (table) => [
     unique("uq_feedback_entry_conversation").on(table.conversationId),
     index("idx_feedback_entries_subject_id").on(table.subjectId),
-    index("idx_feedback_entries_reviewer_id").on(table.reviewerId),
+    index("idx_feedback_entries_reviewer_ref").on(table.reviewerRef),
     index("idx_feedback_entries_created_at").on(table.createdAt),
     index("idx_feedback_entries_subject_created").on(table.subjectId, table.createdAt),
   ],
@@ -768,7 +769,7 @@ export const interactionSchedule = pgTable(
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     interactionType: varchar("interaction_type", { length: 50 }).notNull(),
     subjectId: uuid("subject_id").references(() => users.id),
-    conversationId: uuid("conversation_id").references(() => conversations.id),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
     // The shared meeting this check-in is about (migration 0038).
     anchorEventId: uuid("anchor_event_id").references((): AnyPgColumn => calendarEvents.id, { onDelete: "set null" }),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
@@ -834,6 +835,7 @@ export const pulseCheckTriggers = pgTable(
     sentiment: varchar("sentiment", { length: 50 }),
     followUpConversationId: uuid("follow_up_conversation_id").references(
       () => conversations.id,
+      { onDelete: "set null" },
     ),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1116,14 +1118,14 @@ export const threeSixtyResponses = pgTable(
     reviewId: uuid("review_id")
       .notNull()
       .references(() => threeSixtyReviews.id, { onDelete: "cascade" }),
-    reviewerId: uuid("reviewer_id")
-      .notNull()
-      .references(() => users.id),
+    // Tier A pseudonym (migration 0043); the invitee list is not kept by name.
+    reviewerRef: varchar("reviewer_ref", { length: 64 }).notNull(),
     feedbackEntryId: uuid("feedback_entry_id").references(
       () => feedbackEntries.id,
     ),
     conversationId: uuid("conversation_id").references(
       () => conversations.id,
+      { onDelete: "set null" },
     ),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow(),
@@ -1131,10 +1133,10 @@ export const threeSixtyResponses = pgTable(
   },
   (table) => [
     index("idx_three_sixty_responses_review_id").on(table.reviewId),
-    index("idx_three_sixty_responses_reviewer_id").on(table.reviewerId),
-    unique("uq_three_sixty_response_review_reviewer").on(
+    index("idx_three_sixty_responses_reviewer_ref").on(table.reviewerRef),
+    uniqueIndex("uq_three_sixty_response_review_reviewer").on(
       table.reviewId,
-      table.reviewerId,
+      table.reviewerRef,
     ),
   ],
 );
@@ -1797,9 +1799,8 @@ export const importedFeedback = pgTable(
   "imported_feedback",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    authorId: uuid("author_id")
-      .notNull()
-      .references(() => users.id),
+    // Tier A pseudonym of the author (migration 0043).
+    authorRef: varchar("author_ref", { length: 64 }).notNull(),
     recipientId: uuid("recipient_id")
       .notNull()
       .references(() => users.id),
@@ -1817,3 +1818,26 @@ export const importedFeedback = pgTable(
     index("idx_imported_feedback_recipient").on(table.recipientId, table.givenAt),
   ],
 );
+
+// ── Audit log ─────────────────────────────────────────
+
+/**
+ * Append-only, hash-chained record of sensitive actions (migration 0043),
+ * such as re-identifying a reviewer. UPDATE, DELETE and TRUNCATE are
+ * rejected by triggers; each row carries the previous row's hash
+ * (apps/api/src/lib/audit-log.ts writes and verifies). Never holds
+ * feedback content. No foreign keys: entries outlive users.
+ */
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  seq: bigint("seq", { mode: "number" }).notNull().unique("uq_audit_log_seq"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  actorId: uuid("actor_id"),
+  action: varchar("action", { length: 100 }).notNull(),
+  target: varchar("target", { length: 255 }),
+  reason: text("reason"),
+  outcome: varchar("outcome", { length: 50 }).notNull(),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+  prevHash: char("prev_hash", { length: 64 }).notNull(),
+  rowHash: char("row_hash", { length: 64 }).notNull(),
+});

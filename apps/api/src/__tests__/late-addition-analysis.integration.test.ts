@@ -91,7 +91,7 @@ describe.skipIf(!dbUp)("re-analysis after a late addition (integration)", () => 
       ? (await db.select({ id: feedbackEntries.id }).from(feedbackEntries).where(inArray(feedbackEntries.conversationId, convs))).map((e) => e.id)
       : [];
     if (entries.length) {
-      await db.delete(behavioralSignals).where(inArray(behavioralSignals.sourceId, entries));
+      await db.delete(behavioralSignals).where(inArray(behavioralSignals.sourceId, [...entries, ...convs]));
       await db.delete(feedbackValueScores).where(inArray(feedbackValueScores.feedbackEntryId, entries));
     }
     if (convs.length) {
@@ -133,7 +133,7 @@ describe.skipIf(!dbUp)("re-analysis after a late addition (integration)", () => 
 
     const first = await replaceProfileSignals(db, entry.id);
     await replaceProfileSignals(db, entry.id);
-    const rows = await db.select().from(behavioralSignals).where(eq(behavioralSignals.sourceId, entry.id));
+    const rows = await db.select().from(behavioralSignals).where(eq(behavioralSignals.sourceId, convId));
     expect(first).toBeGreaterThan(0);
     expect(rows).toHaveLength(first!);
   });
