@@ -31,6 +31,10 @@ export class OpenAICompatAdapter implements LLMProviderAdapter {
 
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
     const model = this.models[request.tier];
+    // Fail loudly rather than silently drop an image the caller relies on.
+    if (request.messages.some((m) => m.attachments?.length)) {
+      throw new Error("Image and document attachments are only supported by the Anthropic provider");
+    }
 
     // Separate system messages from user/assistant messages (OpenAI API best practice)
     const systemMessages = request.messages.filter((m) => m.role === "system");

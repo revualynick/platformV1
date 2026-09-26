@@ -7,6 +7,7 @@ import type {
   LLMCompletionRequest,
   LLMCompletionResponse,
   LLMMessage,
+  LLMAttachment,
   LLMToolLoopRequest,
   LLMToolLoopResponse,
 } from "../types.js";
@@ -127,8 +128,16 @@ function extractMessages(
   const nonSystem: Anthropic.MessageParam[] = [];
 
   for (const msg of msgs) {
+    if (msg.attachments?.length && msg.role !== "user") {
+      throw new Error("Attachments are only supported on user messages");
+    }
     if (msg.role === "system") {
       systemMsgs.push(msg.content);
+    } else if (msg.attachments?.length) {
+      nonSystem.push({
+        role: msg.role,
+        content: [...msg.attachments.map(attachmentBlock), { type: "text", text: msg.content }],
+      });
     } else {
       nonSystem.push({ role: msg.role, content: msg.content });
     }
@@ -165,6 +174,12 @@ function extractMessages(
   }
 
   return { systemPrompt, messages: nonSystem };
+}
+
+function attachmentBlock(a: LLMAttachment): Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam {
+  return a.type === "image"
+    ? { type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } }
+    : { type: "document", source: { type: "base64", media_type: a.mediaType, data: a.data } };
 }
 
 function stripCodeFences(text: string): string {

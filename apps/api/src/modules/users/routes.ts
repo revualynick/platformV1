@@ -4,6 +4,7 @@ import { users, engagementScores } from "@revualy/db";
 import { parseBody, idParamSchema, updateUserSchema, listUsersQuerySchema, createUserSchema, bulkCreateUsersSchema } from "../../lib/validation.js";
 import { requireAuth, requireRole, getAuthenticatedUserId } from "../../lib/rbac.js";
 import { syncAuthUser, revokeSessionsForUser } from "../../lib/auth-sync.js";
+import { insertUsersSkippingExisting } from "../../lib/user-provisioning.js";
 
 export const usersRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
@@ -79,20 +80,7 @@ export const usersRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const rows = body.users.map((u) => ({
-      email: u.email,
-      name: u.name,
-      role: u.role ?? "employee",
-      teamId: u.teamId ?? null,
-      managerId: u.managerId ?? null,
-      timezone: u.timezone ?? "UTC",
-    }));
-
-    const created = await db
-      .insert(users)
-      .values(rows)
-      .onConflictDoNothing({ target: users.email })
-      .returning();
+    const created = await insertUsersSkippingExisting(db, body.users);
 
     return reply.code(201).send({
       created: created.length,

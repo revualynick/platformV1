@@ -322,3 +322,11 @@
 - Cron 03:00 UTC on the scheduler queue (single worker, so the 04:00 pass waits); scheduler claims best proposed job first; focus loaded by job id at send time, used only when the title is safe too
 - 22 new tests (gate rules mutation-checked); 375 API tests, 16/16 typecheck; eval/calendar-model.ts written, not run
 - Open for Nick: jobs per person per week, priority rules, whether focus should be dropped when title is hidden
+
+## 2026-09-26: Customer data import pipeline (stage, map, dry run, approve, commit)
+- 0040: `import_runs`, `import_rows` (raw + mapped encrypted JSON, purge 30 days after commit via the sweep job), `imported_feedback` (separate from feedback_entries, so never in engagement), `users.job_title/start_date`, `goals.import_key` (partial unique)
+- `lib/imports/`: CSV/XLSX reader (read-excel-file, new dep), Sonnet mapping proposal (header + 5 rows, schema-constrained to real headers) gated by code with a header-synonym fallback, pure planners for people/goals/feedback/org charts, commit re-plans and refuses on planHash drift
+- Org charts go to Claude as image/PDF attachments (new `LLMMessage.attachments`, Anthropic only); lines carry confidence, low ones held until accepted; nobody is created from a chart
+- Routes at `/api/v1/admin/imports` (admin only); POST /users/bulk now shares `insertUsersSkippingExisting`
+- 40 new tests (30 unit, 2 request-builder, 8 integration); 426 API tests, 16/16 typecheck
+- Open for Nick: auto "manager" role for new users with reports, goal parents only linked on the ladder, engagement aggregates not built, no web UI yet

@@ -15,6 +15,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.0.0",
+    "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.2.0",
     "@revualy/ai-core": "workspace:*",
@@ -30,12 +31,13 @@
     "fastify-plugin": "^5.1.0",
     "googleapis": "^144.0.0",
     "ioredis": "^5.4.0",
+    "read-excel-file": "^9.3.10",
     "resend": "^6.9.2",
-    "@fastify/helmet": "^13.0.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "fflate": "^0.8.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

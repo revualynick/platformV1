@@ -68,4 +68,45 @@ describe("buildAnthropicRequest", () => {
     expect(req).not.toHaveProperty("temperature");
     expect(req.max_tokens).toBe(300 + THINKING_HEADROOM_TOKENS);
   });
+
+  it("sends image and PDF attachments as base64 blocks before the text", () => {
+    const req = buildAnthropicRequest(
+      {
+        tier: "standard",
+        messages: [
+          { role: "system", content: "Read the org chart." },
+          {
+            role: "user",
+            content: "Page 1 of 1.",
+            attachments: [
+              { type: "image", mediaType: "image/png", data: "iVBORw0K" },
+              { type: "document", mediaType: "application/pdf", data: "JVBERi0x" },
+            ],
+          },
+        ],
+      },
+      "claude-sonnet-5",
+    );
+    expect(req.system).toBe("Read the org chart.");
+    expect(req.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0K" } },
+          { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0x" } },
+          { type: "text", text: "Page 1 of 1." },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects attachments on a system or assistant message rather than dropping them", () => {
+    const image = [{ type: "image" as const, mediaType: "image/png" as const, data: "x" }];
+    expect(() =>
+      buildAnthropicRequest({ tier: "fast", messages: [{ role: "system", content: "s", attachments: image }] }, "claude-haiku-4-5"),
+    ).toThrow(/only supported on user messages/);
+    expect(() =>
+      buildAnthropicRequest({ tier: "fast", messages: [{ role: "assistant", content: "a", attachments: image }] }, "claude-haiku-4-5"),
+    ).toThrow(/only supported on user messages/);
+  });
 });
