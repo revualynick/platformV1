@@ -37,7 +37,7 @@ It unpacks that commit into `~/revualy-staging/releases/<sha>`, installs and bui
 ssh nick@linuxbox.local 'systemctl --user status revualy-staging-api revualy-staging-web'
 ssh nick@linuxbox.local 'journalctl --user -u revualy-staging-api -n 100'
 ssh nick@linuxbox.local 'systemctl --user stop revualy-staging-api revualy-staging-web'   # stop
-ssh nick@linuxbox.local 'cat ~/revualy-staging/current/.revision 2>/dev/null; readlink ~/revualy-staging/current'   # what's deployed
+ssh nick@linuxbox.local 'readlink ~/revualy-staging/current'   # what's deployed (the commit is the directory name)
 ```
 Reset the data: stop the services, `docker compose -p revualy-staging down`, delete `~/revualy-staging/data`, then deploy again (it reseeds).
 
@@ -45,3 +45,4 @@ Reset the data: stop the services, `docker compose -p revualy-staging down`, del
 - Only people who can SSH to the box can use it. For a colleague or beta tester, it needs an HTTPS tunnel on a staging subdomain instead.
 - Google sign-in isn't configured: there are no Google OAuth client settings in staging (the laptop has none either; both use the test login). Adding them needs `http://localhost:3001` registered as a return address on the client.
 - Chat platforms (Google Chat, Slack, Teams) can't reach it: webhooks need a public HTTPS address.
+- Surviving a reboot is set up (user services enabled, lingering on, containers `restart: unless-stopped`) but hasn't been tested with an actual reboot.

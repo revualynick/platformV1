@@ -28,7 +28,8 @@ Uploads are allowed in every mode, including when the limit is manual only (as t
 - `src/__tests__/one-on-one-modes.integration.test.ts` (6): mode routes, 403 above the limit, reset to default, lowering the limit lowers the default, only admins change it, the pipeline reads only for managers whose mode allows it (mutation-checked: it fails when the pipeline ignores the manager's choice), recent imports visible only to the two people.
 - Full API suite 570/570, typecheck 17/17.
 - **In the running app (local, Playwright, seeded org)**: all three pages render with no console errors; a manager switched to manual and back; an admin lowered the limit to manual only (the default followed), saved, reloaded, restored; a pending 1:1 was approved from the list and appeared as "Approved, waiting for Gemini notes".
-- **Not run:** an upload through the UI (it needs a real model call); Google connection from the "Connect Google" link; a "1 Issue" Next.js dev badge appeared once during a hot reload and couldn't be reproduced.
+- **On staging (Linux box, production build, real model), 2026-09-26:** a fake notes .txt uploaded through the manager page produced 2 tasks, 1 between-meeting goal and 1 goal suggestion; the goal showed after reload.
+- **Not run:** a real Gemini .docx or .vtt upload; Google connection from the "Connect Google" link; a "1 Issue" Next.js dev badge appeared once during a hot reload and couldn't be reproduced.
 
 ## Review checklist
 - [ ] As a manager on semi-automatic without Google connected, the page says how to connect.
@@ -46,3 +47,4 @@ Uploads are allowed in every mode, including when the limit is manual only (as t
 None.
 
 ## Later changes
+- 2026-09-26: upload verified end to end on staging (see How it was tested).
