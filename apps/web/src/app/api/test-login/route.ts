@@ -4,6 +4,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { users, authUsers, authSessions } from "@revualy/db/schema";
 import { getDb } from "@/lib/db";
+import { publicUrl } from "@/lib/public-url";
 
 /**
  * Dev-only test-login endpoint.
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
       ? rawRedirect
       : null;
   const response = redirectTo
-    ? NextResponse.redirect(new URL(redirectTo, url.origin))
+    ? NextResponse.redirect(publicUrl(redirectTo, request))
     : NextResponse.json({
         ok: true,
         loggedInAs: { email: bizUser.email, role: bizUser.role, id: bizUser.id },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
+import { publicUrl } from "@/lib/public-url";
 
 const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
@@ -13,7 +14,7 @@ const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id || isDemoSession(session)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(publicUrl("/login", request));
   }
 
   const code = request.nextUrl.searchParams.get("code") ?? "";
@@ -33,6 +34,6 @@ export async function GET(request: NextRequest) {
 
   const location = apiRes.headers.get("location");
   return NextResponse.redirect(
-    location ?? new URL("/dashboard/settings?error=oauth_failed", request.url),
+    location ?? publicUrl("/dashboard/settings?error=oauth_failed", request),
   );
 }

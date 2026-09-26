@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { publicUrl } from "@/lib/public-url";
 
 /**
  * Next.js middleware for auth redirects.
@@ -25,12 +26,12 @@ export function middleware(request: NextRequest) {
 
   // Authenticated user on login page → redirect to home hub
   if (isLoggedIn && pathname === "/login") {
-    return NextResponse.redirect(new URL("/home", request.url));
+    return NextResponse.redirect(publicUrl("/home", request));
   }
 
   // Unauthenticated users on protected routes → redirect to login
   if (!isLoggedIn && pathname !== "/login") {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(publicUrl("/login", request));
   }
 
   return NextResponse.next();
