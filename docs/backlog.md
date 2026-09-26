@@ -7,7 +7,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 ## Before beta (real employees)
 
 - **Privacy steps 2 and 3** from `docs/design/privacy-and-agent-access.md`: pseudonymous peer storage (includes export blind by default) and tickets. In progress with agents (2026-09-26). The bot's "anonymised" promise depends on them. Step 1's other leaks are fixed.
-- **C3 step 7** (in progress with an agent, 2026-09-26): encrypt existing data (backfill, plaintext check, remove legacy formats, rewrite `scripts/rotate-encryption-key.ts` and `docs/key-rotation.md`).
+- **Encrypt existing data on each tenant** (C3 step 7 tooling merged 2026-09-26): run `pnpm --filter @revualy/db encryption check`, `backfill`, `check`, then set `ENCRYPTION_LEGACY_READS=off`. See `docs/key-rotation.md`.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
 - **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26).
@@ -22,6 +22,8 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **First-review leftovers** (C3 step 11, not re-checked): nudge query misses zero-activity users; `engagement_scores.streak` has no writer; duplicate or re-created relationships 500; self-reflection analysis never retried and skips flag detection; 360 aggregation runs inside a transaction; team-insight month keys use local time; member detail page scope differs between web and API; `test-login` open redirect, insecure cookie, key in query string.
 
 ## Decisions waiting on Nick
+
+- **Encryption (C3 step 7):** when to default `ENCRYPTION_LEGACY_READS=off` (new tenants from day one, the demo after its backfill?); run the backfill as an automatic job in the API instead of a script?; plaintext OAuth tokens that look like old ciphertext are reported as unreadable and that user reconnects: acceptable?
 
 - **Privacy design open questions** (5, at the end of the design doc).
 - **Calendar model:** priority weighting as client-adjustable sliders, possibly a learning algorithm later (Nick, 2026-09-26). Still open: focus when the title is hidden, one check-in per meeting, joiner dates, whether sensitive-looking titles reach Haiku at all.
@@ -45,7 +47,9 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - Curated demo seed data.
 - GitHub Actions provisioning automation.
 
-## Technical debt (from `docs/archive/deferred-improvements.md`, not re-checked)
+## Technical debt
+
+- The crypto speed test (`performance budget > a bot turn`) fails under heavy machine load (twice on 2026-09-26, both times with agents running) and passes in isolation. Make the budget load-tolerant or run it serially. (from `docs/archive/deferred-improvements.md`, not re-checked)
 
 - Read-only Postgres role for the web app.
 - Parity tests for endpoints migrated to direct reads; auth matrix tests.

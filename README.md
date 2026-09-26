@@ -6,10 +6,10 @@ This README is the running summary. It is kept current: when something important
 
 ## Where it stands (2026-09-26)
 
-- **Phase:** beta hardening on the `beta-hardening` branch, not yet merged or pushed. Roadmap in `docs/c3-plan.md`: steps 0 to 6 done, 7 onwards open.
+- **Phase:** beta hardening on the `beta-hardening` branch, not yet merged or pushed. Roadmap in `docs/c3-plan.md`: steps 0 to 7 done, 8 onwards open.
 - **Beta platform:** Google Chat, one chat platform per tenant. The app isn't installed on the beta Workspace yet.
 - **Deployed:** a demo on Railway (`revualy-demo`, Europe West). No customer tenants yet.
-- **Before real employees use it:** privacy steps 1 to 3 (`docs/design/privacy-and-agent-access.md`), encrypting existing data, and the beta gate (monitoring, real-Workspace checks, full review).
+- **Before real employees use it:** privacy steps 2 and 3 (`docs/design/privacy-and-agent-access.md`), running the encryption backfill on each tenant, and the beta gate (monitoring, real-Workspace checks, full review).
 - **Tests:** 464 API tests and a clean typecheck across 17 packages at the last merge, plus Playwright end-to-end specs and an LLM evaluation harness.
 
 ## How it works

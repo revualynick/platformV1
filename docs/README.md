@@ -10,11 +10,11 @@ Start with the root `README.md` for what Revualy is and where it stands. This pa
 |---|---|
 | `backlog.md` | Everything open: bugs, decisions waiting on Nick, features, technical debt |
 | `plan.md` | Architecture and technical reference; its "Active Context" section is the running record of phases and decisions |
-| `c3-plan.md` | The beta-hardening roadmap (steps 0 to 11). Steps 0 to 6 done |
+| `c3-plan.md` | The beta-hardening roadmap (steps 0 to 11). Steps 0 to 7 done |
 | `deployment.md` | Railway deployment, per-tenant |
 | `local-testing.md` | Running the stack locally, Playwright and the chat simulator |
 | `ui-test-plan.md` | Playwright test schedule and progress (last updated 2026-07-27) |
-| `key-rotation.md` | Encryption key rotation. **Partly outdated** until C3 step 7 rewrites it |
+| `key-rotation.md` | Encryption key rotation, backfill and checks (rewritten 2026-09-26) |
 
 ## Design
 

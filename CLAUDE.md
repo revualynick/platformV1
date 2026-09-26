@@ -13,7 +13,7 @@ AI-powered peer review platform. Feedback interactions happen via chat (Slack, G
 Read `docs/plan.md` for the full architecture, tech stack, data model, and implementation phases.
 
 ## Current state
-**Phases 1-6 complete; beta hardening in progress** (`docs/c3-plan.md`, steps 0-6 done). See `README.md` for the current summary.
+**Phases 1-6 complete; beta hardening in progress** (`docs/c3-plan.md`, steps 0-7 done). See `README.md` for the current summary.
 
 **Architecture:** Per-tenant isolated deployments on Railway. Each customer gets `subdomain.revualy.com` with own Postgres + Redis. Marketing/demo site at apex domain with `DEMO_MODE=true`. Single DB per instance (auth + business data). No Neo4j.
 

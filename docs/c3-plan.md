@@ -1,6 +1,6 @@
 # C3 implementation plan: chat identity, routing, lifecycle and re-presentation
 
-Status: **in progress** (updated 2026-09-26): steps 0 to 6 done, 7 onwards open (also tracked in `docs/backlog.md`). Approved 2026-09-23. Background: `docs/archive/review-2026-09-23-deep.md` (C3), decisions in `docs/plan.md` ("Decision: chat identity + routing").
+Status: **in progress** (updated 2026-09-26): steps 0 to 7 done, 8 onwards open (also tracked in `docs/backlog.md`). Approved 2026-09-23. Background: `docs/archive/review-2026-09-23-deep.md` (C3), decisions in `docs/plan.md` ("Decision: chat identity + routing").
 
 ## Decisions this plan implements
 
@@ -62,7 +62,7 @@ Rules: security and foundations before features; test bed before the logic it te
    - Part 2: migration 0037 `conversation_theme_outcomes` (one row per selected theme; created when first asked with the question text, encrypted; judged `answered`/`weak`; unreached themes `unanswered` at close or incomplete; `judged_by` llm/fallback). `lib/turn-planner.ts`: one structured LLM call per turn (judges the reply against the question, proposes the action, writes the next question); code enforces the rules (1 follow-up per theme, next theme must exist, message cap closes). Model down or unusable after one retry: judge by length (12+ words = answered), move to the next theme using its first example phrasing. Opening question falls back the same way. Outcome writes share the turn's transaction.
    - **Finding for Nick:** the message caps (4-5 messages, bot and person together) are the binding limit, not the follow-up cap. A self-reflection or peer review gets at most two answers, so any follow-up means the second theme is never asked, and a third theme never is. The outcomes table now makes this visible; step 9 re-asks unanswered themes later. Revisit the caps with beta data.
    - Not verified: the combined prompt has not been run against the real model (no local API key); tests prove the mechanics only.
-7. **Encrypt existing data, Phase E part 2 (S):** background backfill, plaintext check, legacy formats removed, rotation script rewritten.
+7. **Encrypt existing data, Phase E part 2 (S):** background backfill, plaintext check, legacy formats removed, rotation script rewritten. **DONE 2026-09-26** (tooling; per-tenant runs pending): `pnpm --filter @revualy/db encryption check|backfill|rotate`, tier-2 jsonb columns encrypted, migration 0042 keeps `updated_at` untouched by maintenance, legacy reads behind `ENCRYPTION_LEGACY_READS` (on until each tenant is backfilled), Redis `1on1:content` encrypted, `docs/key-rotation.md` rewritten.
 8. **Beta gate (S + wait):** monitoring counters and alerts, real-Workspace verification checklist, full code review. **Beta can start here.**
 9. M2 re-presentation engine (tuned with beta data).
 10. M3 Slack/Teams linking.
