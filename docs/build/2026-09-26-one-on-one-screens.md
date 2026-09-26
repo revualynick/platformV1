@@ -1,7 +1,7 @@
 # 1:1 notes screens and mode limits
 
 Status: merged 2026-09-26, not reviewed
-Commits: see the index · Migration: 0045 · Design: Nick's decisions 2026-09-26 (three modes; admin sets the limit, managers choose within it; functional screens in the house style)
+Commits: cfb7dc6 · Migration: 0045 · Design: Nick's decisions 2026-09-26 (three modes; admin sets the limit, managers choose within it; functional screens in the house style)
 
 ## What and why
 1:1 ingestion defaults to semi-automatic, which waits for the manager's approval, but there was no screen to approve on, upload notes or see between-meeting goals, so the feature couldn't be used. Now managers, employees and admins each have a screen, and the mode is per manager within an admin limit instead of one org-wide setting.

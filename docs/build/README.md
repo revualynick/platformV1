@@ -22,7 +22,7 @@ One note per piece of work merged into `beta-hardening`, written at merge time. 
 | 2026-09-26 | [Privacy step 2: pseudonymous peer feedback](2026-09-26-privacy-step-2-pseudonyms.md) | 82b2d23 | 0043 | not reviewed |
 | 2026-09-26 | [Privacy step 3: tickets and the job-agent gate](2026-09-26-privacy-step-3-tickets.md) | 11e749c | 0044 | not reviewed |
 | 2026-09-26 | [Typed decision layer](2026-09-26-typed-decisions.md) | 1fda68e | none | not reviewed |
-| 2026-09-26 | [1:1 notes screens and mode limits](2026-09-26-one-on-one-screens.md) | see git log | 0045 | not reviewed |
+| 2026-09-26 | [1:1 notes screens and mode limits](2026-09-26-one-on-one-screens.md) | cfb7dc6 | 0045 | not reviewed |
 | 2026-09-26 | [Test and migration infrastructure](2026-09-26-test-infrastructure.md) | ce5bdd6, 11e749c | none | not reviewed |
 
 ## Template
