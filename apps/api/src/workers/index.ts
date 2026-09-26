@@ -28,6 +28,7 @@ import {
   turnJobId,
 } from "../lib/conversation-orchestrator.js";
 import { handleInbound } from "../lib/inbound-router.js";
+import { runSweep } from "../lib/conversation-sweeper.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { buildJobId } from "../lib/job-ids.js";
@@ -228,6 +229,13 @@ export function createWorkers(config: WorkerConfig) {
             truncatedInbound: data.truncated ?? false,
           });
           job.log(`Turn for ${data.conversationId}: ${result.status}`);
+          break;
+        }
+
+        case "sweep": {
+          const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
+          const result = await runSweep(tenantDb(orgId), { ...deps, conversationQueue: queues.conversationQueue });
+          job.log(`Sweep: ${JSON.stringify(result)}`);
           break;
         }
 

@@ -305,7 +305,7 @@ async function start() {
   const cronOrgId = process.env.ORG_ID ?? "dev-org";
 
   // Clean up stale repeatable jobs before re-adding
-  for (const queue of [queues.schedulerQueue, queues.notificationQueue, queues.calendarSyncQueue, queues.profileSignalsQueue, queues.checkInQueue]) {
+  for (const queue of [queues.conversationQueue, queues.schedulerQueue, queues.notificationQueue, queues.calendarSyncQueue, queues.profileSignalsQueue, queues.checkInQueue]) {
     const repeatableJobs = await queue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       await queue.removeRepeatableByKey(job.key);
@@ -322,6 +322,16 @@ async function start() {
     "scheduling-pass",
     { orgId: cronOrgId, platform: (process.env.SCHEDULER_PLATFORM ?? "slack") },
     { repeat: { pattern: "0 4 * * *" }, jobId: "scheduling-pass-cron" },
+  );
+
+  // Conversation sweeper: every 5 minutes. Marks conversations quiet for
+  // 24 h incomplete, and re-sends or re-queues anything stuck for over
+  // 5 minutes (unsent replies, unprocessed messages, unanswered turns,
+  // missing analysis). See lib/conversation-sweeper.ts.
+  await queues.conversationQueue.add(
+    "sweep",
+    { type: "sweep", orgId: cronOrgId },
+    { repeat: { pattern: "*/5 * * * *" }, jobId: "conversation-sweep-cron" },
   );
 
   // Weekly digest: Monday 9:00 AM UTC

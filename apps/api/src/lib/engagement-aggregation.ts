@@ -29,12 +29,15 @@ export async function recomputeWeeklyEngagement(
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   // Feedback the user authored this week (their engagement as a reviewer).
+  // Partial feedback (they went quiet mid-conversation) is kept and shown,
+  // but is neither a completed interaction nor a fair quality sample.
   const authored = await db
     .select({ score: feedbackEntries.engagementScore })
     .from(feedbackEntries)
     .where(
       and(
         eq(feedbackEntries.reviewerId, userId),
+        eq(feedbackEntries.isPartial, false),
         gte(feedbackEntries.createdAt, weekStart),
         lt(feedbackEntries.createdAt, weekEnd),
       ),

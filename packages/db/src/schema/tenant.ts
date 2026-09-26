@@ -371,6 +371,9 @@ export const feedbackEntries = pgTable(
       .notNull()
       .default(false),
     // embedding: vector('embedding', { dimensions: 1536 }), // enable when pgvector extension is added
+    // Analysed from an `incomplete` conversation (migration 0036): shown,
+    // labelled, but excluded from quality averages and completed counts.
+    isPartial: boolean("is_partial").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

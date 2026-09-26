@@ -365,6 +365,8 @@ export interface FeedbackEntryRow {
   engagementScore: number;
   wordCount: number;
   hasSpecificExamples: boolean;
+  /** From a conversation that ended early; excluded from quality averages. */
+  isPartial?: boolean;
   createdAt: string;
   valueScores: Array<{
     id: string;

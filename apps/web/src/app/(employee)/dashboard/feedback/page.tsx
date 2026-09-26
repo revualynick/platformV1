@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { PartialBadge } from "@/components/partial-badge";
 import { InfoHint } from "@/components/info-hint";
 import { DataUnavailable } from "@/components/data-unavailable";
 import { logPageError } from "@/lib/page-errors";
@@ -22,6 +23,7 @@ type FeedbackItem = {
   sentiment: string;
   engagementScore: number;
   values: string[];
+  partial?: boolean;
 };
 
 type ValueScore = { value: string; score: number };
@@ -72,6 +74,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
         sentiment: e.sentiment,
         engagementScore: e.engagementScore,
         values: e.valueScores.map((vs) => valuesMap.get(vs.coreValueId) ?? "Unknown"),
+        partial: e.isPartial,
       }));
 
       // Aggregate value scores
@@ -251,6 +254,7 @@ export default async function FeedbackPage() {
                         <span className="ml-2 text-xs text-stone-400">
                           {fb.date}
                         </span>
+                        {fb.partial && <PartialBadge />}
                       </div>
                     </div>
                     <p className="mt-3 text-sm leading-relaxed text-stone-600">

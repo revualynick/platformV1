@@ -460,6 +460,30 @@ export async function processTurn(
   return closing ? { status: "closed" } : { status: "replied" };
 }
 
+// ── Ending without a close ───────────────────────────────
+
+/**
+ * Mark an open conversation `incomplete` (it went quiet, or the person said
+ * "stop") and queue its analysis as partial feedback. Bumps `turn`, so a
+ * turn already in flight loses its claim instead of replying afterwards.
+ * Silent: no message is sent. Returns false if it was no longer open.
+ */
+export async function markIncomplete(
+  db: TenantDb,
+  deps: Pick<OrchestratorDeps, "analysisQueue">,
+  conversationId: string,
+): Promise<boolean> {
+  const now = new Date();
+  const [row] = await db
+    .update(conversations)
+    .set({ status: "incomplete", closedAt: now, lastActivityAt: now, turn: sql`${conversations.turn} + 1` })
+    .where(and(eq(conversations.id, conversationId), inArray(conversations.status, [...OPEN_STATUSES])))
+    .returning({ id: conversations.id });
+  if (!row) return false;
+  await queueAnalysis(deps, conversationId);
+  return true;
+}
+
 // ── In-process conversations (web demo, reflections, simulator) ──
 
 export interface ConversationView {
@@ -616,11 +640,16 @@ export async function deliverOutbox(
 const TRUNCATION_NOTE =
   "(Heads up: your last message was quite long and I could only read the first part. Feel free to split longer thoughts across messages.)\n\n";
 
-async function queueAnalysis(deps: Pick<OrchestratorDeps, "analysisQueue">, conversationId: string) {
+/** Queue analysis; `suffix` gives a distinct job id for a deliberate re-run. */
+export async function queueAnalysis(
+  deps: Pick<OrchestratorDeps, "analysisQueue">,
+  conversationId: string,
+  ...suffix: string[]
+) {
   await deps.analysisQueue.add(
     "analyze",
     { conversationId, orgId: tenantOrgId() },
-    { jobId: buildJobId("analyze", conversationId) },
+    { jobId: buildJobId("analyze", conversationId, ...suffix) },
   );
 }
 

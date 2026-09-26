@@ -88,6 +88,9 @@ export async function runAnalysisPipeline(
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 
+  // Went quiet before finishing (or said "stop"): analysed, but partial.
+  const isPartial = conversation.status === "incomplete";
+
   // Self-reflection is private + self-directed: it belongs in `self_reflections`
   // (what the Reflections page reads), NOT in `feedback_entries` (peer feedback,
   // which would both hide it from the Reflections page and pollute the subject's
@@ -136,14 +139,14 @@ export async function runAnalysisPipeline(
       // Not yet completed, or completed only by an earlier analysis: the
       // fresh extraction (which sees any late addition) replaces it.
       const fields = {
-        status: "completed" as const,
+        status: isPartial ? ("partial" as const) : ("completed" as const),
         conversationId,
         mood: extracted.mood,
         highlights: extracted.highlights ?? null,
         challenges: extracted.challenges ?? null,
         goalForNextWeek: extracted.goalForNextWeek ?? null,
         engagementScore: extracted.engagementScore ?? null,
-        completedAt: new Date(),
+        completedAt: isPartial ? null : new Date(),
       };
       await db
         .insert(selfReflections)
@@ -227,6 +230,7 @@ export async function runAnalysisPipeline(
         engagementScore: engagementResult.score,
         wordCount: engagementResult.wordCount,
         hasSpecificExamples: engagementResult.hasExamples,
+        isPartial,
       })
       // Re-analysis (a late addition to a closed conversation) refreshes
       // the entry rather than being skipped, so the extra answer counts.
@@ -236,6 +240,7 @@ export async function runAnalysisPipeline(
         target: feedbackEntries.conversationId,
         set: {
           rawContent,
+          isPartial,
           wordCount: engagementResult.wordCount,
           ...(stepOk(0) ? { sentiment: sentimentResult } : {}),
           ...(stepOk(1)

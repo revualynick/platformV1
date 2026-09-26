@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { PartialBadge } from "@/components/partial-badge";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -421,6 +422,7 @@ async function FeedbackSection({
     sentiment: string;
     engagementScore: number;
     values: string[];
+    partial?: boolean;
   };
 
   let recentFeedback: FeedbackItem[] = isDemo ? mockFeedback : [];
@@ -447,6 +449,7 @@ async function FeedbackSection({
         sentiment: e.sentiment as "positive" | "neutral" | "negative" | "mixed",
         engagementScore: e.engagementScore,
         values: e.valueScores.map((vs) => valuesMap.get(vs.coreValueId) ?? "Unknown"),
+        partial: e.isPartial,
       }));
     }
   } catch {
@@ -472,6 +475,7 @@ async function FeedbackSection({
                   <div>
                     <span className="text-sm font-medium text-stone-800">{fb.fromName}</span>
                     <span className="ml-2 text-xs text-stone-400">{fb.date}</span>
+                    {fb.partial && <PartialBadge />}
                   </div>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-stone-600">{fb.summary}</p>

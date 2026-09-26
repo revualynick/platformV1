@@ -1,4 +1,5 @@
 import { requireManagerPage } from "@/lib/page-guards";
+import { PartialBadge } from "@/components/partial-badge";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -43,6 +44,7 @@ type MockFeedbackEntry = {
   sentiment: string;
   engagementScore: number;
   values: string[];
+  partial?: boolean;
 };
 
 type MockFlaggedItem = {
@@ -266,6 +268,7 @@ async function FeedbackSection({
         sentiment: e.sentiment,
         engagementScore: e.engagementScore,
         values: e.valueScores?.map((v) => valueNameMap.get(v.coreValueId) ?? v.coreValueId) ?? [],
+        partial: e.isPartial,
       }));
     }
   } catch {
@@ -295,6 +298,7 @@ async function FeedbackSection({
                         {entry.sentiment}
                       </span>
                       <span className="text-xs text-stone-400">{entry.date}</span>
+                      {entry.partial && <PartialBadge />}
                     </div>
                     <p className="mt-2 text-sm text-stone-600">{entry.summary}</p>
                     {entry.values.length > 0 && (

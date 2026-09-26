@@ -9,13 +9,14 @@ import {
   users,
 } from "@revualy/db";
 import type { ChatPlatform } from "@revualy/shared";
-import { buildJobId } from "./job-ids.js";
 import { findIdentity } from "./chat-identity.js";
 import {
   appendLateAddition,
   appendUserMessage,
   findLateAdditionTarget,
   findOpenConversation,
+  markIncomplete,
+  queueAnalysis,
   type OrchestratorDeps,
 } from "./conversation-orchestrator.js";
 
@@ -81,6 +82,11 @@ export async function handleInbound(
   const keyword = parseKeyword(msg.content);
   if (keyword) {
     if (keyword !== "help") await setPaused(db, userId, keyword === "stop");
+    // "stop" also ends a check-in under way: kept and analysed as partial.
+    if (keyword === "stop") {
+      const open = await findOpenConversation(db, userId, platform);
+      if (open) await markIncomplete(db, deps, open.id);
+    }
     await reply(TEXT[keyword]);
     return finish(db, msg, "keyword", userId);
   }
@@ -108,11 +114,7 @@ export async function handleInbound(
   const late = await findLateAdditionTarget(db, userId, platform);
   if (late) {
     await appendLateAddition(db, late.id, msg.content, meta);
-    await deps.analysisQueue.add(
-      "analyze",
-      { conversationId: late.id, orgId: process.env.ORG_ID ?? "dev-org" },
-      { jobId: buildJobId("analyze", late.id, "late", msg.id) },
-    );
+    await queueAnalysis(deps, late.id, "late", msg.id);
     await reply(await lateAdditionText(db, late));
     return finish(db, msg, "late_addition", userId, late.id);
   }

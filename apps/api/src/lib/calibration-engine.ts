@@ -116,6 +116,8 @@ export async function generateCalibrationReport(
       and(
         gte(feedbackEntries.createdAt, new Date(weekStartStr)),
         lt(feedbackEntries.createdAt, new Date(weekEndStr)),
+        // Partial feedback (conversation went quiet) would skew score patterns.
+        eq(feedbackEntries.isPartial, false),
       ),
     );
 
