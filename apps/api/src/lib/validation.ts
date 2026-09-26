@@ -83,6 +83,7 @@ export const updateOrgSettingsSchema = z.object({
   timezone: z.string().max(100).optional(),
   allowedDomains: z.array(z.string().max(255)).optional(),
   checkInTitleMarker: z.string().min(1).max(100).optional(),
+  oneOnOneIngestionMode: z.enum(["automatic", "semi_automatic", "manual"]).optional(),
 });
 
 export const listUsersQuerySchema = z.object({
@@ -203,6 +204,37 @@ export const updateActionItemSchema = z.object({
   completed: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
+
+// ── 1:1 ingestion ─────────────────────────────────────
+
+/** Manual upload of a 1:1 notes or transcript file (processed in memory, never stored). */
+export const uploadOneOnOneSchema = z.object({
+  /** The other person in the 1:1 (the uploader's manager or direct report). */
+  counterpartId: uuid,
+  fileName: z.string().min(1).max(255),
+  /** Base64 file content; the decoded size limit is checked in the route. */
+  contentBase64: z.string().min(1).max(8_000_000),
+  /** When the 1:1 happened (defaults to now). */
+  meetingDate: dateString.optional(),
+});
+
+export const betweenMeetingGoalQuerySchema = z.object({
+  /** Only goals shared with this person (the other side of the 1:1). */
+  withUserId: uuid.optional(),
+  status: z.enum(["active", "done", "dropped"]).optional(),
+});
+
+export const updateBetweenMeetingGoalSchema = z
+  .object({
+    text: z.string().min(1).max(500).optional(),
+    status: z.enum(["active", "done", "dropped"]).optional(),
+    visibility: z.enum(["private", "shareable"]).optional(),
+    shareReason: z.string().min(1).max(300).optional(),
+  })
+  .refine((b) => b.visibility !== "shareable" || !!b.shareReason, {
+    message: "shareReason is required to make an item shareable",
+    path: ["shareReason"],
+  });
 
 export const createAgendaItemSchema = z.object({
   text: z.string().min(1).max(2000),

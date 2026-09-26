@@ -322,3 +322,10 @@
 - Cron 03:00 UTC on the scheduler queue (single worker, so the 04:00 pass waits); scheduler claims best proposed job first; focus loaded by job id at send time, used only when the title is safe too
 - 22 new tests (gate rules mutation-checked); 375 API tests, 16/16 typecheck; eval/calendar-model.ts written, not run
 - Open for Nick: jobs per person per week, priority rules, whether focus should be dropped when title is hidden
+
+## 2026-09-26: 1:1 ingestion v2 (worktree branch, committed, not pushed)
+- 0041: `between_meeting_goals`, action item visibility/share_reason/source_meeting_id, `org_settings.one_on_one_ingestion_mode` (default semi_automatic), check_in_meetings source/detected_by/notes_doc_id/session_id/withheld_count + new statuses awaiting_approval/declined
+- `lib/one-on-one-ingestion.ts`: one structured call per notes chunk (tasks, focus areas, goal progress), gate withholds wellbeing/conduct/safety (model label + keyword backstop), private unless shareable with a reason; quotes from the transcript, verified verbatim
+- Pipeline: MeetingSource interface (OAuth source today, automatic source to plug in), two-person manager/direct-report detection plus the marker; semi-auto waits for approval
+- Routes: upload (in memory, .txt/.md/.vtt/.docx/.html/.pdf best effort), import approve/decline, between-meeting goals GET/PATCH
+- 417 API tests, 16/16 typecheck. Open for Nick: default mode, suggestions still visible to skip-levels/admins, real PDF parser dependency, running notes docs re-extracted
