@@ -57,6 +57,7 @@ export function buildServiceVariables(opts: {
       NEXTAUTH_SECRET: secrets.NEXTAUTH_SECRET,
       INTERNAL_API_SECRET: secrets.INTERNAL_API_SECRET,
       WS_TOKEN_SECRET: secrets.WS_TOKEN_SECRET,
+      REVIEWER_PSEUDONYM_SECRET: secrets.REVIEWER_PSEUDONYM_SECRET,
     });
     Object.assign(web, {
       ENCRYPTION_KEYS: secrets.ENCRYPTION_KEYS,

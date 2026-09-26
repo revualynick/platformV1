@@ -58,6 +58,9 @@ export const GENERATED_SECRET_NAMES = [
   "NEXTAUTH_SECRET",
   "INTERNAL_API_SECRET",
   "WS_TOKEN_SECRET",
+  // Tier A reviewer pseudonyms (apps/api/src/lib/pseudonym.ts). Losing it
+  // breaks duplicate checks and re-identification: back it up with the rest.
+  "REVIEWER_PSEUDONYM_SECRET",
 ] as const;
 export type GeneratedSecretName = (typeof GENERATED_SECRET_NAMES)[number];
 

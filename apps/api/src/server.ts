@@ -31,6 +31,8 @@ import { importRoutes } from "./modules/imports/routes.js";
 import { reflectionRoutes, setReflectionAnalysisQueue } from "./modules/reflections/routes.js";
 import { exportRoutes } from "./modules/export/routes.js";
 import { assessmentRoutes } from "./modules/assessments/routes.js";
+import { privacyRoutes } from "./modules/privacy/routes.js";
+import { assertPseudonymReady } from "./lib/pseudonym.js";
 import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
 import { tenantPlugin, rateLimitKey } from "./lib/tenant-context.js";
@@ -146,6 +148,7 @@ export async function buildApp() {
   await app.register(demoRoutes, { prefix: "/api/v1/demo" });
   await app.register(goalsRoutes, { prefix: "/api/v1/goals" });
   await app.register(importRoutes, { prefix: "/api/v1/admin/imports" });
+  await app.register(privacyRoutes, { prefix: "/api/v1/admin/privacy" });
   await app.register(devRoutes, { prefix: "/api/v1/dev" });
 
   // WebSocket routes
@@ -173,6 +176,8 @@ async function start() {
   // (in every environment) rather than fail on the first request.
   try {
     assertEncryptionReady();
+    // Peer feedback is stored under a pseudonym (tier A): same rule.
+    assertPseudonymReady();
   } catch (err) {
     console.error(`Fatal: ${(err as Error).message}`);
     process.exit(1);

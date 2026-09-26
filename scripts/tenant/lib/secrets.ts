@@ -18,6 +18,7 @@ export function generateTenantSecrets(randomBytes: RandomBytes = crypto.randomBy
     NEXTAUTH_SECRET: randomBytes(32).toString("base64url"),
     INTERNAL_API_SECRET: randomBytes(32).toString("base64url"),
     WS_TOKEN_SECRET: randomBytes(32).toString("hex"),
+    REVIEWER_PSEUDONYM_SECRET: randomBytes(32).toString("hex"),
   };
 }
 
@@ -34,6 +35,7 @@ export function validateSecrets(secrets: Partial<Record<string, unknown>>): stri
   if (!/^[A-Za-z0-9_-]{43}$/.test(s.NEXTAUTH_SECRET)) errors.push("NEXTAUTH_SECRET must be 32 bytes of base64url");
   if (!/^[A-Za-z0-9_-]{43}$/.test(s.INTERNAL_API_SECRET)) errors.push("INTERNAL_API_SECRET must be 32 bytes of base64url");
   if (!/^[0-9a-f]{64}$/.test(s.WS_TOKEN_SECRET)) errors.push("WS_TOKEN_SECRET must be 64 hex characters");
+  if (!/^[0-9a-f]{64}$/.test(s.REVIEWER_PSEUDONYM_SECRET)) errors.push("REVIEWER_PSEUDONYM_SECRET must be 64 hex characters");
   return errors;
 }
 

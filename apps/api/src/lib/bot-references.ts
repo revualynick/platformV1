@@ -47,9 +47,9 @@ export function privacyFacts(type: InteractionType, subjectName: string, anchore
 function basePrivacyFacts(type: InteractionType, subjectName: string): string {
   switch (type) {
     case "peer_review":
-      return `This is a peer review about ${subjectName}. The answers shape ${subjectName}'s feedback summary. ${subjectName} and their manager see themes, not the reviewer's name. The reviewer's exact words are not shown to ${subjectName}.`;
+      return `This is a peer review about ${subjectName}. The answers shape ${subjectName}'s feedback summary. They are stored against a pseudonym, not the reviewer's name, and the named chat record is deleted about a week after it is analysed. ${subjectName} and their manager see paraphrased themes, released every two weeks and only once at least three people have given feedback, not the reviewer's name. The reviewer's exact words are not shown to ${subjectName}.`;
     case "three_sixty":
-      return `This is a 360 review for ${subjectName}. Answers are combined with other people's into an anonymised summary.`;
+      return `This is a 360 review for ${subjectName}. Answers are stored against a pseudonym, not the reviewer's name, and combined with other people's into an anonymised summary, which is only shared if at least three people answered.`;
     case "self_reflection":
       return "This is the person's own weekly reflection. It is private: only they see it, on their dashboard.";
     case "pulse_check":
