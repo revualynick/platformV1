@@ -78,7 +78,7 @@ export function tierFor(concern: Concern): ModelTier {
 }
 
 function systemPrompt(input: PlanInput, org: OrgResources): string {
-  const docs = referenceDocs(input.interactionType, input.subjectName, org);
+  const docs = referenceDocs(input.interactionType, input.subjectName, org, Boolean(input.anchor));
   const self = input.interactionType === "self_reflection";
   return `You are Revualy's check-in assistant, working inside a workplace chat app for ${org.orgName}. You run short ${LABEL[input.interactionType] ?? "feedback"} check-ins. This turn has been handed to you because the person's latest message needs more care than the usual script.
 
@@ -114,7 +114,8 @@ function reminder(input: PlanInput, hint: Concern): string {
       : []),
     `Current topic: ${input.currentTheme ? `${input.currentTheme.intent} (${input.currentTheme.dataGoal})` : "none"}.`,
     `Next topic: ${input.nextTheme ? input.nextTheme.intent : "none"}.`,
-    `What the person was told at the start: ${privacyFacts(input.interactionType, input.subjectName)}`,
+    ...(input.anchor ? [`This check-in is about ${input.anchor}.`] : []),
+    `What the person was told at the start: ${privacyFacts(input.interactionType, input.subjectName, Boolean(input.anchor))}`,
   ];
   return `<system-reminder>\n${lines.join("\n")}\n</system-reminder>`;
 }
@@ -150,7 +151,7 @@ export async function runReferencePath(
   opts: { tier?: ModelTier } = {},
 ): Promise<ReferenceResult> {
   const tier = opts.tier ?? tierFor(hint);
-  const docs = referenceDocs(input.interactionType, input.subjectName, org);
+  const docs = referenceDocs(input.interactionType, input.subjectName, org, Boolean(input.anchor));
   const system = systemPrompt(input, org);
   const res = await llm.completeWithTools({
     tier,

@@ -13,6 +13,7 @@ import {
 import type { InteractionType, ChatPlatform } from "@revualy/shared";
 import { findBestSlot } from "./availability.js";
 import { buildJobId } from "./job-ids.js";
+import { pickSubjectFromMeetings } from "./meeting-anchor.js";
 
 /**
  * Run the daily scheduling pass for an org.
@@ -98,10 +99,19 @@ export async function runSchedulingPass(
     // Select interaction type (rotate: peer_review → self_reflection → peer_review)
     const interactionType = selectInteractionType(existing);
 
-    // Select review subject (for peer reviews)
+    // Select review subject (for peer reviews): a colleague from a recent
+    // shared meeting first, so the check-in can ask about it; otherwise the
+    // strongest relationship not reviewed recently.
     let subjectId: string | null = null;
+    let anchorEventId: string | null = null;
     if (interactionType === "peer_review" || interactionType === "three_sixty") {
-      subjectId = await selectReviewSubject(db, orgId, user.id);
+      const anchored = await pickSubjectFromMeetings(db, user.id, await recentSubjectIds(db, user.id));
+      if (anchored) {
+        subjectId = anchored.subjectId;
+        anchorEventId = anchored.event.id;
+      } else {
+        subjectId = await selectReviewSubject(db, orgId, user.id);
+      }
       if (!subjectId) {
         skipped++;
         continue;
@@ -186,6 +196,7 @@ export async function runSchedulingPass(
         scheduledAt: sendAt,
         interactionType,
         subjectId,
+        anchorEventId,
         status: "pending",
       })
       .returning();
@@ -204,6 +215,7 @@ export async function runSchedulingPass(
         channelId: dmAddress,
         questionnaireId: questionnaire.id,
         scheduleEntryId: entry.id,
+        anchorEventId,
       },
       { delay, jobId: buildJobId("initiate", entry.id) },
     );
@@ -238,6 +250,17 @@ function selectInteractionType(
  * Pick the best review subject for a user.
  * Prioritizes: strongest connections that haven't been reviewed recently.
  */
+/** People this reviewer was asked about in their last five conversations. */
+async function recentSubjectIds(db: TenantDb, userId: string): Promise<Set<string>> {
+  const recent = await db
+    .select({ subjectId: conversations.subjectId })
+    .from(conversations)
+    .where(eq(conversations.reviewerId, userId))
+    .orderBy(desc(conversations.createdAt))
+    .limit(5);
+  return new Set(recent.map((c) => c.subjectId));
+}
+
 async function selectReviewSubject(
   db: TenantDb,
   orgId: string,

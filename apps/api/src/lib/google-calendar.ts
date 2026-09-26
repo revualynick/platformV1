@@ -131,6 +131,10 @@ export interface CalendarEvent {
   externalEventId: string;
   title: string;
   attendees: string[];
+  /** Attendees who declined. */
+  declined?: string[];
+  /** Google visibility: default | public | private | confidential. */
+  visibility?: string;
   startAt: Date;
   endAt: Date;
 }
@@ -192,10 +196,13 @@ export async function fetchPastCheckInEvents(
 }
 
 /**
- * Fetch calendar events for the next 7 days using an access token.
+ * Fetch calendar events from the past week to the week ahead. The past
+ * week is re-read so late declines are kept current: check-ins ask about
+ * recent meetings, never ones the person declined.
  */
 export async function fetchCalendarEvents(
   accessToken: string,
+  lookbackDays = 7,
 ): Promise<CalendarEvent[]> {
   const client = createOAuth2Client();
   client.setCredentials({ access_token: accessToken });
@@ -204,10 +211,11 @@ export async function fetchCalendarEvents(
 
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const lookback = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
 
   const response = await calendar.events.list({
     calendarId: "primary",
-    timeMin: now.toISOString(),
+    timeMin: lookback.toISOString(),
     timeMax: weekFromNow.toISOString(),
     singleEvents: true,
     orderBy: "startTime",
@@ -224,6 +232,10 @@ export async function fetchCalendarEvents(
       attendees: (e.attendees ?? [])
         .map((a) => a.email)
         .filter((email): email is string => !!email),
+      declined: (e.attendees ?? [])
+        .filter((a) => a.responseStatus === "declined" && a.email)
+        .map((a) => a.email!),
+      visibility: e.visibility ?? "default",
       startAt: new Date(e.start!.dateTime!),
       endAt: new Date(e.end!.dateTime!),
     }));

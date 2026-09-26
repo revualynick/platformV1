@@ -38,6 +38,8 @@ export async function syncCalendarForUser(
             externalEventId: event.externalEventId,
             title: event.title,
             attendees: event.attendees,
+            declined: event.declined ?? [],
+            visibility: event.visibility ?? "default",
             startAt: event.startAt,
             endAt: event.endAt,
             source: "google",
@@ -48,6 +50,8 @@ export async function syncCalendarForUser(
           set: {
             title: sql`excluded.title`,
             attendees: sql`excluded.attendees`,
+            declined: sql`excluded.declined`,
+            visibility: sql`excluded.visibility`,
             startAt: sql`excluded.start_at`,
             endAt: sql`excluded.end_at`,
           },

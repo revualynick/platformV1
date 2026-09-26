@@ -292,6 +292,11 @@ export const conversations = pgTable(
     scheduleEntryId: uuid("schedule_entry_id").references((): AnyPgColumn => interactionSchedule.id, {
       onDelete: "set null",
     }),
+    // The shared meeting it opens with (migration 0038), and how it is
+    // described ("the Q3 planning call on Wednesday"); encrypted, titles
+    // can be sensitive.
+    anchorEventId: uuid("anchor_event_id").references((): AnyPgColumn => calendarEvents.id, { onDelete: "set null" }),
+    anchorLabel: encryptedText("conversations", "anchor_label"),
   },
   (table) => [
     uniqueIndex("uq_conversations_schedule_entry")
@@ -758,6 +763,8 @@ export const interactionSchedule = pgTable(
     interactionType: varchar("interaction_type", { length: 50 }).notNull(),
     subjectId: uuid("subject_id").references(() => users.id),
     conversationId: uuid("conversation_id").references(() => conversations.id),
+    // The shared meeting this check-in is about (migration 0038).
+    anchorEventId: uuid("anchor_event_id").references((): AnyPgColumn => calendarEvents.id, { onDelete: "set null" }),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1129,6 +1136,10 @@ export const calendarEvents = pgTable(
     externalEventId: varchar("external_event_id", { length: 255 }).notNull(),
     title: varchar("title", { length: 500 }).notNull(),
     attendees: jsonb("attendees").$type<string[]>().notNull().default([]),
+    // Attendees who declined (migration 0038): never asked about this meeting.
+    declined: jsonb("declined").$type<string[]>().notNull().default([]),
+    // Google visibility: "default" | "public" | "private" | "confidential".
+    visibility: varchar("visibility", { length: 20 }).notNull().default("default"),
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     source: varchar("source", { length: 20 }).notNull(),

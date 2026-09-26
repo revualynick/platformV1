@@ -61,6 +61,8 @@ const initiateJobSchema = z.object({
   // Makes initiation idempotent: a retried job finds the conversation it
   // already created instead of starting a second one.
   scheduleEntryId: z.string().optional(),
+  // The shared meeting chosen at scheduling (re-checked at send time).
+  anchorEventId: z.string().nullable().optional(),
 });
 
 const inboundJobSchema = z.object({
@@ -188,6 +190,7 @@ export function createWorkers(config: WorkerConfig) {
             channelId: data.channelId ?? "",
             questionnaireId: data.questionnaireId,
             scheduleEntryId: data.scheduleEntryId,
+            anchorEventId: data.anchorEventId ?? null,
             scheduled: true,
           });
 

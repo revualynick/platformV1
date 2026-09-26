@@ -14,6 +14,7 @@ import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import { buildJobId } from "./job-ids.js";
 import { planTurn, themeQuestion, type ThemeInfo } from "./turn-planner.js";
 import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
+import { meetingLabel, resolveAnchor } from "./meeting-anchor.js";
 
 /**
  * Conversation engine. All conversation state lives in Postgres (the
@@ -55,6 +56,8 @@ export interface InitiateParams {
   questionnaireId: string;
   /** Scheduler entry; makes initiation idempotent across job retries. */
   scheduleEntryId?: string;
+  /** Shared meeting chosen at scheduling; re-checked now (see resolveAnchor). */
+  anchorEventId?: string | null;
   /**
    * Scheduled check-ins: re-check at send time, not only when it was
    * scheduled (hours earlier). Skips someone who has since said "stop" or
@@ -130,6 +133,16 @@ export async function initiateConversation(
 
   // Deterministic intro (what this is, how long, where answers go: the
   // privacy line must never be LLM-paraphrased) + the first question.
+  // The meeting to open with, for peer check-ins (re-checked at send time).
+  const now = new Date();
+  const anchor =
+    params.interactionType === "peer_review" || params.interactionType === "three_sixty"
+      ? await resolveAnchor(db, params.reviewerId, params.subjectId, params.anchorEventId, now)
+      : null;
+  const anchorLabel = anchor
+    ? meetingLabel(anchor, (subject.name ?? "your colleague").split(" ")[0], now, reviewer.timezone)
+    : null;
+
   // If the model is down, ask the first theme as written rather than fail.
   const firstTheme = selectedThemes[0] ?? null;
   const firstQuestion = await generateQuestion(deps.llm, {
@@ -140,14 +153,14 @@ export async function initiateConversation(
     interactionType: params.interactionType,
     isOpening: true,
     priorMessages: [],
+    anchor: anchorLabel ?? undefined,
   }).catch((err) => {
     if (!firstTheme) throw err;
     console.warn("[Orchestrator] opening question fell back to the theme's own wording:", err instanceof Error ? err.message : err);
     return themeQuestion(firstTheme);
   });
-  const openingQuestion = getInteractionIntro(params.interactionType, subject.name ?? "your colleague") + firstQuestion;
+  const openingQuestion = getInteractionIntro(params.interactionType, subject.name ?? "your colleague", anchorLabel ?? undefined) + firstQuestion;
 
-  const now = new Date();
   const created = await db.transaction(async (tx) => {
     const [conv] = await tx
       .insert(conversations)
@@ -167,6 +180,8 @@ export async function initiateConversation(
         currentThemeIndex: 0,
         phase: "opening",
         scheduleEntryId: params.scheduleEntryId ?? null,
+        anchorEventId: anchor?.id ?? null,
+        anchorLabel,
       })
       // A concurrent retry for the same schedule entry may have won.
       .onConflictDoNothing()
@@ -406,6 +421,7 @@ export async function processTurn(
     currentTheme,
     nextTheme,
     followUpsOnTheme: conv.followUpCount,
+    anchor: conv.anchorLabel ?? undefined,
     // Room for another question and its answer before the cap.
     canContinue: messageCount < maxMessages - 1,
     history: history.map((m) => ({ role: m.role, content: m.content })),
@@ -715,6 +731,8 @@ interface QuestionGenParams {
   interactionType: InteractionType;
   isOpening: boolean;
   priorMessages: Array<{ role: string; content: string }>;
+  /** The shared meeting to ask about ("the \"Q3 planning\" call on Wednesday"). */
+  anchor?: string;
 }
 
 async function generateQuestion(
@@ -757,7 +775,8 @@ Rules:
 - Ask ONE focused question at a time
 - Be conversational and warm, not robotic
 - Keep it under 2 sentences
-- ${params.isOpening ? `Address the reviewer by name ("Hi ${safeReviewerName}")` : "Build on what they just shared"}
+- ${params.isOpening ? `Address the reviewer by name ("Hi ${safeReviewerName}")` : "Build on what they just shared"}${params.anchor ? `
+- Ask about ${params.anchor} specifically: how it went, and how ${stripControlChars(params.subjectName)} contributed` : ""}
 - ${isSelfReflection ? "Frame questions in the second person about the user's own experience (\"you\"/\"your\") — never refer to them by name as a third party" : `Reference ${stripControlChars(params.subjectName)} naturally when relevant`}
 - Never reveal you're following a questionnaire`;
 
@@ -808,7 +827,16 @@ export function getMaxMessages(type: InteractionType): number {
 export function getInteractionIntro(
   type: InteractionType,
   subjectName: string,
+  anchor?: string,
 ): string {
+  // Anchored to a shared meeting: say where it came from, up front.
+  if (anchor && (type === "peer_review" || type === "three_sixty")) {
+    const summary =
+      type === "peer_review"
+        ? `Your answers shape ${subjectName}'s feedback summary: they and their manager see the themes, not your name.`
+        : "Your input is combined with others' into an anonymised summary.";
+    return `👋 I'm Revualy's feedback assistant. I'd like to ask a couple of quick questions about working with ${subjectName}, starting with ${anchor}. I picked that from your calendar (just the title, time and who was invited). It takes about 2-3 minutes. ${summary}\n\n`;
+  }
   switch (type) {
     case "peer_review":
       return `👋 I'm Revualy's feedback assistant. I'll ask a couple of quick questions about working with ${subjectName} — it takes about 2–3 minutes. Your answers shape ${subjectName}'s feedback summary: they and their manager see the themes, not your name.\n\n`;

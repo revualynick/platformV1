@@ -37,7 +37,14 @@ export const EVAL_ORG: OrgResources = {
 };
 
 /** Who sees what, per check-in. The same facts as the opening message, never paraphrased into claims beyond them. */
-export function privacyFacts(type: InteractionType, subjectName: string): string {
+export function privacyFacts(type: InteractionType, subjectName: string, anchored = false): string {
+  const calendar = anchored
+    ? " The meeting this check-in is about was picked from the person's own calendar: only its title, time and who was invited are used, never anything said in it."
+    : "";
+  return basePrivacyFacts(type, subjectName) + calendar;
+}
+
+function basePrivacyFacts(type: InteractionType, subjectName: string): string {
   switch (type) {
     case "peer_review":
       return `This is a peer review about ${subjectName}. The answers shape ${subjectName}'s feedback summary. ${subjectName} and their manager see themes, not the reviewer's name. The reviewer's exact words are not shown to ${subjectName}.`;
@@ -59,14 +66,16 @@ export interface ReferenceDoc {
   body: string;
 }
 
-export function referenceDocs(type: InteractionType, subjectName: string, org: OrgResources): ReferenceDoc[] {
+export function referenceDocs(type: InteractionType, subjectName: string, org: OrgResources, anchored = false): ReferenceDoc[] {
   return [
     {
       name: "privacy",
       when: "The person asks who sees their answers, where data goes, what you know about them, or why they are being asked.",
       body: [
-        `Facts you may state: ${privacyFacts(type, subjectName)}`,
-        `You know only what is in this conversation: their first name and the colleague being discussed. You do not know anything else about them.`,
+        `Facts you may state: ${privacyFacts(type, subjectName, anchored)}`,
+        anchored
+          ? "You know what is in this conversation and the meeting's title, time and invite list from their calendar. You know nothing else about them."
+          : "You know only what is in this conversation: their first name and the colleague being discussed. You do not know anything else about them.",
         `If they ask something these facts do not cover (retention, exports, legal questions), say you do not know and that ${org.hrContact} can answer.`,
         "Never invent reassurances or claims about data. Never say answers are anonymous beyond what the facts say.",
         "After answering, ask the current question again in different words, briefly. Code adds a line reminding them they can skip or stop.",
