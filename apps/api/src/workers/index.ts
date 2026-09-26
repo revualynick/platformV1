@@ -32,6 +32,7 @@ import { handleInbound } from "../lib/inbound-router.js";
 import { runSweep } from "../lib/conversation-sweeper.js";
 import { purgeExpiredImportRows } from "../lib/imports/pipeline.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
+import { writeBackForConversation } from "../lib/tickets/writeback.js";
 import { runSchedulingPass } from "../lib/interaction-scheduler.js";
 import { runCalendarModelPass } from "../lib/calendar-model.js";
 import { buildJobId } from "../lib/job-ids.js";
@@ -180,7 +181,8 @@ export function createWorkers(config: WorkerConfig) {
     async (job) => {
       const { type } = job.data as { type: string };
 
-      const deps = { llm, adapters, analysisQueue: queues.analysisQueue };
+      // The job agent proposes each ticket's context; the policy gate decides.
+      const deps = { llm, adapters, analysisQueue: queues.analysisQueue, ticketAgent: llm };
       const tenantDb = (orgId: string) => getTenantDb(orgId, process.env.DATABASE_URL ?? "");
 
       switch (type) {
@@ -306,6 +308,10 @@ export function createWorkers(config: WorkerConfig) {
       );
 
       await runAnalysisPipeline(db, llm, conversationId, console, orgId, queues.profileSignalsQueue, queues.notificationQueue);
+      // Ticket write-back: validate the finished ticket's result and mark it
+      // written back. Peer feedback is still stored by the analysis pipeline
+      // until writePeerFeedback() gets its pseudonymous sink.
+      await writeBackForConversation(db, conversationId, { orgId });
     },
     { connection, concurrency: 3, lockDuration: 120_000, lockRenewTime: 40_000 },
   );

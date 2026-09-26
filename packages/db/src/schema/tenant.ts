@@ -877,6 +877,54 @@ export const checkinJobs = pgTable(
   ],
 );
 
+// ── Tickets ────────────────────────────────────────────
+
+export type TicketType = "peer_checkin" | "personal_checkin" | "one_on_one_followup";
+export type TicketStatus = "prepared" | "open" | "done" | "written_back" | "expired";
+
+/** One item the policy gate dropped: what and why, never the content. */
+export interface TicketGateLogEntry {
+  category: string;
+  about: string;
+  reason: string;
+}
+
+/**
+ * The air gap between the job side and the chat side (migration 0044;
+ * docs/design/privacy-and-agent-access.md). The job side prepares the
+ * ticket's context through a policy gate; the chat side reads only its
+ * ticket, appends turns through it and marks it done; write-back then
+ * validates the result and the ticket expires, which wipes the context.
+ * Context is encrypted JSON (see apps/api/src/lib/tickets).
+ */
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ticketType: varchar("ticket_type", { length: 30 }).$type<TicketType>().notNull(),
+    reviewerId: uuid("reviewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id").references(() => users.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").references((): AnyPgColumn => conversations.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 20 }).$type<TicketStatus>().notNull().default("prepared"),
+    context: encryptedText("tickets", "context").notNull().default(""),
+    preparedBy: varchar("prepared_by", { length: 20 }).$type<"agent" | "default">().notNull(),
+    gateLog: jsonb("gate_log").$type<TicketGateLogEntry[]>().notNull().default([]),
+    turnCount: integer("turn_count").notNull().default(0),
+    outcome: varchar("outcome", { length: 20 }).$type<"closed" | "incomplete">(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    writtenBackAt: timestamp("written_back_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("uq_tickets_conversation").on(table.conversationId),
+    index("idx_tickets_expiry").on(table.expiresAt).where(sql`status <> 'expired'`),
+  ],
+);
+
 // ── Pulse Checks ───────────────────────────────────────
 
 export const pulseCheckTriggers = pgTable(

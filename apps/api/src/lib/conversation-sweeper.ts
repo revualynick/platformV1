@@ -4,6 +4,7 @@ import type { TenantDb } from "@revualy/db";
 import { checkinJobs, conversations, conversationMessages, inboundMessages, interactionSchedule } from "@revualy/db";
 import { ANCHOR_LOOKBACK_DAYS } from "./meeting-anchor.js";
 import { buildJobId } from "./job-ids.js";
+import { expireTickets } from "./tickets/prepare.js";
 import {
   OPEN_STATUSES,
   deliverOutbox,
@@ -33,6 +34,9 @@ import {
  *                  transcript, inbound copies and schedule rows; used
  *                  check-in jobs past the anchor lookback -> deleted. The
  *                  feedback stays, under the reviewer's pseudonym only.
+ *  8. tickets:     any ticket past its expiry (prepared but never used,
+ *                  stuck open, done but never written back) -> expired,
+ *                  context wiped
  *
  * Re-queued jobs get an hourly job id suffix: at most one retry per item
  * per hour (the original job id may still sit in BullMQ's failed set,
@@ -67,6 +71,7 @@ export interface SweepResult {
   jobsExpired: number;
   conversationsPurged: number;
   jobsPurged: number;
+  ticketsExpired: number;
   errors: number;
 }
 
@@ -87,6 +92,7 @@ export async function runSweep(
     jobsExpired: 0,
     conversationsPurged: 0,
     jobsPurged: 0,
+    ticketsExpired: 0,
     errors: 0,
   };
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
@@ -224,6 +230,9 @@ export async function runSweep(
     .where(and(eq(checkinJobs.status, "used"), lt(checkinJobs.createdAt, jobsBefore)))
     .returning({ id: checkinJobs.id });
   result.jobsPurged = purgedJobs.length;
+
+  // 8. Tickets past their expiry, whatever state they were stuck in.
+  result.ticketsExpired = await expireTickets(db, now);
 
   return result;
 }
