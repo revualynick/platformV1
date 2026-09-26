@@ -126,6 +126,8 @@ export const users = pgTable(
     // Set by people imports (migration 0040).
     jobTitle: varchar("job_title", { length: 255 }),
     startDate: date("start_date"),
+    // This manager's 1:1 ingestion mode; null = the org default (migration 0045).
+    oneOnOneIngestionMode: varchar("one_on_one_ingestion_mode", { length: 20 }),
     isActive: boolean("is_active").notNull().default(true),
     onboardingCompleted: boolean("onboarding_completed")
       .notNull()
@@ -1391,6 +1393,11 @@ export const orgSettings = pgTable("org_settings", {
     .default("[Check-in]"),
   // How 1:1s are ingested (migration 0041): automatic | semi_automatic | manual.
   oneOnOneIngestionMode: varchar("one_on_one_ingestion_mode", { length: 20 })
+    .notNull()
+    .default("semi_automatic"),
+  // The most automatic 1:1 mode managers may choose (migration 0045).
+  // oneOnOneIngestionMode above is the default for managers who haven't chosen.
+  oneOnOneMaxMode: varchar("one_on_one_max_mode", { length: 20 })
     .notNull()
     .default("semi_automatic"),
   createdAt: timestamp("created_at", { withTimezone: true })

@@ -66,10 +66,38 @@ async function apiFetch<T>(
     // Truncate body to prevent large dumps; log in all envs for observability
     const body = await res.text().catch(() => "");
     console.error(`API error ${res.status}: ${path} — ${body.slice(0, 500)}`);
-    throw new Error(`API request failed: ${res.status} ${path}`);
+    let apiMessage: string | undefined;
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown };
+      if (typeof parsed.error === "string" && res.status < 500) apiMessage = parsed.error;
+    } catch {
+      // not JSON
+    }
+    throw new ApiError(res.status, path, apiMessage);
   }
 
   return res.json() as Promise<T>;
+}
+
+/**
+ * A failed API call. The message stays generic (it's logged and sometimes
+ * shown); apiMessage carries the API's own 4xx explanation for screens
+ * that want to show it ("Unsupported file type ...").
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly path: string,
+    readonly apiMessage?: string,
+  ) {
+    super(`API request failed: ${status} ${path}`);
+    this.name = "ApiError";
+  }
+}
+
+/** The API's explanation when there is one, otherwise the fallback. */
+export function friendlyError(err: unknown, fallback: string): string {
+  return err instanceof ApiError && err.apiMessage ? err.apiMessage : fallback;
 }
 
 // ── Org / Admin ────────────────────────────────────────
@@ -249,6 +277,8 @@ export async function updateOrgSettings(data: {
   timezone?: string;
   allowedDomains?: string[];
   checkInTitleMarker?: string;
+  oneOnOneIngestionMode?: IngestionMode;
+  oneOnOneMaxMode?: IngestionMode;
 }) {
   return apiFetch<OrgSettingsRow>("/api/v1/admin/org", {
     method: "PATCH",
@@ -1355,3 +1385,117 @@ export async function getGoogleIntegrationStatus() {
   }>("/api/v1/integrations/google/status");
 }
 
+// ── 1:1 ingestion (Meet notes and uploads) ─────────────
+
+export type IngestionMode = "manual" | "semi_automatic" | "automatic";
+
+export interface IngestionModeInfo {
+  allowed: IngestionMode[];
+  orgMaxMode: IngestionMode;
+  orgDefault: IngestionMode;
+  /** The caller's own choice; null = the org default. */
+  choice: IngestionMode | null;
+  effective: IngestionMode;
+  automaticAvailable: boolean;
+  driveConnected: boolean;
+}
+
+export async function getIngestionMode() {
+  return apiFetch<IngestionModeInfo>("/api/v1/one-on-one-sessions/ingestion-mode");
+}
+
+export async function setIngestionMode(mode: IngestionMode | null) {
+  return apiFetch<{ choice: IngestionMode | null }>("/api/v1/one-on-one-sessions/ingestion-mode", {
+    method: "PUT",
+    body: JSON.stringify({ mode }),
+  });
+}
+
+export interface PendingImport {
+  id: string;
+  title: string;
+  eventStart: string;
+  detectedBy: string | null;
+  subjectUserId: string | null;
+  subjectName: string | null;
+}
+
+export async function getPendingImports() {
+  return apiFetch<{ data: PendingImport[] }>("/api/v1/one-on-one-sessions/imports");
+}
+
+export async function decideImport(id: string, action: "approve" | "decline") {
+  return apiFetch<{ id: string; status: string }>(`/api/v1/one-on-one-sessions/imports/${id}/${action}`, {
+    method: "POST",
+  });
+}
+
+export interface RecentImport {
+  id: string;
+  title: string;
+  eventStart: string;
+  source: string;
+  status: string;
+  withheldCount: number;
+  organizerId: string;
+  subjectUserId: string | null;
+  subjectName: string | null;
+}
+
+export async function getRecentImports() {
+  return apiFetch<{ data: RecentImport[] }>("/api/v1/one-on-one-sessions/imports/recent");
+}
+
+export interface UploadOutcome {
+  meetingId: string;
+  sessionId: string;
+  tasks: number;
+  /** Between-meeting goals created. */
+  focusAreas: number;
+  suggestions: number;
+  /** Items held back as wellbeing, conduct or safety. */
+  withheld: number;
+}
+
+export async function uploadOneOnOne(data: {
+  counterpartId: string;
+  fileName: string;
+  contentBase64: string;
+  meetingDate?: string;
+}) {
+  return apiFetch<UploadOutcome>("/api/v1/one-on-one-sessions/imports/upload", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export interface BetweenMeetingGoal {
+  id: string;
+  ownerId: string;
+  counterpartId: string;
+  text: string;
+  status: "active" | "done" | "dropped";
+  visibility: "private" | "shareable";
+  shareReason: string | null;
+  sourceMeetingId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getBetweenMeetingGoals(opts?: { withUserId?: string; status?: "active" | "done" | "dropped" }) {
+  const params = new URLSearchParams();
+  if (opts?.withUserId) params.set("withUserId", opts.withUserId);
+  if (opts?.status) params.set("status", opts.status);
+  const qs = params.toString() ? `?${params}` : "";
+  return apiFetch<{ data: BetweenMeetingGoal[] }>(`/api/v1/one-on-one-sessions/between-meeting-goals${qs}`);
+}
+
+export async function updateBetweenMeetingGoal(
+  id: string,
+  data: { text?: string; status?: "active" | "done" | "dropped" },
+) {
+  return apiFetch<BetweenMeetingGoal>(`/api/v1/one-on-one-sessions/between-meeting-goals/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}

@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@revualy/shared"],
   experimental: {
     optimizePackageImports: ["recharts", "drizzle-orm"],
+    // 1:1 notes uploads go through a server action; files are up to 5 MB.
+    serverActions: { bodySizeLimit: "6mb" },
   },
   async headers() {
     const securityHeaders = [

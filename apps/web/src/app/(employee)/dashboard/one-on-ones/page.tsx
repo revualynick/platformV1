@@ -7,6 +7,11 @@ import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { SessionList } from "@/components/session-list";
 import { DataUnavailable } from "@/components/data-unavailable";
 import { logPageError } from "@/lib/page-errors";
+import { getBetweenMeetingGoals, getRecentImports, type BetweenMeetingGoal, type RecentImport } from "@/lib/api";
+import { updateGoalAction, uploadNotesAction } from "@/lib/one-on-one-import-actions";
+import { BetweenMeetingGoals } from "@/components/one-on-one-imports/between-meeting-goals";
+import { UploadNotes } from "@/components/one-on-one-imports/upload-notes";
+import { RecentImports } from "@/components/one-on-one-imports/recent-imports";
 
 async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDemo: boolean) {
   const userId = session?.user?.id;
@@ -38,6 +43,7 @@ async function loadOneOnOneData(session: Awaited<ReturnType<typeof auth>>, isDem
     return {
       sessions: sessionsResult.status === "fulfilled" ? sessionsResult.value : [],
       managerName: managerResult.status === "fulfilled" && managerResult.value ? managerResult.value.name : "Your Manager",
+      managerId,
       hasManager: true,
       loadFailed: sessionsResult.status === "rejected",
     };
@@ -56,6 +62,24 @@ export default async function OneOnOnesPage() {
   const session = await auth();
   const isDemo = isDemoSession(session);
   const data = await loadOneOnOneData(session, isDemo);
+  const viewerId = session?.user?.id ?? "";
+  const managerId = "managerId" in data ? (data.managerId as string | null) : null;
+
+  // Between-meeting goals and imported notes with the manager (API-enforced
+  // to the two people in the 1:1).
+  let goals: BetweenMeetingGoal[] = [];
+  let recent: RecentImport[] = [];
+  if (!isDemo && managerId) {
+    const [goalsR, recentR] = await Promise.allSettled([
+      getBetweenMeetingGoals({ withUserId: managerId }),
+      getRecentImports(),
+    ]);
+    if (goalsR.status === "fulfilled") goals = goalsR.value.data;
+    else logPageError("one-on-ones", goalsR.reason);
+    if (recentR.status === "fulfilled") recent = recentR.value.data;
+    else logPageError("one-on-ones", recentR.reason);
+  }
+  const managerNames: Record<string, string> = managerId ? { [managerId]: data.managerName ?? "Your manager" } : {};
 
   if (data.loadFailed && !isDemo) {
     return (
@@ -111,6 +135,34 @@ export default async function OneOnOnesPage() {
         </p>
       </div>
 
+      {managerId && (
+        <div className="mb-6 space-y-5">
+          <div className="card-enter">
+            <BetweenMeetingGoals
+              goals={goals}
+              names={managerNames}
+              viewerId={viewerId}
+              updateAction={updateGoalAction}
+              showPerson={false}
+            />
+          </div>
+          <div className="card-enter" style={{ animationDelay: "60ms" }}>
+            <UploadNotes
+              counterparts={[{ id: managerId, name: data.managerName ?? "Your manager" }]}
+              uploadAction={uploadNotesAction}
+            />
+          </div>
+          {recent.length > 0 && (
+            <div className="card-enter" style={{ animationDelay: "120ms" }}>
+              <RecentImports imports={recent} viewerId={viewerId} names={managerNames} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {managerId && (
+        <h2 className="mb-4 font-display text-base font-semibold text-stone-800">Live sessions</h2>
+      )}
       <div className="card-enter">
         <SessionList
           /* DB rows have Date objects + wide string status; Next.js serializes

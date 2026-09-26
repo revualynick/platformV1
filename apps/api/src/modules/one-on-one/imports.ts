@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { eq, and, or, desc } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
-import { users, checkInMeetings, betweenMeetingGoals } from "@revualy/db";
+import { users, checkInMeetings, betweenMeetingGoals, calendarTokens } from "@revualy/db";
+import { getOrgSettings } from "@revualy/db/queries";
 import { requireAuth, getAuthenticatedUserId } from "../../lib/rbac.js";
 import {
   parseBody,
@@ -10,7 +11,10 @@ import {
   uploadOneOnOneSchema,
   betweenMeetingGoalQuerySchema,
   updateBetweenMeetingGoalSchema,
+  setIngestionModeSchema,
 } from "../../lib/validation.js";
+import { allowedModes, effectiveMode, isMode, AUTOMATIC_SOURCE_AVAILABLE } from "../../lib/ingestion-mode.js";
+import { GOOGLE_DRIVE_SCOPE } from "../../lib/google-calendar.js";
 import {
   extractDocumentText,
   fileExtension,
@@ -49,6 +53,8 @@ const READ_ERROR_MESSAGE: Record<DocumentReadError["code"], string> = {
  * - GET /imports, POST /imports/:id/approve | /decline: semi-automatic
  *   mode's "import this 1:1?" (the manager whose calendar it is).
  * - GET/PATCH /between-meeting-goals: both people in the 1:1, nobody else.
+ * - GET/PUT /ingestion-mode: the caller's own mode, within the admin's limit.
+ * - GET /imports/recent: recent imports the caller was part of (status only).
  */
 export const importRoutes: FastifyPluginAsync<ImportRouteOptions> = async (app, opts) => {
   app.post(
@@ -167,6 +173,71 @@ export const importRoutes: FastifyPluginAsync<ImportRouteOptions> = async (app, 
       return reply.send(updated);
     });
   }
+
+  // GET /ingestion-mode: what the caller may choose and what applies now
+  app.get("/ingestion-mode", { preHandler: requireAuth }, async (request, reply) => {
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+    const settings = await getOrgSettings(db);
+    const [me] = await db.select({ choice: users.oneOnOneIngestionMode }).from(users).where(eq(users.id, userId));
+    const [token] = await db
+      .select({ scopes: calendarTokens.scopes })
+      .from(calendarTokens)
+      .where(and(eq(calendarTokens.userId, userId), eq(calendarTokens.provider, "google")));
+    const limits = { maxMode: settings?.oneOnOneMaxMode, defaultMode: settings?.oneOnOneIngestionMode };
+    const maxMode = isMode(limits.maxMode) ? limits.maxMode : "semi_automatic";
+    return reply.send({
+      allowed: allowedModes(maxMode),
+      orgMaxMode: maxMode,
+      orgDefault: effectiveMode(limits, null),
+      choice: isMode(me?.choice) ? me.choice : null,
+      effective: effectiveMode(limits, me?.choice),
+      automaticAvailable: AUTOMATIC_SOURCE_AVAILABLE,
+      // Semi-automatic reads Meet notes with the manager's own Google token.
+      driveConnected: Boolean(token?.scopes.includes(GOOGLE_DRIVE_SCOPE)),
+    });
+  });
+
+  // PUT /ingestion-mode: set (or clear, with null) the caller's own mode
+  app.put("/ingestion-mode", { preHandler: requireAuth }, async (request, reply) => {
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+    const { mode } = parseBody(setIngestionModeSchema, request.body);
+    if (mode !== null) {
+      const settings = await getOrgSettings(db);
+      const maxMode = isMode(settings?.oneOnOneMaxMode) ? settings.oneOnOneMaxMode : "semi_automatic";
+      if (!allowedModes(maxMode).includes(mode)) {
+        return reply.code(403).send({ error: "Your organisation doesn't allow that mode" });
+      }
+    }
+    await db.update(users).set({ oneOnOneIngestionMode: mode }).where(eq(users.id, userId));
+    return reply.send({ choice: mode });
+  });
+
+  // GET /imports/recent: the last imports the caller took part in. Status
+  // and counts only: never the notes, and uploads carry no file name.
+  app.get("/imports/recent", { preHandler: requireAuth }, async (request, reply) => {
+    const { db } = request.tenant;
+    const userId = getAuthenticatedUserId(request);
+    const rows = await db
+      .select({
+        id: checkInMeetings.id,
+        title: checkInMeetings.title,
+        eventStart: checkInMeetings.eventStart,
+        source: checkInMeetings.source,
+        status: checkInMeetings.status,
+        withheldCount: checkInMeetings.withheldCount,
+        organizerId: checkInMeetings.organizerId,
+        subjectUserId: checkInMeetings.subjectUserId,
+        subjectName: users.name,
+      })
+      .from(checkInMeetings)
+      .leftJoin(users, eq(users.id, checkInMeetings.subjectUserId))
+      .where(or(eq(checkInMeetings.organizerId, userId), eq(checkInMeetings.subjectUserId, userId)))
+      .orderBy(desc(checkInMeetings.eventStart))
+      .limit(30);
+    return reply.send({ data: rows });
+  });
 
   // GET /between-meeting-goals: the caller's, as owner or counterpart
   app.get("/between-meeting-goals", { preHandler: requireAuth }, async (request, reply) => {

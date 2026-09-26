@@ -12,6 +12,7 @@ const navItems = [
   { label: "People", href: "/settings/people", icon: "⊡" },
   { label: "Core Values", href: "/settings/values", icon: "◇" },
   { label: "Goals", href: "/settings/goals", icon: "◍" },
+  { label: "1:1 Notes", href: "/settings/one-on-ones", icon: "◐" },
   { label: "Campaigns", href: "/settings/campaigns", icon: "◈" },
   { label: "Integrations", href: "/settings/integrations", icon: "⬡" },
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },

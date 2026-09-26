@@ -16,6 +16,7 @@ import {
   type TranscriptLookupEvent,
 } from "./google-drive.js";
 import { ingestMeetingDocuments } from "./one-on-one-ingestion.js";
+import { effectiveMode } from "./ingestion-mode.js";
 
 export {
   chunkTranscript,
@@ -31,7 +32,8 @@ export {
  * and a direct report), waits for Meet's Docs (Gemini notes, transcript),
  * then hands them to one-on-one-ingestion.ts.
  *
- * Mode (org_settings.one_on_one_ingestion_mode, set by an admin):
+ * Mode, per manager (lib/ingestion-mode.ts): the admin sets the most
+ * automatic mode allowed and a default; each manager may choose within it.
  * - automatic: a MeetingSource with admin-granted access (a service
  *   account) reads every manager's 1:1s. None is built yet: pass one in.
  * - semi_automatic: the manager's own Google token. Each found 1:1 waits
@@ -260,34 +262,53 @@ export async function runCheckInPipeline(
 ): Promise<{ discovered: number; processed: number }> {
   const settings = await getOrgSettings(db);
   const marker = settings?.checkInTitleMarker ?? DEFAULT_MARKER;
-  const mode = (settings?.oneOnOneIngestionMode ?? "semi_automatic") as IngestionMode;
+  // Each manager's own mode, within the admin's limit (lib/ingestion-mode.ts).
+  // Automatic is only possible when a meeting source is actually supplied.
+  const automaticAvailable = Boolean(opts.automaticSource);
+  const limits = { maxMode: settings?.oneOnOneMaxMode, defaultMode: settings?.oneOnOneIngestionMode };
+  const modeOf = async (ids: string[]): Promise<Map<string, IngestionMode>> => {
+    if (ids.length === 0) return new Map();
+    const rows = await db
+      .select({ id: users.id, choice: users.oneOnOneIngestionMode })
+      .from(users)
+      .where(inArray(users.id, ids));
+    return new Map(rows.map((r) => [r.id, effectiveMode(limits, r.choice, automaticAvailable)]));
+  };
 
-  if (mode === "manual") return { discovered: 0, processed: 0 };
-  let source: MeetingSource;
-  let owners: string[];
-  if (mode === "automatic") {
-    if (!opts.automaticSource) {
-      logger.log("1:1 ingestion is set to automatic but no automatic source is configured; nothing to do");
-      return { discovered: 0, processed: 0 };
+  // Semi-automatic: people who connected Google with Drive access, reading
+  // with their own token.
+  const tokenRows = await db
+    .select({ userId: calendarTokens.userId, scopes: calendarTokens.scopes })
+    .from(calendarTokens)
+    .where(eq(calendarTokens.provider, "google"))
+    .limit(500);
+  const tokenOwners = tokenRows.filter((t) => t.scopes.includes(GOOGLE_DRIVE_SCOPE)).map((t) => t.userId);
+  const tokenModes = await modeOf(tokenOwners);
+  const semiOwners = tokenOwners.filter((id) => tokenModes.get(id) === "semi_automatic");
+
+  const calendarSource = oauthMeetingSource(db, google);
+  let discovered = await discoverMeetings(db, calendarSource, semiOwners, marker, "semi_automatic", logger);
+
+  // Automatic: managers who chose it (or default to it), through the source.
+  let automaticSource: MeetingSource | null = null;
+  if (opts.automaticSource) {
+    const managers = await managerIds(db);
+    const managerModes = await modeOf(managers);
+    const autoOwners = managers.filter((id) => managerModes.get(id) === "automatic");
+    if (autoOwners.length > 0) {
+      automaticSource = opts.automaticSource;
+      discovered += await discoverMeetings(db, automaticSource, autoOwners, marker, "automatic", logger);
     }
-    source = opts.automaticSource;
-    owners = await managerIds(db);
-  } else {
-    source = oauthMeetingSource(db, google);
-    const tokenRows = await db
-      .select({ userId: calendarTokens.userId, scopes: calendarTokens.scopes })
-      .from(calendarTokens)
-      .where(eq(calendarTokens.provider, "google"))
-      .limit(500);
-    owners = tokenRows.filter((t) => t.scopes.includes(GOOGLE_DRIVE_SCOPE)).map((t) => t.userId);
   }
-  const sourceKind = mode === "automatic" ? "automatic" : "calendar";
 
-  const discovered = await discoverMeetings(db, source, owners, marker, mode, logger);
-  const pending = await selectMeetingsToProcess(db, 50, [sourceKind]);
   let processed = 0;
-  for (const meeting of pending) {
-    if (await processCheckInMeeting(db, llm, meeting, source, logger)) processed++;
+  for (const meeting of await selectMeetingsToProcess(db, 50, ["calendar"])) {
+    if (await processCheckInMeeting(db, llm, meeting, calendarSource, logger)) processed++;
+  }
+  if (opts.automaticSource) {
+    for (const meeting of await selectMeetingsToProcess(db, 50, ["automatic"])) {
+      if (await processCheckInMeeting(db, llm, meeting, opts.automaticSource, logger)) processed++;
+    }
   }
   return { discovered, processed };
 }

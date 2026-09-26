@@ -84,6 +84,7 @@ export const updateOrgSettingsSchema = z.object({
   allowedDomains: z.array(z.string().max(255)).optional(),
   checkInTitleMarker: z.string().min(1).max(100).optional(),
   oneOnOneIngestionMode: z.enum(["automatic", "semi_automatic", "manual"]).optional(),
+  oneOnOneMaxMode: z.enum(["automatic", "semi_automatic", "manual"]).optional(),
 });
 
 export const listUsersQuerySchema = z.object({
@@ -216,6 +217,11 @@ export const uploadOneOnOneSchema = z.object({
   contentBase64: z.string().min(1).max(8_000_000),
   /** When the 1:1 happened (defaults to now). */
   meetingDate: dateString.optional(),
+});
+
+/** A manager's own 1:1 ingestion mode; null goes back to the org default. */
+export const setIngestionModeSchema = z.object({
+  mode: z.enum(["automatic", "semi_automatic", "manual"]).nullable(),
 });
 
 export const betweenMeetingGoalQuerySchema = z.object({

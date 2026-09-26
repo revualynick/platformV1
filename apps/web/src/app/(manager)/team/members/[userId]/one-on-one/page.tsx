@@ -1,7 +1,10 @@
 import { requireManagerPage } from "@/lib/page-guards";
 import { auth } from "@/lib/auth";
 import { PathNameProvider } from "@/lib/path-context";
-import { getOneOnOneSessions, getOneOnOneSession, getUser, getUsers, getWsToken } from "@/lib/api";
+import { getOneOnOneSessions, getOneOnOneSession, getUser, getUsers, getWsToken, getBetweenMeetingGoals } from "@/lib/api";
+import type { BetweenMeetingGoal } from "@/lib/api";
+import { updateGoalAction } from "@/lib/one-on-one-import-actions";
+import { BetweenMeetingGoals } from "@/components/one-on-one-imports/between-meeting-goals";
 import type { OneOnOneSession, OneOnOneSessionDetail } from "@/lib/api";
 import { oneOnOneSessions as mockSessions } from "@/lib/mock-data";
 import { isDemoSession } from "@/lib/session-utils";
@@ -87,6 +90,12 @@ export default async function ManagerOneOnOnePage({
   }
 
   const data = await loadData(userId, session?.user?.id, isDemo);
+  let goals: BetweenMeetingGoal[] = [];
+  if (!isDemo) {
+    goals = await getBetweenMeetingGoals({ withUserId: userId })
+      .then((r) => r.data)
+      .catch(() => []);
+  }
 
   const WS_BASE = process.env.NEXT_PUBLIC_WS_URL;
   let wsUrl: string | null = null;
@@ -136,6 +145,17 @@ export default async function ManagerOneOnOnePage({
           />
         </div>
       )}
+
+      {/* Between-meeting goals from 1:1 notes */}
+      <div className="card-enter mb-6" style={{ animationDelay: "60ms" }}>
+        <BetweenMeetingGoals
+          goals={goals}
+          names={{ [userId]: data.employeeName }}
+          viewerId={data.currentUserId}
+          updateAction={updateGoalAction}
+          showPerson={false}
+        />
+      </div>
 
       {/* Schedule new session */}
       <div className="card-enter mb-6" style={{ animationDelay: "100ms" }}>

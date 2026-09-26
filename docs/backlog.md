@@ -60,6 +60,8 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Technical debt
 
+- `pnpm dev` doesn't pass `.env` to the servers: Turborepo runs in strict env mode and the `dev` task declares no variables, so the API exits with "INTERNAL_API_SECRET env var is required". Workaround: start `apps/api` (`npx tsx src/server.ts`) and `apps/web` (`npx next dev -p 3001`) directly with `.env` loaded. Fix: `passThroughEnv` or `envMode: "loose"` for `dev` (found 2026-09-26).
+- 1:1 screens follow-ups: admin view of which modes managers use and who has Google connected; process an approved import straight away instead of at the next hourly run; test an upload through the UI with a real model.
 - `pnpm tenant:fleet migrate` runs migrations under the Postgres service's variables, which lack `REVIEWER_PSEUDONYM_SECRET`, so migration 0043 would refuse on a tenant with feedback rows. Deployed tenants migrate at API boot with the secret, so this only affects the fleet tool. Fix: run it through the API service, or pass the secret (found 2026-09-26).
 - Local Postgres (Docker bind mount on macOS) occasionally fails `CREATE DATABASE` under heavy parallel load with "could not open file ... Permission denied". Intermittent, environmental; seen twice on 2026-09-26.
 

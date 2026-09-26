@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { effectiveMode } from "../../lib/ingestion-mode.js";
 import { eq } from "drizzle-orm";
 import {
   coreValues,
@@ -71,9 +72,19 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     if (body.allowedDomains !== undefined) updates.allowedDomains = body.allowedDomains;
     if (body.checkInTitleMarker !== undefined) updates.checkInTitleMarker = body.checkInTitleMarker;
     if (body.oneOnOneIngestionMode !== undefined) updates.oneOnOneIngestionMode = body.oneOnOneIngestionMode;
+    if (body.oneOnOneMaxMode !== undefined) updates.oneOnOneMaxMode = body.oneOnOneMaxMode;
 
-    const [existing] = await db.select({ id: orgSettings.id }).from(orgSettings);
+    const [existing] = await db
+      .select({ id: orgSettings.id, defaultMode: orgSettings.oneOnOneIngestionMode, maxMode: orgSettings.oneOnOneMaxMode })
+      .from(orgSettings);
     if (!existing) return reply.code(404).send({ error: "Org settings not found" });
+
+    // The default can't be more automatic than the limit: lowering the limit
+    // lowers the default with it.
+    const maxMode = (updates.oneOnOneMaxMode ?? existing.maxMode) as string;
+    const defaultMode = (updates.oneOnOneIngestionMode ?? existing.defaultMode) as string;
+    const clamped = effectiveMode({ maxMode, defaultMode }, null, true);
+    if (clamped !== defaultMode) updates.oneOnOneIngestionMode = clamped;
 
     const [updated] = await db
       .update(orgSettings)

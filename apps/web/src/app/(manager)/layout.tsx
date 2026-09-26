@@ -11,6 +11,7 @@ const navItems = [
   { label: "Team Insights", href: "/team/feedback", icon: "◈" },
   { label: "Team Members", href: "/team/members", icon: "◑" },
   { label: "Team Goals", href: "/team/goals", icon: "◍" },
+  { label: "1:1 Notes", href: "/team/one-on-ones", icon: "◐" },
   { label: "Flagged Items", href: "/team/flagged", icon: "⚑" },
   { label: "Leaderboard", href: "/team/leaderboard", icon: "◆" },
   { label: "Team Profiles", href: "/team/profiles", icon: "◐" },
