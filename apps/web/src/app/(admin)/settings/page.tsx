@@ -1,5 +1,4 @@
 import { requireAdminPage } from "@/lib/page-guards";
-import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/lib/db";
 import {
@@ -431,20 +430,9 @@ export default async function AdminSettings() {
       </div>
 
       {/* Main content — streams in (awaits loadValues inside) */}
-      <Suspense
-        fallback={
-          <div className="space-y-8">
-            <SectionSkeleton />
-            <StatsSkeleton />
-            <div className="grid gap-6 lg:grid-cols-12">
-              <div className="lg:col-span-7"><SectionSkeleton /></div>
-              <div className="lg:col-span-5"><SectionSkeleton /></div>
-            </div>
-          </div>
-        }
-      >
+      
         <MainContent isDemo={isDemo} orgSettings={orgSettings} />
-      </Suspense>
+      
     </div>
   );
 }

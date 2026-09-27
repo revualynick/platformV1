@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { PartialBadge } from "@/components/partial-badge";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -243,9 +242,9 @@ async function ChartsRow({
           <span className="text-xs text-stone-400">Last 6 weeks</span>
         </div>
         <ChartErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
+          
             <EngagementChart data={engagementHistory} />
-          </Suspense>
+          
         </ChartErrorBoundary>
       </div>
 
@@ -258,9 +257,9 @@ async function ChartsRow({
           <span className="text-xs text-stone-400">Avg scores</span>
         </div>
         <ChartErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
+          
             <ValuesRadar data={valuesScores} />
-          </Suspense>
+          
         </ChartErrorBoundary>
       </div>
     </div>
@@ -541,37 +540,26 @@ export default async function EmployeeDashboard() {
       </DismissibleCard>
 
       {/* Top row: Engagement ring + stats + upcoming */}
-      <Suspense fallback={<TopRowSkeleton />}>
+      
         <TopRow userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
 
       {/* Charts row */}
-      <Suspense
-        fallback={
-          <div className="mb-8 grid gap-6 lg:grid-cols-12">
-            <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-7" style={{ boxShadow: "var(--shadow-sm)" }}>
-              <ChartSkeleton />
-            </div>
-            <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-5" style={{ boxShadow: "var(--shadow-sm)" }}>
-              <ChartSkeleton />
-            </div>
-          </div>
-        }
-      >
+      
         <ChartsRow userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
 
       {/* 1:1 Sessions preview */}
-      <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+      
         <SessionsSection userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
 
       {/* Recent feedback */}
-      <Suspense fallback={<SectionSkeleton />}>
+      
         <ChartErrorBoundary>
           <FeedbackSection userId={userId} isDemo={isDemo} />
         </ChartErrorBoundary>
-      </Suspense>
+      
     </div>
   );
 }

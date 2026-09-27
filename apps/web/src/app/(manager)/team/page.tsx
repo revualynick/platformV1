@@ -1,5 +1,5 @@
 import { requireManagerPage } from "@/lib/page-guards";
-import { Suspense, cache } from "react";
+import { cache } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -44,7 +44,7 @@ type LeaderboardEntry = {
 };
 
 // ── Shared data loader ─────────────────────────────────
-// Wrapped in React.cache so the three Suspense sections (StatsSection,
+// Wrapped in React.cache so the three sections (StatsSection,
 // ChartAndLeaderboardSection, FlaggedSection) that each call it with the same
 // (userId, isDemo) args share a single execution per render pass — the
 // listActiveUsers + getBulkLatestEngagement + getFlaggedItemsForReports
@@ -232,9 +232,9 @@ async function ChartAndLeaderboardSection({
           <span className="text-xs text-stone-400">Range: highest — avg — lowest</span>
         </div>
         <ChartErrorBoundary>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+          
             <TeamTrendChart data={trendData} />
-          </Suspense>
+          
         </ChartErrorBoundary>
       </div>
 
@@ -356,30 +356,19 @@ export default async function TeamDashboard() {
       </div>
 
       {/* Top stats */}
-      <Suspense fallback={<StatsSkeleton />}>
+      
         <StatsSection userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
 
       {/* Trend chart + Leaderboard */}
-      <Suspense
-        fallback={
-          <div className="mb-8 grid gap-6 lg:grid-cols-12">
-            <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-7" style={{ boxShadow: "var(--shadow-sm)" }}>
-              <ChartSkeleton />
-            </div>
-            <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6 lg:col-span-5" style={{ boxShadow: "var(--shadow-sm)" }}>
-              <SectionSkeleton />
-            </div>
-          </div>
-        }
-      >
+      
         <ChartAndLeaderboardSection userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
 
       {/* Flagged items */}
-      <Suspense fallback={null}>
+      
         <FlaggedSection userId={userId} isDemo={isDemo} />
-      </Suspense>
+      
     </div>
   );
 }

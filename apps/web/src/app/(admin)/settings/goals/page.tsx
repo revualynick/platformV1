@@ -1,5 +1,4 @@
 import { requireAdminPage } from "@/lib/page-guards";
-import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -259,13 +258,9 @@ export default async function AdminGoalsPage() {
           View org alignment →
         </Link>
       </div>
-      <Suspense
-        fallback={
-          <div className="h-64 animate-pulse rounded-2xl border border-stone-200/60 bg-stone-100" />
-        }
-      >
+      
         <AdminGoalsContent isDemo={isDemo} />
-      </Suspense>
+      
     </div>
   );
 }

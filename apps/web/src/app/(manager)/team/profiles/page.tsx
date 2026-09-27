@@ -1,5 +1,4 @@
 import { requireManagerPage } from "@/lib/page-guards";
-import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { redirect } from "next/navigation";
@@ -56,9 +55,9 @@ export default async function TeamProfilesPage() {
         </p>
       </div>
 
-      <Suspense fallback={<TeamProfilesSkeleton />}>
+      
         <TeamProfilesContent isDemo={isDemo} managerId={session?.user?.id ?? ""} />
-      </Suspense>
+      
     </div>
   );
 }

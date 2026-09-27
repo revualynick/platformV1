@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -204,9 +203,9 @@ export default async function GoalsPage() {
           View org alignment →
         </Link>
       </div>
-      <Suspense fallback={<GoalsSkeleton />}>
+      
         <GoalsContent userId={userId ?? "demo-user"} isDemo={isDemo} />
-      </Suspense>
+      
     </div>
   );
 }

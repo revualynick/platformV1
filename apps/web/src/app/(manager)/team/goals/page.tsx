@@ -1,5 +1,4 @@
 import { requireManagerPage } from "@/lib/page-guards";
-import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -342,9 +341,9 @@ export default async function TeamGoalsPage() {
           View org alignment →
         </Link>
       </div>
-      <Suspense fallback={<GoalsSkeleton />}>
+      
         <TeamGoalsContent userId={userId ?? "demo-user"} isDemo={isDemo} />
-      </Suspense>
+      
     </div>
   );
 }

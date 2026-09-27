@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
@@ -221,9 +220,9 @@ export default async function EngagementPage() {
           <span className="text-xs text-stone-400">Last 6 weeks</span>
         </div>
         <ChartErrorBoundary>
-          <Suspense fallback={<div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />}>
+          
             <EngagementChart data={chartData} />
-          </Suspense>
+          
         </ChartErrorBoundary>
       </div>
 

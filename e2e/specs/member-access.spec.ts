@@ -18,7 +18,7 @@ test("direct manager sees content on the member page", async ({ page }) => {
 
 test("skip-level manager sees signals only", async ({ page }) => {
   await loginAs(page, "managerNoReports", `/team/members/${userId(USERS.employee)}`);
-  await expect(page.getByText(SIGNALS_NOTICE)).toBeVisible();
+  await expect(page.getByText(SIGNALS_NOTICE).filter({ visible: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "1:1 cadence" })).toBeVisible();
   await expect(page.getByText(/Private Notes/i)).toHaveCount(0);
   await expect(page.getByPlaceholder(/add a private note/i)).toHaveCount(0);
@@ -26,7 +26,7 @@ test("skip-level manager sees signals only", async ({ page }) => {
 
 test("admin sees signals only", async ({ page }) => {
   await loginAs(page, "admin", `/team/members/${userId(USERS.employee)}`);
-  await expect(page.getByText(SIGNALS_NOTICE)).toBeVisible();
+  await expect(page.getByText(SIGNALS_NOTICE).filter({ visible: true })).toBeVisible();
   await expect(page.getByText(/Private Notes/i)).toHaveCount(0);
 });
 

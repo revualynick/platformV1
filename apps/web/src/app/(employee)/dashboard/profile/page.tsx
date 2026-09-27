@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { redirect } from "next/navigation";
@@ -46,9 +45,9 @@ export default async function ProfilePage() {
         </p>
       </div>
 
-      <Suspense fallback={<ProfileSkeleton />}>
+      
         <ProfileContent isDemo={isDemo} />
-      </Suspense>
+      
     </div>
   );
 }
