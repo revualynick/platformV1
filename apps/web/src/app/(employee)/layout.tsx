@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar";
 import { PathBar } from "@/components/path-bar";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { getSupportMe } from "@/lib/api";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "◉" },
@@ -32,9 +33,22 @@ export default async function EmployeeLayout({
 
   const userName = session?.user?.name ?? (isDemoMode ? "Demo User" : undefined);
 
+  // Support contacts get the queue of people who asked to be contacted.
+  let isSupportContact = false;
+  if (session) {
+    try {
+      isSupportContact = (await getSupportMe()).isContact;
+    } catch {
+      // No link; the page itself checks again.
+    }
+  }
+  const items = isSupportContact
+    ? [...navItems.slice(0, -1), { label: "Support requests", href: "/dashboard/support", icon: "✚" }, navItems[navItems.length - 1]]
+    : navItems;
+
   return (
     <div className="flex min-h-screen bg-cream">
-      <Sidebar role="employee" items={navItems} userName={userName} />
+      <Sidebar role="employee" items={items} userName={userName} />
       <main className="min-w-0 flex-1 px-4 pb-6 pt-20 lg:ml-[260px] lg:pl-6 lg:pr-8 lg:py-8">
         <PathBar />
         {children}

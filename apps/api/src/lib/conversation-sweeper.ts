@@ -1,7 +1,8 @@
 import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
-import { checkinJobs, conversations, conversationMessages, inboundMessages, interactionSchedule } from "@revualy/db";
+import { checkinJobs, conversations, conversationMessages, inboundMessages, interactionSchedule, supportRequests } from "@revualy/db";
+import { notifySupportContacts } from "./support.js";
 import { ANCHOR_LOOKBACK_DAYS } from "./meeting-anchor.js";
 import { buildJobId } from "./job-ids.js";
 import { expireTickets } from "./tickets/prepare.js";
@@ -37,6 +38,8 @@ import {
  *  8. tickets:     any ticket past its expiry (prepared but never used,
  *                  stuck open, done but never written back) -> expired,
  *                  context wiped
+ *  9. support:     support requests not acknowledged by their due time ->
+ *                  one reminder to the support contacts
  *
  * Re-queued jobs get an hourly job id suffix: at most one retry per item
  * per hour (the original job id may still sit in BullMQ's failed set,
@@ -72,6 +75,7 @@ export interface SweepResult {
   conversationsPurged: number;
   jobsPurged: number;
   ticketsExpired: number;
+  supportReminders: number;
   errors: number;
 }
 
@@ -93,6 +97,7 @@ export async function runSweep(
     conversationsPurged: 0,
     jobsPurged: 0,
     ticketsExpired: 0,
+    supportReminders: 0,
     errors: 0,
   };
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
@@ -190,6 +195,7 @@ export async function runSweep(
       AND EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user')
       AND NOT EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
       AND NOT EXISTS (SELECT 1 FROM self_reflections r WHERE r.conversation_id = c.id)
+      AND c.phase NOT IN ('support_offer', 'support_retry', 'support')
   `)) as unknown as Array<{ id: string }>;
   result.analysisRequeued = await each(unanalysed, "re-queue analysis", (c) => queueAnalysis(deps, c.id, bucket));
 
@@ -208,14 +214,22 @@ export async function runSweep(
   // would lose feedback, and they already show up as stuck work.
   // Self-reflections are tier B and keep their conversations.
   const retentionCutoff = new Date(now.getTime() - DELIVERY_RETENTION_DAYS * DAY_MS);
+  // A conversation that ended for a support concern is never analysed, so
+  // it is purgeable on age alone, self-reflections included: the disclosure
+  // isn't kept.
   const purgeable = (await db.execute(sql`
     SELECT c.id FROM conversations c
-    WHERE c.interaction_type <> 'self_reflection'
-      AND c.status NOT IN ('scheduled', 'initiated', 'in_progress', 'closing')
+    WHERE c.status NOT IN ('scheduled', 'initiated', 'in_progress', 'closing')
       AND COALESCE(c.closed_at, c.last_activity_at, c.created_at) < ${ts(retentionCutoff)}
       AND (
-        EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
-        OR NOT EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user')
+        c.phase IN ('support_offer', 'support_retry', 'support')
+        OR (
+          c.interaction_type <> 'self_reflection'
+          AND (
+            EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
+            OR NOT EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user')
+          )
+        )
       )
     LIMIT ${PURGE_BATCH}
   `)) as unknown as Array<{ id: string }>;
@@ -233,6 +247,17 @@ export async function runSweep(
 
   // 8. Tickets past their expiry, whatever state they were stuck in.
   result.ticketsExpired = await expireTickets(db, now);
+
+  // 9. Support requests nobody has acknowledged by their due time: one
+  // reminder to the support contacts.
+  const overdue = await db
+    .update(supportRequests)
+    .set({ remindedAt: now })
+    .where(and(eq(supportRequests.status, "open"), lt(supportRequests.dueAt, now), isNull(supportRequests.remindedAt)))
+    .returning({ id: supportRequests.id });
+  result.supportReminders = await each(overdue, "support reminder", (r) =>
+    notifySupportContacts(deps.notificationQueue, process.env.ORG_ID ?? "dev-org", r.id, "overdue"),
+  );
 
   return result;
 }

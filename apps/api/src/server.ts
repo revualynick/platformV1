@@ -34,6 +34,7 @@ import { exportRoutes } from "./modules/export/routes.js";
 import { assessmentRoutes } from "./modules/assessments/routes.js";
 import { privacyRoutes } from "./modules/privacy/routes.js";
 import { accessGrantRoutes } from "./modules/access-grants/routes.js";
+import { supportRoutes } from "./modules/support/routes.js";
 import { assertPseudonymReady } from "./lib/pseudonym.js";
 import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
@@ -152,6 +153,7 @@ export async function buildApp() {
   await app.register(importRoutes, { prefix: "/api/v1/admin/imports" });
   await app.register(privacyRoutes, { prefix: "/api/v1/admin/privacy" });
   await app.register(accessGrantRoutes, { prefix: "/api/v1/access-grants" });
+  await app.register(supportRoutes, { prefix: "/api/v1/support" });
   await app.register(devRoutes, { prefix: "/api/v1/dev" });
 
   // WebSocket routes

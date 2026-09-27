@@ -171,3 +171,33 @@ export function assessmentInviteTemplate(data: AssessmentInviteData): string {
 </table>
 `);
 }
+
+// ── Support request ───────────────────────────────────
+
+export interface SupportRequestData {
+  contactName: string;
+  kind: "new" | "overdue";
+  /** "today" or "within two working days" */
+  when: string;
+}
+
+/**
+ * To a support contact when someone accepts the offer of support. Names no
+ * one and holds nothing they wrote: the contact opens Revualy to see who.
+ */
+export function supportRequestTemplate(data: SupportRequestData): string {
+  const lead =
+    data.kind === "new"
+      ? `Someone has asked, through a Revualy check-in, for a member of the support team to get in touch with them. They'd like to hear from someone ${escapeHtml(data.when)}.`
+      : `A request for someone to get in touch hasn't been picked up yet and is now past the time we told the person. Please check it as soon as you can.`;
+  return layout("A request for support", `
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">Hi ${escapeHtml(data.contactName)},</p>
+<p style="color:${BRAND.stone};font-size:15px;margin:0 0 16px;">${lead}</p>
+<p style="color:#78716C;font-size:13px;margin:0 0 24px;">We don't put names in emails. They only asked to be contacted; Revualy doesn't pass on anything they wrote.</p>
+<table cellpadding="0" cellspacing="0">
+<tr><td style="background:${BRAND.forest};border-radius:10px;padding:12px 24px;">
+<a href="${APP_URL}/dashboard/support" style="color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;">Open the support requests</a>
+</td></tr>
+</table>
+`);
+}

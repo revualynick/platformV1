@@ -336,10 +336,15 @@ export const conversations = pgTable(
     selectedThemeIds: jsonb("selected_theme_ids").$type<string[]>().notNull().default([]),
     currentThemeIndex: integer("current_theme_index").notNull().default(0),
     phase: varchar("phase", { length: 20 })
-      .$type<"opening" | "exploring" | "follow_up" | "closing">()
+      // support_offer / support_retry: waiting for a yes or no to the offer of
+      // support (docs/bot/concerns-playbook.md); support: ended for a support
+      // concern, never analysed as feedback (migration 0047).
+      .$type<"opening" | "exploring" | "follow_up" | "closing" | "support_offer" | "support_retry" | "support">()
       .notNull()
       .default("opening"),
     followUpCount: integer("follow_up_count").notNull().default(0),
+    /** Set with a support phase: which offer was made (sets how soon the contact is asked to respond). */
+    supportLevel: varchar("support_level", { length: 10 }).$type<"wellbeing" | "safety">(),
     threadId: varchar("thread_id", { length: 255 }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
       .notNull()
@@ -1400,6 +1405,13 @@ export const orgSettings = pgTable("org_settings", {
   oneOnOneMaxMode: varchar("one_on_one_max_mode", { length: 20 })
     .notNull()
     .default("semi_automatic"),
+  // Support handover (migration 0047, docs/bot/concerns-playbook.md). The
+  // people who receive requests for support that a person agreed to, and
+  // the organisation's own support details, in its own words.
+  supportContactId: uuid("support_contact_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  supportBackupId: uuid("support_backup_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  supportDetails: text("support_details").notNull().default(""),
+  supportOutside: text("support_outside").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1988,3 +2000,45 @@ export const accessGrants = pgTable(
     index("idx_access_grants_subject").on(table.subjectId),
   ],
 );
+
+// ── Support handover ──────────────────────────────────
+
+/**
+ * Requests for support that the person agreed to (migration 0047,
+ * docs/bot/concerns-playbook.md). When the bot recognises that someone may
+ * need support, it offers to ask the organisation's support contact to get
+ * in touch; only a yes creates a row. The row never holds what they wrote:
+ * who asked, how soon, and where the request has got to.
+ */
+export const supportRequests = pgTable(
+  "support_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** today: the bot said someone would be in touch today; soon: within two working days. */
+    urgency: varchar("urgency", { length: 10 }).$type<"today" | "soon">().notNull(),
+    status: varchar("status", { length: 20 }).$type<"open" | "acknowledged" | "closed">().notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedBy: uuid("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: uuid("closed_by").references(() => users.id, { onDelete: "set null" }),
+    /** When the overdue reminder went to the contacts (once). */
+    remindedAt: timestamp("reminded_at", { withTimezone: true }),
+  },
+  (table) => [index("idx_support_requests_open").on(table.status, table.dueAt)],
+);
+
+/**
+ * Counts only, by month: how often support was offered and accepted. No
+ * person, conversation or time of day, so the aggregate can be shown to
+ * admins without naming anyone (small counts are hidden on screen).
+ */
+export const supportSignals = pgTable("support_signals", {
+  month: date("month", { mode: "string" }).primaryKey(),
+  offers: integer("offers").notNull().default(0),
+  accepted: integer("accepted").notNull().default(0),
+});

@@ -1,4 +1,5 @@
 import { eq, and } from "drizzle-orm";
+import { isSupportPhase } from "./support.js";
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
@@ -80,6 +81,12 @@ export async function runAnalysisPipeline(
 
   if (!conversation) {
     return { success: false, failedSteps: ["fetch"], feedbackEntryId: null };
+  }
+
+  // Ended for a support concern (docs/bot/concerns-playbook.md): what they
+  // wrote is never analysed or stored as feedback.
+  if (isSupportPhase(conversation.phase)) {
+    return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 
   // Extract user-only messages (the actual feedback content)

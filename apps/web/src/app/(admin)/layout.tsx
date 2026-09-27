@@ -17,6 +17,7 @@ const navItems = [
   { label: "Integrations", href: "/settings/integrations", icon: "⬡" },
   { label: "Escalations", href: "/settings/escalations", icon: "⚑" },
   { label: "Access", href: "/settings/access", icon: "⛊" },
+  { label: "Support", href: "/settings/support", icon: "✚" },
   { label: "Break-glass", href: "/settings/break-glass", icon: "⚿" },
 ];
 

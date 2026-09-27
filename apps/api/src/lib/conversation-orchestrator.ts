@@ -9,7 +9,9 @@ import { buildJobId } from "./job-ids.js";
 import { planTurn, themeQuestion } from "./turn-planner.js";
 import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
-import { openTicket, openTicketForConversation } from "./tickets/reader.js";
+import { openTicket, openTicketForConversation, type TicketHandle } from "./tickets/reader.js";
+import { parseConsent, supportReplies, type SupportLevel } from "./bot-references.js";
+import { createSupportRequest, isSupportPhase, loadSupportResources, notifySupportContacts } from "./support.js";
 
 /**
  * Conversation engine. All conversation state lives in Postgres (the
@@ -39,6 +41,8 @@ export interface OrchestratorDeps {
    * decides). Absent: every ticket gets the deterministic default.
    */
   ticketAgent?: Pick<LLMGateway, "complete">;
+  /** For emailing the support contacts when someone accepts the offer of support. */
+  notificationQueue?: Queue;
 }
 
 type Conversation = typeof conversations.$inferSelect;
@@ -400,6 +404,12 @@ export async function processTurn(
   if (pending.length === 0) return { status: "nothing_pending" };
   const lastPendingSeq = pending[pending.length - 1].seq;
 
+  // Waiting for a yes or no to the offer of support: code answers, no model.
+  if (conv.phase === "support_offer" || conv.phase === "support_retry") {
+    const reply = pending.map((m) => m.content).join("\n\n");
+    return answerSupportOffer(db, deps, conv, ticket, reply, lastPendingSeq, history.length, opts);
+  }
+
   // ── Decide and draft (one LLM call, outside any transaction) ──
   const interactionType = conv.interactionType as InteractionType;
   const maxMessages = getMaxMessages(interactionType);
@@ -527,8 +537,94 @@ export async function markIncomplete(
     return updated;
   });
   if (!row) return false;
-  await queueAnalysis(deps, conversationId);
+  // Ended for a support concern: never analysed as feedback.
+  if (!isSupportPhase(row.phase)) await queueAnalysis(deps, conversationId);
   return true;
+}
+
+// ── The answer to an offer of support ───────────────────
+
+/**
+ * The person has answered the offer of support (docs/bot/concerns-playbook.md).
+ * Consent is read by fixed rules (parseConsent), never by a model:
+ *  - yes: a support request (who and how soon, nothing they wrote), the
+ *    support contacts are emailed, and the check-in ends
+ *  - no: nothing is passed on, and the check-in ends
+ *  - unclear: asked once more; unclear again counts as no
+ * The conversation ends as `incomplete` in phase `support` and is never
+ * analysed as feedback.
+ */
+async function answerSupportOffer(
+  db: TenantDb,
+  deps: OrchestratorDeps,
+  conv: Conversation,
+  ticket: TicketHandle,
+  reply: string,
+  lastPendingSeq: number,
+  messageCount: number,
+  opts: DeliverOptions,
+): Promise<TurnResult> {
+  const org = await loadSupportResources(db);
+  const level: SupportLevel = conv.supportLevel ?? "wellbeing";
+  const answer = parseConsent(reply);
+  const retry = answer === "unclear" && conv.phase === "support_offer" && Boolean(org.supportContact);
+  const yes = answer === "yes" && Boolean(org.supportContact);
+  const outbound = yes
+    ? supportReplies.yes(level, org)
+    : answer === "yes"
+      ? supportReplies.unavailable(org)
+      : retry
+        ? supportReplies.retry(org)
+        : answer === "no"
+          ? supportReplies.no(org)
+          : supportReplies.giveUp(org);
+
+  let requestId: string | null = null;
+  try {
+    await db.transaction(async (tx) => {
+      const now = new Date();
+      const [claimed] = await tx
+        .update(conversations)
+        .set({
+          turn: sql`${conversations.turn} + 1`,
+          messageCount: messageCount + 1,
+          lastActivityAt: now,
+          phase: retry ? "support_retry" : "support",
+          ...(retry ? { status: "in_progress" } : { status: "incomplete", closedAt: now }),
+        })
+        .where(and(eq(conversations.id, conv.id), eq(conversations.turn, conv.turn)))
+        .returning({ id: conversations.id });
+      if (!claimed) throw new LostRace();
+
+      const [newer] = await tx
+        .select({ seq: conversationMessages.seq })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, conv.id),
+            eq(conversationMessages.role, "user"),
+            gt(conversationMessages.seq, lastPendingSeq),
+          ),
+        )
+        .limit(1);
+      if (newer) throw new Superseded();
+
+      await ticket.appendTurn(tx, outbound);
+      if (!retry) {
+        await recordUnreachedThemes(tx, conv);
+        await markTicketDoneForConversation(tx, conv.id, "incomplete", now);
+      }
+      if (yes) requestId = await createSupportRequest(tx, conv.reviewerId, level, now);
+    });
+  } catch (err) {
+    if (err instanceof Superseded) return { status: "superseded" };
+    if (err instanceof LostRace) return { status: "lost_race" };
+    throw err;
+  }
+
+  if (requestId) await notifySupportContacts(deps.notificationQueue, tenantOrgId(), requestId);
+  await deliverOutbox(db, deps, conv.id, opts);
+  return retry ? { status: "replied" } : { status: "closed" };
 }
 
 // ── In-process conversations (web demo, reflections, simulator) ──

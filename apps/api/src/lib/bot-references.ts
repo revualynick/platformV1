@@ -20,20 +20,28 @@ export const CONCERNS: Concern[] = ["none", "privacy", "off_script", "wellbeing"
 /** Concerns that end the feedback questions for this conversation. */
 export const SERIOUS: ReadonlySet<Concern> = new Set(["wellbeing", "conduct", "safety"]);
 
-/** Set by each organisation (admin settings, later). Defaults are for evaluation only. */
+/**
+ * Set by each organisation. The support fields come from the admin's
+ * support settings (loadSupportResources in support.ts); hrContact is still
+ * an evaluation default. EVAL_ORG is for evaluation only.
+ */
 export interface OrgResources {
   orgName: string;
   hrContact: string;
-  safetyContact: string;
-  /** Employee Assistance Programme, if the organisation has one. */
-  eap?: string;
+  /** The support contact's name, or null when none is set (then no offer can be made). */
+  supportContact: string | null;
+  /** Where to get support, in the organisation's own words (EAP, first aiders, HR). */
+  supportDetails: string;
+  /** Optional line about support outside work, in line with the organisation's safeguarding policy. */
+  supportOutside: string;
 }
 
 export const EVAL_ORG: OrgResources = {
   orgName: "Acme",
   hrContact: "Jo in People Team (jo@acme.test)",
-  safetyContact: "Jo in People Team",
-  eap: "the Acme Employee Assistance Programme (0800 000 000, free and confidential)",
+  supportContact: "Jo Patel",
+  supportDetails: "The Acme Employee Assistance Programme is free and confidential on 0800 000 000.",
+  supportOutside: "If you'd rather talk to someone outside work, Samaritans are there any time on 116 123.",
 };
 
 /** Who sees what, per check-in. The same facts as the opening message, never paraphrased into claims beyond them. */
@@ -98,7 +106,7 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
         "It IS a wellbeing concern when it sounds sustained or serious: struggling most days, burnout, anxiety about coming in, crying at work, feeling unable to cope, thinking of leaving because of it.",
         "Acknowledge what they said in one or two sentences, specifically and plainly, in the context of work. No therapy language, no forced positivity, no silver linings.",
         "Do NOT ask another feedback question in this conversation, and do not ask them to explain more.",
-        "Do not give advice. Code adds the support options and the offer to pause or to let HR know (only with their yes).",
+        "Do not give advice. Code adds the organisation's support details and the offer to ask their support contact to get in touch (only with their yes).",
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -122,7 +130,7 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
         "Respond with care in one or two plain sentences: take it seriously, and say you are glad they said something. You are not a crisis service; do not counsel or ask them to explain.",
         "Do not ask feedback questions. Do not try to counsel them.",
         "Quote the exact words that raised the concern in trigger_quote.",
-        "Code adds the offer of a check-in from a named person at their organisation, and one line about support outside work.",
+        "Code adds the offer to ask their organisation's support contact to get in touch today (only with their yes), and the organisation's support details.",
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -131,39 +139,93 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
 
 /**
  * Fixed wording appended by code after the model's reply, work-relevant.
- * PLAYBOOK defaults: W1 (HR told only with consent), C1 (conduct passed on
- * only with consent), S1 (a named contact is told a check-in may be
- * welcome, never what was written; live escalation, not yet wired). The
- * single outside-work line at the safety tier is pending Nick's decision.
+ * Wellbeing and safety are one handover (Nick, 2026-09-27): the bot says
+ * what it is, offers to ask the organisation's support contact to get in
+ * touch (today for safety, within two working days for wellbeing), and
+ * passes a name on only with a yes. The support details are the
+ * organisation's own words. C1 (conduct passed on only with consent)
+ * remains a playbook default.
  */
 export function fixedTail(concern: Concern, org: OrgResources): string {
   switch (concern) {
     case "privacy":
       return "You can carry on, skip this question, or reply stop at any time.";
     case "wellbeing":
-      return (
-        `If work's weighing on you, ${org.hrContact} is there to talk it through${org.eap ? `, and there's also ${org.eap}` : ""}. ` +
-        `I can let ${firstName(org.hrContact)} know you'd welcome a chat, but only if you reply yes. ` +
-        "Otherwise we'll leave the check-in here for today."
-      );
+    case "safety":
+      return supportOffer(concern, org);
     case "conduct":
       return (
         `You can raise this with ${org.hrContact} directly. ` +
         `I can pass it on to them for you, but only if you reply yes. Either way, we'll leave the feedback questions there for now.`
-      );
-    case "safety":
-      return (
-        `I'd like ${org.safetyContact} to check in with you, just to make sure you're OK. ` +
-        "I'll only tell them you might welcome a check-in, not what you wrote. " +
-        "If you'd rather talk to someone outside work, Samaritans are there any time on 116 123. " +
-        "We'll leave the check-in here for today."
       );
     default:
       return "";
   }
 }
 
-/** "Jo in People Team (jo@acme.test)" -> "Jo". */
-function firstName(contact: string): string {
-  return contact.split(/[\s(]/)[0] || contact;
+export type SupportLevel = "wellbeing" | "safety";
+
+const WHEN: Record<SupportLevel, string> = {
+  safety: "today",
+  wellbeing: "in the next couple of working days",
+};
+
+function details(org: OrgResources, withOutside: boolean): string {
+  return [org.supportDetails.trim(), withOutside ? org.supportOutside.trim() : ""].filter(Boolean).join(" ");
+}
+
+/** The offer made when someone may need support. Without a support contact there is nothing to offer, only details. */
+export function supportOffer(level: SupportLevel, org: OrgResources): string {
+  const safety = level === "safety";
+  const known = details(org, safety) || "Your HR team can tell you what support is available.";
+  if (!org.supportContact) {
+    return `I'm only a feedback assistant, so I can't help with this myself. ${known} We'll leave the check-in here, and there's no need to reply.`;
+  }
+  return [
+    `I'm only a feedback assistant, so I can't help with this myself${safety ? ", but I don't want to leave it there" : ""}.`,
+    `Would you like me to ask ${org.supportContact} to get in touch with you ${WHEN[level]}?`,
+    "I'd only tell them you'd welcome a conversation, not anything you've written here. Reply yes or no.",
+    details(org, safety),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Replies to the answer, all fixed. */
+export const supportReplies = {
+  yes: (level: SupportLevel, org: OrgResources) =>
+    `Thank you. I've asked ${org.supportContact} to get in touch with you ${WHEN[level]}. I haven't passed on anything you wrote here.`,
+  no: (org: OrgResources) =>
+    `That's fine, I won't pass anything on.${org.supportContact ? ` You can contact ${org.supportContact} yourself at any time.` : ""}`,
+  retry: (org: OrgResources) => `Just to check: would you like me to ask ${org.supportContact} to get in touch? Reply yes or no.`,
+  unavailable: (org: OrgResources) =>
+    `I'm sorry, there's no one set up to pass this on to right now, so I haven't passed anything on. ${details(org, true) || "Your HR team can tell you what support is available."}`,
+  giveUp: (org: OrgResources) =>
+    `I'll leave it there and won't pass anything on.${org.supportContact ? ` You can contact ${org.supportContact} yourself at any time.` : ""}`,
+};
+
+export type ConsentAnswer = "yes" | "no" | "unclear";
+
+const YES = /^(y|yes|yeah|yep|yup|ok|okay|sure|please|go ahead|please do|that would help|that'd help)\b/;
+const NO = /^(n|no|nope|nah|not now|not really|no thanks|i'm ok|im ok|i'm fine|im fine|i'm good|im good)\b/;
+const POSITIVE = new Set(["yes", "yeah", "yep", "yup", "please", "sure"]);
+const NEGATIVE = new Set(["no", "nope", "nah", "not", "don't", "dont", "never"]);
+
+/**
+ * A yes or no to the offer, read by code, never by a model: consent is
+ * decided by fixed rules. Mixed signals ("please don't", "no, please do")
+ * and anything else are unclear and get asked once more; a second unclear
+ * answer is treated as no.
+ */
+export function parseConsent(text: string): ConsentAnswer {
+  const t = text.toLowerCase().replace(/[’]/g, "'").replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!t) return "unclear";
+  const words = t.split(" ");
+  const pos = words.some((w) => POSITIVE.has(w));
+  const neg = words.some((w) => NEGATIVE.has(w));
+  if (YES.test(t) && !neg) return "yes";
+  if (NO.test(t) && !pos) return "no";
+  if (pos && !neg) return "yes";
+  if (neg && !pos) return "no";
+  return "unclear";
 }
