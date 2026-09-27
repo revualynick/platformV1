@@ -14,7 +14,8 @@
 # then browse http://localhost:3001.
 #
 # TEST_LOGIN=off (passed through by deploy.sh) runs with the test login
-# disabled, as production does.
+# disabled, as production does. SEED=force reseeds (wipes staging data).
+# E2E=smoke runs the quick browser set afterwards (from deploy.sh, laptop side).
 set -euo pipefail
 
 ROOT="$HOME/revualy-staging"
@@ -103,8 +104,8 @@ fi
 # 6. Seed only an empty database. The seed runs from source on the box
 # (it isn't part of the production images), so it needs a one-off install.
 USERS=$("${COMPOSE[@]}" exec -T postgres psql -U revualy -d revualy_staging -tAc "select count(*) from users" 2>/dev/null || echo 0)
-if [ "${USERS// /}" = "0" ]; then
-  log "Seed demo org (database was empty)"
+if [ "${USERS// /}" = "0" ] || [ "${SEED:-auto}" = "force" ]; then
+  log "Seed demo org (database was empty, or SEED=force: this wipes staging data)"
   (cd "$RELEASE" && CI=true pnpm install --frozen-lockfile >/dev/null && pnpm --filter @revualy/db seed)
 fi
 

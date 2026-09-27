@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAsEmail, USERS } from "../helpers/auth";
-import { execSync } from "node:child_process";
+import { API_URL, WS_URL, INTERNAL_SECRET, psql as runSql, userId } from "../helpers/env";
 import WebSocket from "ws";
 
 /**
@@ -12,16 +12,11 @@ import WebSocket from "ws";
  * Manager = jordan.wells, employee = sarah.chen (sarah reports to jordan).
  */
 
-const JORDAN = "90376027-fc06-4504-9cd2-1c03ac06e8af";
-const SARAH = "807d6071-181c-4253-906e-18434e573c1d";
-const API = "http://localhost:3000";
-const SECRET = process.env.INTERNAL_API_SECRET ?? "";
-
-function psql(sql: string): string {
-  return execSync(
-    `docker exec revualy-postgres-1 psql -U revualy -d revualy_dev -t -A -c "${sql.replace(/"/g, '\\"')}"`,
-  ).toString().trim();
-}
+const JORDAN = userId(USERS.manager);
+const SARAH = userId(USERS.employee);
+const API = API_URL;
+const SECRET = INTERNAL_SECRET;
+const psql = runSql;
 
 async function mintToken(sessionId: string, userId: string): Promise<string> {
   const res = await fetch(`${API}/api/v1/one-on-one-sessions/${sessionId}/ws-token`, {
@@ -36,7 +31,7 @@ async function mintToken(sessionId: string, userId: string): Promise<string> {
 
 function connect(sessionId: string, token: string): Promise<{ ws: WebSocket; messages: any[] }> {
   const messages: any[] = [];
-  const ws = new WebSocket(`ws://localhost:3000/ws/one-on-one/${sessionId}`, ["revualy-ws", token]);
+  const ws = new WebSocket(`${WS_URL}/ws/one-on-one/${sessionId}`, ["revualy-ws", token]);
   ws.on("message", (d) => {
     try { messages.push(JSON.parse(d.toString())); } catch { /* ignore */ }
   });

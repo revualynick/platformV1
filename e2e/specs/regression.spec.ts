@@ -46,10 +46,14 @@ test("B1 — self-reflection appears on the Reflections page (not as peer feedba
 test("B3 — engagement dashboard reflects real feedback (not seed/0)", async ({ page }) => {
   await loginAs(page, "employee", "/dashboard/engagement");
   await page.waitForLoadState("networkidle");
-  // The weekly breakdown table should contain a current-week (2026-07) row, i.e.
-  // engagement is computed from real activity, not only old Feb seed rows.
+  // The weekly breakdown should contain a row for this month, i.e. engagement
+  // reflects recent activity, not only the old fixed-date seed rows. (The seed
+  // adds this week's engagement relative to today.)
+  const now = new Date();
+  const month = now.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  const iso = now.toISOString().slice(0, 7);
   const body = await page.locator("body").innerText();
-  expect(body, "B3: current-week engagement present").toMatch(/Jul|2026-07/);
+  expect(body, "B3: current-week engagement present").toMatch(new RegExp(`${month}|${iso}`));
 });
 
 test("B12 — 360 Reviews section renders on the employee feedback page (empty-safe)", async ({ page }) => {

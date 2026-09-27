@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { execSync } from "child_process";
 import { loginAsEmail, collectErrors, USERS } from "../helpers/auth";
+import { psql } from "../helpers/env";
 
 /**
  * Onboarding wizard E2E — covers the 3-step wizard at /onboarding.
@@ -24,12 +24,6 @@ const TOM = USERS.employee2; // tom.nguyen@acmecorp.com
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
-function psql(sql: string) {
-  execSync(
-    `docker exec revualy-postgres-1 psql -U revualy -d revualy_dev -c "${sql.replace(/"/g, '\\"')}"`,
-    { stdio: "ignore" },
-  );
-}
 
 function resetTomToUnboarded() {
   psql(`UPDATE users SET onboarding_completed=false WHERE email='${TOM}';`);
@@ -327,11 +321,7 @@ test.describe("Onboarding wizard", () => {
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
 
     // Verify DB persistence
-    const result = execSync(
-      `docker exec revualy-postgres-1 psql -U revualy -d revualy_dev -t -A -c "SELECT onboarding_completed FROM users WHERE email='${TOM}';"`,
-    )
-      .toString()
-      .trim();
+    const result = psql(`SELECT onboarding_completed FROM users WHERE email='${TOM}';`);
     expect(result, "users.onboarding_completed must be true after wizard").toBe("t");
 
     expect(errors, `console errors:\n${errors.join("\n")}`).toHaveLength(0);

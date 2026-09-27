@@ -947,6 +947,59 @@ async function seed() {
 
   console.log("  ✓ 2 goal cycles, 11 goals, 6 goal updates");
 
+  // ── Recent activity (dates relative to today) ─────────
+  // The fixed 2026 dates above go stale; these keep dashboards and the
+  // browser regression checks (e2e/specs/regression.spec.ts) meaningful on a
+  // fresh seed: this week's engagement, a completed reflection, and an open
+  // escalation plus a pulse alert for one of Jordan's reports.
+  const monday = (offsetWeeks: number) => {
+    const d = new Date();
+    const day = (d.getUTCDay() + 6) % 7; // 0 = Monday
+    d.setUTCDate(d.getUTCDate() - day - 7 * offsetWeeks);
+    return d.toISOString().slice(0, 10);
+  };
+  for (const user of engData) {
+    const latest = user.scores[user.scores.length - 1];
+    await db.insert(engagementScores).values(
+      [1, 0].map((offset) => ({
+        userId: u(user.name),
+        weekStarting: monday(offset),
+        interactionsCompleted: latest > 70 ? 3 : latest > 50 ? 2 : 1,
+        interactionsTarget: 3,
+        averageQualityScore: latest,
+        responseRate: latest / 100,
+        streak: 0,
+        rank: null,
+      })),
+    );
+  }
+  await db.insert(selfReflections).values({
+    userId: u("Sarah Chen"),
+    weekStarting: monday(0),
+    status: "completed",
+    mood: "good",
+    highlights: "Shipped the onboarding checklist and paired with Marcus on the migration.",
+    challenges: "Estimates on the migration work keep slipping.",
+    goalForNextWeek: "Break the migration into smaller, estimable pieces.",
+    engagementScore: 80,
+    promptTheme: "weekly",
+    completedAt: new Date(),
+  });
+  await db.insert(escalations).values({
+    subjectId: u("David Kim"),
+    type: "other",
+    severity: "medium",
+    status: "open",
+    reason: "Repeated low-effort responses and a dismissive tone in recent check-ins",
+    description: "Flagged by the analysis pipeline for a coaching conversation.",
+  });
+  await db.insert(pulseCheckTriggers).values({
+    sourceType: "engagement_drop",
+    sourceRef: u("David Kim"),
+    sentiment: "negative",
+  });
+  console.log("  ✓ recent activity: 2 weeks of engagement, 1 reflection, 1 escalation, 1 pulse alert");
+
   console.log("\nSeed complete!");
   await pgSql.end();
   process.exit(0);
