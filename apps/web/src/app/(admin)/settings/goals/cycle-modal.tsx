@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 
@@ -17,26 +17,29 @@ export function CycleModal({
   createAction: (formData: FormData) => Promise<ActionResult>;
 }) {
   const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
-  function handleSubmit(formData: FormData) {
+  // A React 19 form action already runs inside a transition, so await the
+  // save directly (a nested startTransition left the router applying an
+  // older page tree about one time in five on the production build).
+  async function handleSubmit(formData: FormData) {
     setError(null);
-    startTransition(async () => {
+    setPending(true);
+    try {
       const result = await createAction(formData);
       if (!result.ok) {
         setError(result.error);
-      } else {
-        formRef.current?.reset();
-        setOpen(false);
-        // The action revalidates the page, but in the production build the
-        // new cycle sometimes didn't appear until a reload (staging,
-        // 2026-09-27). Refresh explicitly so it always shows.
-        router.refresh();
+        return;
       }
-    });
+      formRef.current?.reset();
+      setOpen(false);
+      router.refresh();
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
