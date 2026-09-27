@@ -6,6 +6,7 @@ import type { LLMGateway } from "@revualy/ai-core";
 import { getTenantDb, users, checkInMeetings, orgSettings } from "@revualy/db";
 import { runCheckInPipeline, type MeetingSource } from "../lib/check-in-pipeline.js";
 import { buildApp } from "../server.js";
+import { setCheckInQueue } from "../modules/one-on-one/imports.js";
 
 /**
  * Admin limit + manager choice for 1:1 ingestion (2026-09-26): the mode
@@ -172,13 +173,33 @@ describe.skipIf(!dbUp)("1:1 ingestion modes (integration)", () => {
     expect(found).toEqual([{ organizerId: ids.autoManager, source: "automatic" }]);
   });
 
+  it("approving an import queues that meeting for processing straight away", async () => {
+    const added: Array<{ name: string; data: unknown }> = [];
+    setCheckInQueue({ add: async (name: string, data: unknown) => { added.push({ name, data }); return {}; } } as never);
+    const [m] = await db
+      .insert(checkInMeetings)
+      .values({ organizerId: ids.autoManager, subjectUserId: ids.report, externalEventId: `approve-${tag}`, title: "1:1", eventStart: new Date(), source: "calendar", status: "awaiting_approval" })
+      .returning({ id: checkInMeetings.id });
+    const res = await app.inject({ method: "POST", url: `/api/v1/one-on-one-sessions/imports/${m.id}/approve`, headers: as(ids.autoManager) });
+    expect(res.statusCode).toBe(200);
+    expect(added).toEqual([{ name: "check-in-meeting", data: { orgId: process.env.ORG_ID, meetingId: m.id } }]);
+
+    // Declining queues nothing.
+    const [m2] = await db
+      .insert(checkInMeetings)
+      .values({ organizerId: ids.autoManager, subjectUserId: ids.report, externalEventId: `decline-${tag}`, title: "1:1", eventStart: new Date(), source: "calendar", status: "awaiting_approval" })
+      .returning({ id: checkInMeetings.id });
+    await app.inject({ method: "POST", url: `/api/v1/one-on-one-sessions/imports/${m2.id}/decline`, headers: as(ids.autoManager) });
+    expect(added).toHaveLength(1);
+  });
+
   it("recent imports are visible to the two people in the 1:1 and nobody else", async () => {
     const url = "/api/v1/one-on-one-sessions/imports/recent";
     const forManager = await app.inject({ method: "GET", url, headers: as(ids.autoManager) });
     const forReport = await app.inject({ method: "GET", url, headers: as(ids.report) });
     const forOutsider = await app.inject({ method: "GET", url, headers: as(ids.outsider) });
-    expect(forManager.json().data).toHaveLength(1);
-    expect(forReport.json().data).toHaveLength(1);
+    expect(forManager.json().data.length).toBeGreaterThan(0);
+    expect(forReport.json().data.length).toBe(forManager.json().data.length);
     expect(forOutsider.json().data).toHaveLength(0);
   });
 });

@@ -2,27 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { updateOrg } from "./actions";
+import { COMMON_TIMEZONES } from "@/lib/timezones";
 
-const COMMON_TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Toronto",
-  "America/Vancouver",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Amsterdam",
-  "Asia/Tokyo",
-  "Asia/Singapore",
-  "Asia/Shanghai",
-  "Asia/Kolkata",
-  "Australia/Sydney",
-  "Australia/Melbourne",
-  "Pacific/Auckland",
-];
 
 interface Props {
   initialName: string;

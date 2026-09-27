@@ -2,6 +2,7 @@
 
 import { useState, useRef, useTransition } from "react";
 import { addPerson, importPeople, deactivateUserAction, reactivateUserAction } from "../actions";
+import { COMMON_TIMEZONES } from "@/lib/timezones";
 
 const VALID_ROLES = ["employee", "manager", "admin", "super_admin"] as const;
 
@@ -13,26 +14,6 @@ interface ParsedPerson {
   errors?: string[];
 }
 
-const COMMON_TIMEZONES = [
-  "UTC",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Toronto",
-  "America/Vancouver",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Amsterdam",
-  "Asia/Tokyo",
-  "Asia/Singapore",
-  "Asia/Shanghai",
-  "Asia/Kolkata",
-  "Australia/Sydney",
-  "Australia/Melbourne",
-  "Pacific/Auckland",
-];
 
 function validatePerson(p: ParsedPerson): ParsedPerson {
   const errors: string[] = [];

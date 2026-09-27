@@ -55,3 +55,6 @@ scripts/tenant/state/
 
 # Agent worktrees (removed after merge)
 .claude/worktrees/
+
+# Rewritten by e2e/specs/mutations.spec.ts on every run
+e2e/.mutation-markers.json

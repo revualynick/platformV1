@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
+import type { Queue } from "bullmq";
+import { buildJobId } from "../../lib/job-ids.js";
 import { eq, and, or, desc } from "drizzle-orm";
 import type { TenantDb } from "@revualy/db";
 import { users, checkInMeetings, betweenMeetingGoals, calendarTokens } from "@revualy/db";
@@ -56,6 +58,12 @@ const READ_ERROR_MESSAGE: Record<DocumentReadError["code"], string> = {
  * - GET/PUT /ingestion-mode: the caller's own mode, within the admin's limit.
  * - GET /imports/recent: recent imports the caller was part of (status only).
  */
+let checkInQueue: Queue | null = null;
+/** Set at startup (server.ts); approvals queue their meeting for processing. */
+export function setCheckInQueue(queue: Queue) {
+  checkInQueue = queue;
+}
+
 export const importRoutes: FastifyPluginAsync<ImportRouteOptions> = async (app, opts) => {
   app.post(
     "/imports/upload",
@@ -170,6 +178,13 @@ export const importRoutes: FastifyPluginAsync<ImportRouteOptions> = async (app, 
         )
         .returning({ id: checkInMeetings.id, status: checkInMeetings.status });
       if (!updated) return reply.code(404).send({ error: "Import not found" });
+      if (action === "approve" && checkInQueue) {
+        // Read the notes now rather than at the next hourly run. Best effort:
+        // if queueing fails, the hourly run still picks the meeting up.
+        await checkInQueue
+          .add("check-in-meeting", { orgId: request.tenant.orgId, meetingId: id }, { jobId: buildJobId("check-in-meeting", id) })
+          .catch((err: unknown) => request.log.warn({ err }, "could not queue approved 1:1"));
+      }
       return reply.send(updated);
     });
   }

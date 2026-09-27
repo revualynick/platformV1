@@ -430,12 +430,14 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
 
     // Get current month boundaries
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    // UTC month boundaries: local-time dates shifted the key by a day on a
+    // server outside UTC (first review, 2026-09-23).
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const monthStarting = monthStart.toISOString().split("T")[0];
 
     // Previous month — used to compute sentimentTrend
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
     const prevMonthStarting = prevMonthStart.toISOString().split("T")[0];
 
     const [prevDigest] = await db

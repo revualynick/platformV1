@@ -503,6 +503,32 @@ export function statusAfterFailure(
  * "awaiting_approval" rows are never selected. Least recently attempted
  * first, so retries cannot crowd new meetings out of the batch.
  */
+/**
+ * Process one just-approved calendar 1:1 straight away (instead of at the
+ * next hourly run). If the Gemini notes aren't attached yet it stays pending
+ * and the hourly run picks it up as before.
+ */
+export async function processMeetingNow(
+  db: TenantDb,
+  llm: Pick<LLMGateway, "complete">,
+  meetingId: string,
+  logger: Logger = console,
+  google: CheckInGoogleDeps = defaultGoogleDeps,
+): Promise<boolean> {
+  const [meeting] = await db
+    .select()
+    .from(checkInMeetings)
+    .where(
+      and(
+        eq(checkInMeetings.id, meetingId),
+        eq(checkInMeetings.source, "calendar"),
+        eq(checkInMeetings.status, "pending_transcript"),
+      ),
+    );
+  if (!meeting) return false;
+  return processCheckInMeeting(db, llm, meeting, oauthMeetingSource(db, google), logger);
+}
+
 export async function selectMeetingsToProcess(
   db: TenantDb,
   limit = 50,

@@ -5,6 +5,7 @@ import websocket from "@fastify/websocket";
 import rateLimit from "@fastify/rate-limit";
 import helmet from "@fastify/helmet";
 import { authRoutes } from "./modules/auth/routes.js";
+import { setCheckInQueue } from "./modules/one-on-one/imports.js";
 import { chatRoutes, setConversationQueue } from "./modules/chat/routes.js";
 import { devRoutes, setSimulatorDeps } from "./modules/dev/routes.js";
 import { InternalSimulatorAdapter } from "./lib/internal-simulator-adapter.js";
@@ -198,6 +199,7 @@ async function start() {
 
   const queues = createQueues(REDIS_URL);
   setConversationQueue(queues.conversationQueue);
+  setCheckInQueue(queues.checkInQueue);
   setDemoAnalysisQueue(queues.analysisQueue);
   setProfilesNotificationQueue(queues.notificationQueue);
   setReflectionAnalysisQueue(queues.analysisQueue);

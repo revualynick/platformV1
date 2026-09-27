@@ -41,7 +41,7 @@ import { discoverGoogleChatDm } from "../lib/chat-identity.js";
 import { selectNudgeTargets } from "../lib/engagement-aggregation.js";
 import { sendEmail, unsubscribeUrlFor } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
-import { runCheckInPipeline } from "../lib/check-in-pipeline.js";
+import { runCheckInPipeline, processMeetingNow } from "../lib/check-in-pipeline.js";
 import { replaceProfileSignals } from "../lib/profile-signal-store.js";
 import { tenantReviewerRef } from "../lib/pseudonym.js";
 import { getReleasedFeedbackIds } from "@revualy/db/queries";
@@ -410,7 +410,7 @@ export function createWorkers(config: WorkerConfig) {
           if (managers.length > 0) {
             // monthStarting for the just-completed period (previous month on Monday = last month)
             const now = new Date();
-            const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
             const prevMonthStarting = prevMonth.toISOString().slice(0, 10);
 
             await queues.notificationQueue.addBulk(
@@ -643,10 +643,10 @@ export function createWorkers(config: WorkerConfig) {
           const reportIds = directReports.map((r) => r.id);
 
           const monthStart = new Date(monthStarting);
-          const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+          const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
 
           // Previous-month digest for sentiment trend
-          const prevMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
+          const prevMonthStart = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() - 1, 1));
           const prevMonthStarting = prevMonthStart.toISOString().slice(0, 10);
 
           const [prevDigest] = await db
@@ -1068,8 +1068,15 @@ export function createWorkers(config: WorkerConfig) {
   const checkInWorker = new Worker(
     "check-in",
     async (job) => {
-      const { orgId } = job.data as { orgId: string };
+      const { orgId, meetingId } = job.data as { orgId: string; meetingId?: string };
       const db = getTenantDb(orgId, process.env.DATABASE_URL ?? "");
+
+      // One just-approved 1:1 (queued by the approve route).
+      if (meetingId) {
+        const done = await processMeetingNow(db, llm, meetingId, { log: (msg: string) => job.log(msg) } as unknown as Console);
+        job.log(`Approved 1:1 ${done ? "processed" : "left for the hourly run"}`);
+        return;
+      }
 
       const result = await runCheckInPipeline(db, llm, {
         log: (msg) => job.log(msg),

@@ -67,6 +67,16 @@ export async function recomputeWeeklyEngagement(
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : 0;
 
+  // Streak: consecutive weeks meeting the target, carried on from last week's
+  // row; a week below target resets it (nothing wrote it before; it read 0).
+  const prevWeek = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [prev] = await db
+    .select({ streak: engagementScores.streak })
+    .from(engagementScores)
+    .where(and(eq(engagementScores.userId, userId), eq(engagementScores.weekStarting, prevWeek)));
+  const metTarget = interactionsTarget > 0 && interactionsCompleted >= interactionsTarget;
+  const streak = metTarget ? (prev?.streak ?? 0) + 1 : 0;
+
   await db
     .insert(engagementScores)
     .values({
@@ -76,6 +86,7 @@ export async function recomputeWeeklyEngagement(
       interactionsTarget,
       averageQualityScore,
       responseRate: responseRateFor(interactionsCompleted, interactionsTarget),
+      streak,
     })
     .onConflictDoUpdate({
       target: [engagementScores.userId, engagementScores.weekStarting],
@@ -84,6 +95,7 @@ export async function recomputeWeeklyEngagement(
         interactionsTarget,
         averageQualityScore,
         responseRate: responseRateFor(interactionsCompleted, interactionsTarget),
+        streak,
       },
     });
 }
