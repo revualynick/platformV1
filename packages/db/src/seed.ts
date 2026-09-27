@@ -992,6 +992,7 @@ async function seed() {
     status: "open",
     reason: "Repeated low-effort responses and a dismissive tone in recent check-ins",
     description: "Flagged by the analysis pipeline for a coaching conversation.",
+    flaggedContent: "",
   });
   await db.insert(pulseCheckTriggers).values({
     sourceType: "engagement_drop",
