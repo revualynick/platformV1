@@ -1,7 +1,7 @@
 # Browser suite against any environment, smoke tests after deploys
 
 Status: merged 2026-09-27, not reviewed
-Commits: 36cc8fb, 2bd4f7e..96e92ab (see git log) · Migration: none
+Commits: 36cc8fb..96e92ab (7 commits) · Migration: none
 
 ## What and why
 The Playwright suite assumed the laptop: its database container, port, secret and seed ids, plus data left over from old local runs. Against staging it failed 27 of 202. Now it runs against any environment, staging deploys run a smoke set automatically, and running it on the production build found three real problems.
