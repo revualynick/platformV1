@@ -27,9 +27,9 @@ test("admin breaks glass, sees a read-only view, the person is told, and access 
 
   // Open access.
   await page.goto("/settings/break-glass");
-  await page.getByLabel("Person").selectOption(tom);
-  await page.getByLabel("Reason").fill(REASON);
-  await page.getByLabel("Access for").selectOption("7");
+  await page.getByLabel("Person", { exact: true }).selectOption(tom);
+  await page.getByLabel("Reason", { exact: true }).fill(REASON);
+  await page.getByLabel("Access for", { exact: true }).selectOption("7");
   await page.getByRole("button", { name: "Open access" }).click();
   const card = page.locator("div.rounded-2xl", { hasText: REASON }).filter({ has: page.getByText("active", { exact: true }) });
   await expect(card.first()).toBeVisible();

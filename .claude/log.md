@@ -397,3 +397,9 @@
 - Left for Nick: member page scope, concern checks on reflections (moved to Decisions), plus earlier decisions
 - Person access (Nick): content for self and direct manager, signals for skip-levels and admins (API assertContentAccess, member page signals view, team profiles direct manager only); reflections concern checks parked pending design. In-page Suspense removed from saving pages (same bug as loading.tsx). API 579/579, browser suite 206/206 on staging
 - Next: Nick's yes on safety wording to wire the reference path; break-glass route not built
+
+## 2026-09-27: break-glass access built; literature for the bot wording
+- Break-glass (Nick: content view opens on a logged reason, no second approver; raw content will need one; subject told unless a hold, hold ends with the grant): access_grants (0046), /api/v1/access-grants, assertContentAccess reads via an active grant (audited, never writes), /settings/break-glass, member page read-only period view, subject notice on dashboard and settings. API 587/587, typecheck 17/17, full browser suite on staging 207 passed, 0 failed (no retries)
+- Limits to backlog: API content routes not period-limited, page DB reads audited as one view, in-app notice only, reason hidden from subject (pending Nick)
+- Safety wording (item 1, Nick still deciding): agent read Schein, Humble Inquiry (2nd ed. 2021) -> docs/research/humble-inquiry.md; Bungay Stanier, The Coaching Habit (2016) -> docs/research/coaching-habit.md with a merged list of 19 proposals. Both books back "no digging"; neither covers wellbeing or safety. Epubs sit untracked in the repo root; *.epub now gitignored
+- macOS blocks this session from ~/Downloads; Nick moved the books into the repo

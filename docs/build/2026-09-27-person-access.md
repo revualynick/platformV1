@@ -21,5 +21,7 @@ Nick asked for the member page scope to follow the privacy design. The person an
 - [ ] As Jordan, full page. As Priya, sent back.
 
 ## Not done / limits
-- Break-glass access for admins in a formal process isn't built.
 - Pages that lost Suspense now wait for their slowest section; not measured on a slow connection.
+
+## Later changes
+- 2026-09-27: break-glass access built (`2026-09-27-break-glass.md`).

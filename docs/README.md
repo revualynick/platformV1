@@ -31,6 +31,8 @@ Start with the root `README.md` for what Revualy is and where it stands. This pa
 
 | Doc | What it covers |
 |---|---|
+| `research/humble-inquiry.md` | Schein, *Humble Inquiry* (2nd ed., 2021) mapped onto the concerns playbook: proposed wording changes, conflicts with Nick's decisions, limits |
+| `research/coaching-habit.md` | Bungay Stanier, *The Coaching Habit* (2016) mapped onto the concerns playbook, plus a merged list of 19 proposals across both books |
 | `research/migration-sources.md` | Export formats from Culture Amp, 15Five, Lattice, Leapsome, Betterworks, Peakon; Google Meet API |
 
 ## Elsewhere

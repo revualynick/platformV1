@@ -58,3 +58,6 @@ scripts/tenant/state/
 
 # Rewritten by e2e/specs/mutations.spec.ts on every run
 e2e/.mutation-markers.json
+
+# Reference books dropped in for research (copyrighted, never commit)
+*.epub

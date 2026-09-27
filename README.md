@@ -72,6 +72,7 @@ Full guide: `docs/local-testing.md`. Staging on the Linux box: `docs/staging.md`
 
 Newest first. Each line links to where the detail lives. When a decision replaces an earlier one, say so.
 
+- **2026-09-27** Break-glass: an admin can open read-only content access to one person for a formal process, on a logged reason, for a dated period and up to 30 days. No second approver for the content view; raw content will need one. The subject is told unless a hold is set, and a hold ends with the grant. `docs/build/2026-09-27-break-glass.md`
 - **2026-09-26** Privacy tiers, consent-based sharing, raw inputs kept encrypted, and the ticket air gap between chat agents and data. `docs/design/privacy-and-agent-access.md`
 - **2026-09-26** A deterministic decision layer driven by a reasoning model, in the spirit of Jev (TypeSafe AI), built on our own models rather than adopting Jev. For alpha and beta, quality comes before token cost. `docs/backlog.md`
 - **2026-09-26** 1:1 ingestion defaults to semi-automatic. Calendar model weighting to become client-adjustable sliders.

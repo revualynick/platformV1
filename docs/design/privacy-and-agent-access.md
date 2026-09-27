@@ -80,7 +80,7 @@ Consequences:
 - The member page shows skip-levels and admins a signals-only view instead of redirecting them away, and says why.
 - Team profiles (colour and decision-making self-assessments) are self data: only the team's own manager sees them per person.
 - Escalations and the HR feed are a separate, formal process and are not changed by this rule.
-- Admins who need content for a formal process use the break-glass route (not built yet), which is logged.
+- Admins who need content for a formal process use the break-glass route, which is logged (built 2026-09-27, see below).
 
 ### Triggered access
 
@@ -88,6 +88,8 @@ Consequences:
 - **Manager change:** the new manager gets a **handover summary** automatically (goals, open actions, agreed focus areas, general direction), and the subject is told. The subject sees it first and can add a comment. This is the one non-consent transfer in normal use, so that a poor record can't be reset by changing manager.
 - **An issue** (grievance, formal performance process, conduct report): HR requests access through the break-glass route with a reason. They get a summary scoped to the period, not the raw text. The subject is told unless the law says otherwise.
 - **Raw content** only when a formal process genuinely requires it (an investigation, a tribunal, a subject access request), with a second approval as well as the log.
+
+**Break-glass as built (Nick, 2026-09-27).** A content-view grant opens on a written reason with no second approver: an admin gets the direct manager's content view, read-only, for a dated period (at most 366 days) and up to 30 days, without the manager's private notes. Raw content, once viewable, needs a second approver. The subject is told in-app when the grant opens, unless the admin sets a hold with its own reason; a hold ends when lifted or when the grant ends, so the subject is always told. The subject sees who, when and the period, not the reason. Grants, views, reads, holds and revocations go to the audit log. Build note: `docs/build/2026-09-27-break-glass.md`.
 
 **Why the spirit and not the transcript:** people speak differently when every word could be read later. If transcripts are openly available, 1:1s turn guarded and the product loses the candour it depends on.
 

@@ -12,7 +12,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Verify the 2026-09-26 merges end to end:** nothing has run against real models or Railway. Deploy the branch to the test tenant, re-run the topic grid on the Linux box against the ticket-based engine, and walk each build note's review checklist.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
-- **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26).
+- **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26). Sources read: `docs/research/humble-inquiry.md` and `docs/research/coaching-habit.md` (the latter has the merged list of proposed changes for Nick's review). Neither gives any basis for the wellbeing or safety levels, which need clinical and HR sources.
 - **Revoke the eval API key** on the Linux box when its 7 days are up.
 
 ## Bugs
@@ -43,6 +43,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
   - Escalation screens and pulse triggers still show named data; `imported_feedback.source_key` includes the author id.
   - Chat side still writes `conversation_theme_outcomes` and `checkin_jobs` status directly; personal-ticket goals unused in prompts; 1:1 follow-up tickets not created; reference path not yet called from the orchestrator.
   - Re-run the topic grid on the box to check first-name prompts didn't shift bot quality.
+  - Break-glass follow-ups (`docs/build/2026-09-27-break-glass.md`): API content routes aren't limited to the grant's period (only the web view filters); the member page's direct DB reads are audited as one view; subject told in-app only (no email or chat); second approver for raw content once raw content is viewable; decide whether the subject sees the reason.
   - Privacy steps 4 to 6: raw transcript storage with per-person keys, row-level security, sharing grants and handover summaries.
 - **Typed decisions:** run the calibration on the Linux box (command in `docs/build/2026-09-26-typed-decisions.md`), then decide thresholds and tier; add specs for sensitivity and ticket context.
 
