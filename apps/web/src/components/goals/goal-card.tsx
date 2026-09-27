@@ -107,8 +107,8 @@ export function GoalCard({
       className="rounded-2xl border border-stone-200/60 bg-surface p-5"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-1 basis-48">
           <h3 className="truncate font-display text-base font-semibold text-stone-900">
             {goal.title}
           </h3>
@@ -121,7 +121,7 @@ export function GoalCard({
             <p className="mt-0.5 text-xs text-stone-400">{goal.ownerName}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {pendingSuggestion && (
             <button
               onClick={() => setReviewOpen(true)}

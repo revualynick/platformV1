@@ -344,9 +344,9 @@ async function MainContent({
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Left column: Core Values */}
-        <div className="lg:col-span-7">
+        <div className="min-w-0 lg:col-span-7">
           <div
             className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6"
             style={{ animationDelay: "300ms", boxShadow: "var(--shadow-sm)" }}
@@ -356,7 +356,7 @@ async function MainContent({
         </div>
 
         {/* Right column: Needs attention + Quick access */}
-        <div className="space-y-6 lg:col-span-5">
+        <div className="min-w-0 space-y-6 lg:col-span-5">
           {/* Needs attention */}
           {attentionItems.length > 0 && (
             <div
