@@ -23,6 +23,7 @@ One note per piece of work merged into `beta-hardening`, written at merge time. 
 | 2026-09-26 | [Privacy step 3: tickets and the job-agent gate](2026-09-26-privacy-step-3-tickets.md) | 11e749c | 0044 | not reviewed |
 | 2026-09-26 | [Typed decision layer](2026-09-26-typed-decisions.md) | 1fda68e | none | not reviewed |
 | 2026-09-26 | [1:1 notes screens and mode limits](2026-09-26-one-on-one-screens.md) | cfb7dc6 | 0045 | not reviewed |
+| 2026-09-27 | [Person access and in-page Suspense](2026-09-27-person-access.md) | f459bdf.. | none | not reviewed |
 | 2026-09-27 | [Goal cycle refresh, mobile layout, mechanical backlog](2026-09-27-mechanical-fixes.md) | 16643d9..24217a4 | none | not reviewed |
 | 2026-09-27 | [Browser suite against any environment](2026-09-27-e2e-any-environment.md) | 36cc8fb..96e92ab | none | not reviewed |
 | 2026-09-26 | [Staging mirror and redirect fix](2026-09-26-staging-mirror.md) | bf67c74, 8725411, 8364a02 | none | not reviewed |

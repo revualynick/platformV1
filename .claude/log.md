@@ -395,3 +395,5 @@
 - Mechanical: pnpm dev env, Slack bot_id (H4), streak writer, UTC month keys, shared timezones, approved 1:1s processed at once; several backlog items found already fixed and removed
 - Browser suite vs staging, no retries: 202 passed, 0 failed. API 575/575
 - Left for Nick: member page scope, concern checks on reflections (moved to Decisions), plus earlier decisions
+- Person access (Nick): content for self and direct manager, signals for skip-levels and admins (API assertContentAccess, member page signals view, team profiles direct manager only); reflections concern checks parked pending design. In-page Suspense removed from saving pages (same bug as loading.tsx). API 579/579, browser suite 206/206 on staging
+- Next: Nick's yes on safety wording to wire the reference path; break-glass route not built
