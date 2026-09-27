@@ -59,6 +59,7 @@ docker compose up -d              # PostgreSQL, Redis (local dev)
 - **Drizzle:** Can't chain `.where()` — build conditions array, then `.where(and(...conditions))`
 - **Self-referencing FKs:** Use raw SQL migrations (Drizzle can't express inline)
 - **Fastify 5:** `decorateRequest("prop")` without second arg (no null)
+- **No `loading.tsx` above pages that save in place.** In the production build, a route-level loading boundary makes a server action's streamed response sometimes leave the old content on screen (a saved item doesn't appear until reload; measured on staging 2026-09-27: 35-55% of saves without the fix, 0/20 with). Loading boundaries remain only on read-only pages (team insights, leaderboard, org charts, employee feedback and reflections).
 
 ## Documentation hygiene
 - `README.md` is the running summary: update "Where it stands" and add a line to its decisions log when something important is decided or lands.
