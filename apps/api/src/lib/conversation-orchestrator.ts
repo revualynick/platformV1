@@ -8,7 +8,7 @@ import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import { buildJobId } from "./job-ids.js";
 import { planTurn, themeQuestion, type PlanInput } from "./turn-planner.js";
 import { runReferencePath, compose, type ReferenceNext } from "./reference-path.js";
-import { SERIOUS, type Concern } from "./bot-references.js";
+import { OFF_SCRIPT_CLOSE, OFF_SCRIPT_OFFER, SERIOUS, type Concern } from "./bot-references.js";
 import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
 import { openTicket, openTicketForConversation, type TicketHandle } from "./tickets/reader.js";
@@ -459,6 +459,7 @@ export async function processTurn(
           currentThemeIndex: next.currentThemeIndex,
           phase: next.phase as Conversation["phase"],
           followUpCount: next.followUpCount,
+          offScriptStreak: 0,
           messageCount: messageCount + 1,
           lastActivityAt: now,
           status: closing ? "closed" : "in_progress",
@@ -550,7 +551,9 @@ export async function markIncomplete(
  * The script path flagged a concern. The reference path (Opus 5.5 for
  * wellbeing, conduct and safety) writes a short acknowledgement; code adds
  * the fixed wording and decides what happens (docs/bot/concerns-playbook.md):
- *  - privacy, off_script: answer and carry on; the theme doesn't move
+ *  - privacy, off_script: answer and carry on; the theme doesn't move. The
+ *    second off-script reply in a row adds an offer to stop; the third
+ *    ends the check-in for today (analysed as partial, like a quiet one)
  *  - wellbeing, safety: signpost to the organisation's support contact and
  *    details, end the check-in, never analyse it, count the signpost
  *  - conduct: say where to raise it, end the check-in (analysed as usual,
@@ -587,6 +590,14 @@ async function handleConcern(
     ({ message, next } = compose(hint, "", "pause", org));
   }
 
+  // Off-script replies in a row: a privacy question or an answer breaks the run.
+  const streak = concern === "off_script" ? conv.offScriptStreak + 1 : 0;
+  if (streak === 2) message = `${message}\n\n${OFF_SCRIPT_OFFER}`;
+  if (streak >= 3) {
+    message = OFF_SCRIPT_CLOSE;
+    next = "pause";
+  }
+
   const ending = next === "pause";
   const support = concern === "wellbeing" || concern === "safety";
   try {
@@ -598,6 +609,7 @@ async function handleConcern(
           turn: sql`${conversations.turn} + 1`,
           messageCount: messageCount + 1,
           lastActivityAt: now,
+          offScriptStreak: streak,
           ...(ending
             ? { status: "incomplete", closedAt: now, phase: support ? ("support" as const) : ("closing" as const) }
             : { status: "in_progress" }),

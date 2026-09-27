@@ -342,6 +342,8 @@ export const conversations = pgTable(
       .notNull()
       .default("opening"),
     followUpCount: integer("follow_up_count").notNull().default(0),
+    /** Off-script replies in a row (migration 0049): the second gets an offer to stop, the third ends the check-in. */
+    offScriptStreak: integer("off_script_streak").notNull().default(0),
     threadId: varchar("thread_id", { length: 255 }),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
       .notNull()
@@ -1408,6 +1410,17 @@ export const orgSettings = pgTable("org_settings", {
   supportContact: text("support_contact").notNull().default(""),
   supportDetails: text("support_details").notNull().default(""),
   supportOutside: text("support_outside").notNull().default(""),
+  // The client's own versions of the fixed concern wording (migration 0049);
+  // empty = Revualy's defaults. Signed off by the client's HR team: the
+  // sign-off records a hash of the wording it covers, so editing clears it.
+  supportWording: jsonb("support_wording").$type<{ support?: string; conduct?: string }>().notNull().default({}),
+  supportWordingSignoff: jsonb("support_wording_signoff").$type<{
+    name: string;
+    role: string;
+    at: string;
+    recordedBy: string;
+    hash: string;
+  } | null>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

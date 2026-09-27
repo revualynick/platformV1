@@ -101,7 +101,7 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
   let chat: FakeChat;
   let analysis: Array<{ data: { conversationId: string } }>;
   let app: FastifyInstance;
-  let saved: { supportContact: string; supportDetails: string; supportOutside: string } | null = null;
+  let saved: Partial<typeof orgSettings.$inferInsert> | null = null;
 
   const recordingQueue = <T>(into: T[]) => ({ add: async (_name: string, data: never) => void into.push({ data } as T) }) as unknown as Queue;
   const depsFor = (llm: LLMGateway): OrchestratorDeps => {
@@ -133,6 +133,15 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
     return { id: res.conversationId, result, text: chat.sent.map((m) => m.text).join("\n") };
   }
 
+  /** Another reply in the same conversation. */
+  async function again(id: string, llm: LLMGateway, reply: string) {
+    const deps = depsFor(llm);
+    await appendUserMessage(db, id, reply);
+    chat.sent = [];
+    const result = await processTurn(db, deps, id);
+    return { result, text: chat.sent.map((m) => m.text).join("\n") };
+  }
+
   beforeAll(async () => {
     await db.insert(users).values([
       { id: ids.person, email: `p-${tag}@test.local`, name: "Rae Kim" },
@@ -155,9 +164,15 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
       confirmedAt: new Date(),
     });
     const [existing] = await db.select().from(orgSettings).limit(1);
-    const ours = { supportContact: CONTACT, supportDetails: DETAILS, supportOutside: "" };
+    const ours = { supportContact: CONTACT, supportDetails: DETAILS, supportOutside: "", supportWording: {}, supportWordingSignoff: null };
     if (existing) {
-      saved = { supportContact: existing.supportContact, supportDetails: existing.supportDetails, supportOutside: existing.supportOutside };
+      saved = {
+        supportContact: existing.supportContact,
+        supportDetails: existing.supportDetails,
+        supportOutside: existing.supportOutside,
+        supportWording: existing.supportWording,
+        supportWordingSignoff: existing.supportWordingSignoff,
+      };
       await db.update(orgSettings).set(ours).where(eq(orgSettings.id, existing.id));
     } else {
       await db.insert(orgSettings).values(ours);
@@ -175,7 +190,7 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
 
   afterAll(async () => {
     await app?.close();
-    await db.update(orgSettings).set(saved ?? { supportContact: "", supportDetails: "", supportOutside: "" });
+    await db.update(orgSettings).set(saved ?? { supportContact: "", supportDetails: "", supportOutside: "", supportWording: {}, supportWordingSignoff: null });
     await db.delete(conversations).where(eq(conversations.reviewerId, ids.person));
     await db.delete(userPlatformIdentities).where(eq(userPlatformIdentities.userId, ids.person));
     await db.delete(questionnaires).where(eq(questionnaires.id, questionnaireId));
@@ -275,5 +290,81 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
       for (const level of ["wellbeing", "safety", "conduct"]) expect(m[level] === null || (m[level] as number) >= 3).toBe(true);
     }
     await db.delete(supportSignposts).where(eq(supportSignposts.month, "2001-01-01"));
+  });
+
+  it("off-script twice in a row offers to stop; a third time ends the check-in for today", async () => {
+    const offScript = fakeLLM("off_script", "off_script");
+    const first = await turn(offScript, "lol what's the weather like");
+    expect(first.text).not.toContain("Is now a bad time?");
+    const second = await again(first.id, offScript, "tell me a joke");
+    expect(second.result.status).toBe("replied");
+    expect(second.text).toContain("Is now a bad time?");
+    expect(await conv(first.id)).toMatchObject({ status: "in_progress", offScriptStreak: 2 });
+
+    const third = await again(first.id, offScript, "banana");
+    expect(third.result.status).toBe("closed");
+    expect(third.text).toBe("Let's leave it there for today. We'll pick this up another time.");
+    expect(await conv(first.id)).toMatchObject({ status: "incomplete", phase: "closing" });
+    // Ended like a quiet one: analysed as partial.
+    expect(analysis.map((a) => a.data.conversationId)).toContain(first.id);
+  });
+
+  it("a privacy question or an answer breaks an off-script run", async () => {
+    const first = await turn(fakeLLM("off_script", "off_script"), "lol");
+    await again(first.id, fakeLLM("privacy", "privacy"), "who sees this?");
+    expect((await conv(first.id)).offScriptStreak).toBe(0);
+    const next = await again(first.id, fakeLLM("off_script", "off_script"), "lol again");
+    expect(next.text).not.toContain("Is now a bad time?");
+    await again(first.id, fakeLLM("none", "none"), "Sam is great at unblocking people.");
+    expect((await conv(first.id)).offScriptStreak).toBe(0);
+  });
+
+  it("the client's HR team signs off the wording; editing it makes the sign-off stale; live turns use it", async () => {
+    const bad = await app.inject({
+      method: "PUT",
+      url: "/api/v1/support/wording",
+      headers: as(ids.admin),
+      payload: { support: "Talk to {manager}.", conduct: "" },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const custom = "We're sorry things are hard. Please speak to {contact}. {details} {outside}";
+    const put = await app.inject({ method: "PUT", url: "/api/v1/support/wording", headers: as(ids.admin), payload: { support: custom, conduct: "" } });
+    expect(put.statusCode).toBe(200);
+
+    let data = (await app.inject({ method: "GET", url: "/api/v1/support/settings", headers: as(ids.admin) })).json().data;
+    expect(data.wording).toEqual({ support: custom, conduct: "" });
+    expect(data.previews.wellbeing).toBe(`We're sorry things are hard. Please speak to ${CONTACT}. ${DETAILS}`);
+    expect(data.signoff).toBeNull();
+
+    const sign = await app.inject({
+      method: "POST",
+      url: "/api/v1/support/wording/sign-off",
+      headers: as(ids.admin),
+      payload: { name: "Priya Shah", role: "Head of People" },
+    });
+    expect(sign.statusCode).toBe(200);
+    data = (await app.inject({ method: "GET", url: "/api/v1/support/settings", headers: as(ids.admin) })).json().data;
+    expect(data.signoff).toMatchObject({ name: "Priya Shah", role: "Head of People", current: true });
+
+    // The live signpost uses their wording.
+    const { text } = await turn(fakeLLM("wellbeing", "wellbeing"));
+    expect(text).toContain(`Please speak to ${CONTACT}.`);
+
+    // Changing the contact changes what people see: the sign-off is stale.
+    await app.inject({
+      method: "PUT",
+      url: "/api/v1/support/settings",
+      headers: as(ids.admin),
+      payload: { supportContact: "Someone else", supportDetails: DETAILS, supportOutside: "" },
+    });
+    data = (await app.inject({ method: "GET", url: "/api/v1/support/settings", headers: as(ids.admin) })).json().data;
+    expect(data.signoff).toMatchObject({ current: false });
+
+    // Back to the defaults for the other tests.
+    await app.inject({ method: "PUT", url: "/api/v1/support/wording", headers: as(ids.admin), payload: { support: "", conduct: "" } });
+    await app.inject({ method: "PUT", url: "/api/v1/support/settings", headers: as(ids.admin), payload: { supportContact: CONTACT, supportDetails: DETAILS, supportOutside: "" } });
+    const nonAdmin = await app.inject({ method: "POST", url: "/api/v1/support/wording/sign-off", headers: as(ids.person), payload: { name: "Me", role: "Me" } });
+    expect(nonAdmin.statusCode).toBe(403);
   });
 });

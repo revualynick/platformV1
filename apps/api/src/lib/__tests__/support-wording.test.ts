@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { EVAL_ORG, fixedTail, supportSignpost } from "../bot-references.js";
+import { DEFAULT_WORDING, EVAL_ORG, fixedTail, renderWording, supportSignpost, unknownPlaceholders } from "../bot-references.js";
 
 /**
  * Support signposting's fixed wording (docs/bot/concerns-playbook.md, Nick
@@ -28,7 +28,7 @@ describe("support signpost", () => {
   it("never invents a resource when the organisation gave none", () => {
     const bare = { ...EVAL_ORG, supportContact: null, supportDetails: "", supportOutside: "" };
     const text = supportSignpost("safety", bare);
-    expect(text).toContain("Your HR team can tell you what support is available.");
+    expect(text).toContain("Your HR team is better placed to support you");
     expect(text).not.toMatch(/Samaritans|111|999|911|emergency/i);
   });
 
@@ -37,5 +37,26 @@ describe("support signpost", () => {
     expect(text).toContain(`raise this with ${EVAL_ORG.hrContact}`);
     expect(text).toContain("I haven't passed anything on");
     expect(text).not.toMatch(/reply yes|pass it on to them for you/i);
+  });
+});
+
+describe("the organisation's own wording", () => {
+  it("replaces the default, with placeholders filled", () => {
+    const org = { ...EVAL_ORG, wording: { support: "Please talk to {contact}. {details} {outside}" } };
+    expect(supportSignpost("wellbeing", org)).toBe(`Please talk to ${EVAL_ORG.supportContact}. ${EVAL_ORG.supportDetails}`);
+    expect(supportSignpost("safety", org)).toBe(`Please talk to ${EVAL_ORG.supportContact}. ${EVAL_ORG.supportDetails} ${EVAL_ORG.supportOutside}`);
+    // Conduct keeps the default until they change it too.
+    expect(fixedTail("conduct", org)).toBe(renderWording(DEFAULT_WORDING.conduct, { ...org, supportContact: org.hrContact }, { outside: false }));
+  });
+
+  it("capitalises the fallback contact only at the start of a sentence, and leaves their text alone", () => {
+    const org = { ...EVAL_ORG, supportContact: null, wording: { support: "{contact} can help, e.g. with leave. Or ask {contact}." } };
+    expect(supportSignpost("wellbeing", org)).toBe("Your HR team can help, e.g. with leave. Or ask your HR team.");
+  });
+
+  it("refuses unknown placeholders", () => {
+    expect(unknownPlaceholders("Talk to {contact} or {manager}.")).toEqual(["{manager}"]);
+    expect(unknownPlaceholders(DEFAULT_WORDING.support)).toEqual([]);
+    expect(unknownPlaceholders(DEFAULT_WORDING.conduct)).toEqual([]);
   });
 });

@@ -344,6 +344,13 @@
       "when": 1790520000000,
       "tag": "0048_support_signpost",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790530000000,
+      "tag": "0049_wording_signoff_off_script",
+      "breakpoints": true
     }
   ]
 }

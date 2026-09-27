@@ -1590,6 +1590,14 @@ export type SupportSettings = {
   supportContact: string;
   supportDetails: string;
   supportOutside: string;
+  /** The client's own wording; "" = the default. */
+  wording: { support: string; conduct: string };
+  defaults: { support: string; conduct: string };
+  placeholders: string[];
+  /** The fixed part of each message as it would be sent now. */
+  previews: { wellbeing: string; safety: string; conduct: string };
+  /** current: false when the wording, contact or details changed since. */
+  signoff: { name: string; role: string; at: string; current: boolean } | null;
   /** Counts under minShownCount come back as null. */
   months: Array<{ month: string; wellbeing: number | null; safety: number | null; conduct: number | null }>;
   minShownCount: number;
@@ -1601,4 +1609,12 @@ export async function getSupportSettings() {
 
 export async function saveSupportSettings(data: { supportContact: string; supportDetails: string; supportOutside: string }) {
   return apiFetch<{ ok: true }>("/api/v1/support/settings", { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function saveSupportWording(data: { support: string; conduct: string }) {
+  return apiFetch<{ ok: true }>("/api/v1/support/wording", { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function signOffSupportWording(data: { name: string; role: string }) {
+  return apiFetch<{ ok: true }>("/api/v1/support/wording/sign-off", { method: "POST", body: JSON.stringify(data) });
 }

@@ -34,6 +34,8 @@ export interface OrgResources {
   supportDetails: string;
   /** Optional line about support outside work, in line with the organisation's safeguarding policy. */
   supportOutside: string;
+  /** The organisation's own versions of the fixed wording (signed off by its HR team); unset = the defaults. */
+  wording?: Partial<Record<WordingKey, string>>;
 }
 
 export const EVAL_ORG: OrgResources = {
@@ -146,7 +148,43 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
  * to anyone and nothing is recorded about the person; only a monthly count
  * of how often each signpost was shown. The same for conduct: the bot says
  * where to raise it and doesn't pass anything on.
+ *
+ * The wording is the organisation's to sign off and adjust (Nick,
+ * 2026-09-27): these are templates with placeholders, and the defaults
+ * below apply until the client's HR team writes its own.
  */
+export type WordingKey = "support" | "conduct";
+export const WORDING_PLACEHOLDERS = ["{contact}", "{details}", "{outside}"] as const;
+
+export const DEFAULT_WORDING: Record<WordingKey, string> = {
+  support:
+    "I'm only a feedback assistant, so I can't help with this myself. {contact} is better placed to support you, so it's worth reaching out to them. {details} {outside} I haven't passed anything on. We'll leave the check-in here, and there's no need to reply.",
+  conduct:
+    "You can raise this with {contact}, who can take it forward properly. I haven't passed anything on. We'll leave the feedback questions there for now.",
+};
+
+/** Placeholders a template may use; anything else in braces is refused when saving. */
+export function unknownPlaceholders(template: string): string[] {
+  return (template.match(/\{[^}]*\}/g) ?? []).filter((p) => !(WORDING_PLACEHOLDERS as readonly string[]).includes(p));
+}
+
+/**
+ * Fill a template. The contact falls back to "your HR team" (capitalised at
+ * the start of a sentence); empty details and the outside line (safety
+ * only) drop out. The organisation's own text is otherwise left as written.
+ */
+export function renderWording(template: string, org: OrgResources, opts: { outside: boolean }): string {
+  const contact = org.supportContact?.trim() || "your HR team";
+  const capitalised = contact.charAt(0).toUpperCase() + contact.slice(1);
+  return template
+    .replace(/(^|[.!?]\s+)\{contact\}/g, (_m, lead: string) => lead + capitalised)
+    .replaceAll("{contact}", contact)
+    .replaceAll("{details}", org.supportDetails.trim())
+    .replaceAll("{outside}", opts.outside ? org.supportOutside.trim() : "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function fixedTail(concern: Concern, org: OrgResources): string {
   switch (concern) {
     case "privacy":
@@ -155,7 +193,8 @@ export function fixedTail(concern: Concern, org: OrgResources): string {
     case "safety":
       return supportSignpost(concern, org);
     case "conduct":
-      return `You can raise this with ${org.hrContact}, who can take it forward properly. I haven't passed anything on. We'll leave the feedback questions there for now.`;
+      // Conduct reports go to the conduct contact (today the same person, or "your HR team").
+      return renderWording(org.wording?.conduct || DEFAULT_WORDING.conduct, { ...org, supportContact: org.hrContact }, { outside: false });
     default:
       return "";
   }
@@ -165,15 +204,21 @@ export type SupportLevel = "wellbeing" | "safety";
 
 /** Where to get support: the organisation's contact and details, never a resource we made up. */
 export function supportSignpost(level: SupportLevel, org: OrgResources): string {
-  const details = [org.supportDetails.trim(), level === "safety" ? org.supportOutside.trim() : ""].filter(Boolean).join(" ");
-  const contact = org.supportContact?.trim();
-  return [
-    "I'm only a feedback assistant, so I can't help with this myself.",
-    contact ? `${contact} is better placed to support you, so it's worth reaching out to them.` : "",
-    details,
-    !contact && !details ? "Your HR team can tell you what support is available." : "",
-    "I haven't passed anything on. We'll leave the check-in here, and there's no need to reply.",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  return renderWording(org.wording?.support || DEFAULT_WORDING.support, org, { outside: level === "safety" });
 }
+
+/** What admins see before signing off: the fixed part of each message, as it would be sent. */
+export function wordingPreviews(org: OrgResources): Record<"wellbeing" | "safety" | "conduct", string> {
+  return {
+    wellbeing: supportSignpost("wellbeing", org),
+    safety: supportSignpost("safety", org),
+    conduct: fixedTail("conduct", org),
+  };
+}
+
+/**
+ * Off-script (docs/bot/concerns-playbook.md): the second off-script reply
+ * in a row gets an offer to stop; a third ends the check-in for today.
+ */
+export const OFF_SCRIPT_OFFER = "Is now a bad time? No problem if so: we can pick this up another day. If you'd like to carry on, just answer the question above.";
+export const OFF_SCRIPT_CLOSE = "Let's leave it there for today. We'll pick this up another time.";

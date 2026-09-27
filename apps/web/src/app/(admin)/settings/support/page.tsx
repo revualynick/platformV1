@@ -6,6 +6,7 @@ import type { SupportSettings } from "@/lib/api";
 import { DataUnavailable } from "@/components/data-unavailable";
 import { logPageError } from "@/lib/page-errors";
 import { SupportForm } from "./support-form";
+import { WordingForm, SignOffForm } from "./wording-form";
 
 /**
  * Support signposting (docs/bot/concerns-playbook.md). Who the bot points
@@ -63,6 +64,43 @@ export default async function SupportSettingsPage() {
           />
         )}
       </div>
+
+      {!isDemo && settings && (
+        <div className="card-enter mb-8 rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <h2 className="font-display text-base font-semibold text-stone-800">Wording</h2>
+          <p className="mt-1 text-sm text-stone-500">
+            The bot writes a short acknowledgement of its own, then sends this wording exactly as it is here. Your HR
+            team should read it and sign it off, and can change it to fit your policy and tone.
+          </p>
+          <div className={`mt-4 rounded-xl px-4 py-3 text-sm ${settings.signoff?.current ? "bg-forest/10 text-forest" : "bg-amber-50 text-amber-900"}`}>
+            {settings.signoff?.current
+              ? `Signed off by ${settings.signoff.name} (${settings.signoff.role}) on ${new Date(settings.signoff.at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}.`
+              : settings.signoff
+                ? `Changed since ${settings.signoff.name} (${settings.signoff.role}) signed it off. Please have it signed off again.`
+                : "Not signed off yet. Until it is, the bot uses the wording below as it stands."}
+          </div>
+          <div className="mt-6">
+            <WordingForm wording={settings.wording} defaults={settings.defaults} placeholders={settings.placeholders} />
+          </div>
+          <h3 className="mt-8 text-xs font-medium uppercase tracking-wider text-stone-400">What people will see</h3>
+          <dl className="mt-2 space-y-3 text-sm">
+            {([
+              ["Struggling", settings.previews.wellbeing],
+              ["Possible risk", settings.previews.safety],
+              ["Conduct", settings.previews.conduct],
+            ] as const).map(([name, text]) => (
+              <div key={name} className="rounded-xl bg-stone-50 px-4 py-3">
+                <dt className="text-xs font-medium text-stone-500">{name}</dt>
+                <dd className="mt-1 text-stone-700">{text}</dd>
+              </div>
+            ))}
+          </dl>
+          <h3 className="mt-8 text-xs font-medium uppercase tracking-wider text-stone-400">Record your HR team&apos;s sign-off of the wording above</h3>
+          <div className="mt-2">
+            <SignOffForm />
+          </div>
+        </div>
+      )}
 
       <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
         <h2 className="font-display text-base font-semibold text-stone-800">How often the bot pointed people to support</h2>

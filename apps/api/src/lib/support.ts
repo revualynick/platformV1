@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { orgSettings, supportSignposts, type TenantDb } from "@revualy/db";
 import type { OrgResources } from "./bot-references.js";
-import { EVAL_ORG } from "./bot-references.js";
+import { EVAL_ORG, wordingPreviews } from "./bot-references.js";
 
 /**
  * Support signposting (docs/bot/concerns-playbook.md, Nick 2026-09-27).
@@ -28,18 +29,42 @@ export function isSupportPhase(phase: string | null | undefined): boolean {
   return phase === "support";
 }
 
+export interface WordingSignoff {
+  name: string;
+  role: string;
+  at: string;
+  /** The admin who recorded it in Revualy. */
+  recordedBy: string;
+  /** wordingHash() of what was signed off. */
+  hash: string;
+}
+
 export interface SupportSettings {
   contact: string;
   details: string;
   outside: string;
+  wording: { support?: string; conduct?: string };
+  signoff: WordingSignoff | null;
 }
 
 export async function loadSupportSettings(db: DbOrTx): Promise<SupportSettings> {
   const [row] = await db
-    .select({ contact: orgSettings.supportContact, details: orgSettings.supportDetails, outside: orgSettings.supportOutside })
+    .select({
+      contact: orgSettings.supportContact,
+      details: orgSettings.supportDetails,
+      outside: orgSettings.supportOutside,
+      wording: orgSettings.supportWording,
+      signoff: orgSettings.supportWordingSignoff,
+    })
     .from(orgSettings)
     .limit(1);
-  return { contact: row?.contact ?? "", details: row?.details ?? "", outside: row?.outside ?? "" };
+  return {
+    contact: row?.contact ?? "",
+    details: row?.details ?? "",
+    outside: row?.outside ?? "",
+    wording: row?.wording ?? {},
+    signoff: row?.signoff ?? null,
+  };
 }
 
 /** What the bot's fixed wording needs, from the organisation's settings. */
@@ -56,7 +81,18 @@ export async function loadSupportResources(db: DbOrTx): Promise<OrgResources> {
     supportContact: contact,
     supportDetails: settings.details,
     supportOutside: settings.outside,
+    wording: settings.wording,
   };
+}
+
+/**
+ * A fingerprint of exactly what people would see (the rendered wording,
+ * with the contact and details filled in). A sign-off covers this; any
+ * change to the wording, contact or details makes it stale.
+ */
+export function wordingHash(org: OrgResources): string {
+  const p = wordingPreviews(org);
+  return createHash("sha256").update(JSON.stringify([p.wellbeing, p.safety, p.conduct])).digest("hex");
 }
 
 /** First day of the month, UTC: the counts' key. */
