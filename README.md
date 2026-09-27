@@ -72,6 +72,7 @@ Full guide: `docs/local-testing.md`. Staging on the Linux box: `docs/staging.md`
 
 Newest first. Each line links to where the detail lives. When a decision replaces an earlier one, say so.
 
+- **2026-09-28** Before a real demo tenant: simulate a month with 100 generated people on the staging box, with a faked clock stepped a day at a time, the real models for the bot and a local model for the people. The clean month becomes the demo tenant. `docs/demo-simulation-plan.md`
 - **2026-09-27** The concern wording belongs to each client: its HR team signs it off and can adjust it in the admin settings; Revualy supplies defaults. Replaces a one-off Revualy review. `docs/build/2026-09-27-wording-signoff-off-script.md`
 - **2026-09-27** Wellbeing and safety: signpost, the way Claude points to 111 or 999, but to a named person at the organisation who is better placed to support them, with the client's own details. Nothing passed on, nothing recorded about the person, only monthly counts. Replaces live safety escalation and W1/W2/C1/S1/S2 (and a consented request queue tried the same day). Reference path live in conversations. `docs/bot/concerns-playbook.md`
 - **2026-09-27** Break-glass: an admin can open read-only content access to one person for a formal process, on a logged reason, for a dated period and up to 30 days. No second approver for the content view; raw content will need one. The subject is told unless a hold is set, and a hold ends with the grant. `docs/build/2026-09-27-break-glass.md`
