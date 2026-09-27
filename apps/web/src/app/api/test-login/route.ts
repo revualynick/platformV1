@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { or, eq } from "drizzle-orm";
 import { users, authUsers, authSessions } from "@revualy/db/schema";
 import { getDb } from "@/lib/db";
 import { publicUrl } from "@/lib/public-url";
@@ -85,11 +85,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "User is deactivated" }, { status: 403 });
   }
 
-  // Upsert the matching auth_user row (linked by tenant_user_id).
+  // Upsert the matching auth_user row: linked by tenant_user_id, or by email
+  // when the link is stale (e.g. the tenant users were reseeded), in which
+  // case it is relinked below.
   const [existingAuth] = await db
     .select({ id: authUsers.id })
     .from(authUsers)
-    .where(eq(authUsers.tenantUserId, bizUser.id));
+    .where(or(eq(authUsers.tenantUserId, bizUser.id), eq(authUsers.email, bizUser.email)));
 
   let authUserId: string;
   if (existingAuth) {
@@ -102,6 +104,7 @@ export async function GET(request: NextRequest) {
         onboardingCompleted: true,
         name: bizUser.name,
         email: bizUser.email,
+        tenantUserId: bizUser.id,
       })
       .where(eq(authUsers.id, authUserId));
   } else {

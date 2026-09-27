@@ -30,6 +30,9 @@ import {
   campaigns,
   feedbackDigests,
   selfReflections,
+  authSessions,
+  authAccounts,
+  authUsers,
   discoveredThemes,
   calibrationReports,
   pulseCheckConfig,
@@ -68,6 +71,12 @@ async function seed() {
   // Delete in reverse FK order to avoid constraint violations.
   // Every tenant table must be listed here.
   console.log("  Clearing existing data...");
+  // Sign-in records belong to the users being wiped: left behind, their
+  // emails block the reseeded people from signing in (auth_user.email is
+  // unique; found on staging 2026-09-27).
+  await db.delete(authSessions);
+  await db.delete(authAccounts);
+  await db.delete(authUsers);
   await db.delete(goalUpdateSuggestions);
   await db.delete(checkInMeetings);
   await db.delete(goalUpdates);
