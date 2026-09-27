@@ -191,6 +191,7 @@ export async function runSweep(
       AND NOT EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
       AND NOT EXISTS (SELECT 1 FROM self_reflections r WHERE r.conversation_id = c.id)
       AND c.phase <> 'support'
+      AND NOT (c.off_script_streak >= 3 AND NOT EXISTS (SELECT 1 FROM conversation_theme_outcomes o WHERE o.conversation_id = c.id AND o.outcome <> 'unanswered'))
   `)) as unknown as Array<{ id: string }>;
   result.analysisRequeued = await each(unanalysed, "re-queue analysis", (c) => queueAnalysis(deps, c.id, bucket));
 
@@ -211,13 +212,15 @@ export async function runSweep(
   const retentionCutoff = new Date(now.getTime() - DELIVERY_RETENTION_DAYS * DAY_MS);
   // A conversation that ended for a support concern is never analysed, so
   // it is purgeable on age alone, self-reflections included: the disclosure
-  // isn't kept.
+  // isn't kept. The same for one that ended on off-script replies without a
+  // real answer: there is nothing in it to keep.
   const purgeable = (await db.execute(sql`
     SELECT c.id FROM conversations c
     WHERE c.status NOT IN ('scheduled', 'initiated', 'in_progress', 'closing')
       AND COALESCE(c.closed_at, c.last_activity_at, c.created_at) < ${ts(retentionCutoff)}
       AND (
         c.phase = 'support'
+        OR (c.off_script_streak >= 3 AND NOT EXISTS (SELECT 1 FROM conversation_theme_outcomes o WHERE o.conversation_id = c.id AND o.outcome <> 'unanswered'))
         OR (
           c.interaction_type <> 'self_reflection'
           AND (

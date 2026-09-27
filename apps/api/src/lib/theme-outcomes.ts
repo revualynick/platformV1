@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { TenantDb, ThemeOutcome } from "@revualy/db";
 import { conversationThemeOutcomes } from "@revualy/db";
 
@@ -66,4 +66,14 @@ export async function recordUnreachedThemes(db: Writer, conv: OutcomeConversatio
     .insert(conversationThemeOutcomes)
     .values(conv.selectedThemeIds.map((themeId) => base(conv, themeId)))
     .onConflictDoNothing();
+}
+
+/** Whether any theme in this conversation got a real answer (answered or weak). */
+export async function hasAnsweredTheme(db: Writer, conversationId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: conversationThemeOutcomes.id })
+    .from(conversationThemeOutcomes)
+    .where(and(eq(conversationThemeOutcomes.conversationId, conversationId), ne(conversationThemeOutcomes.outcome, "unanswered")))
+    .limit(1);
+  return Boolean(row);
 }

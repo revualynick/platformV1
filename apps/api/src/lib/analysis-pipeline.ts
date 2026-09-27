@@ -1,5 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { isSupportPhase } from "./support.js";
+import { hasAnsweredTheme } from "./theme-outcomes.js";
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
@@ -86,6 +87,10 @@ export async function runAnalysisPipeline(
   // Ended for a support concern (docs/bot/concerns-playbook.md): what they
   // wrote is never analysed or stored as feedback.
   if (isSupportPhase(conversation.phase)) {
+    return { success: true, failedSteps: [], feedbackEntryId: null };
+  }
+  // Ended on three off-script replies without a real answer: nothing to analyse.
+  if (conversation.offScriptStreak >= 3 && !(await hasAnsweredTheme(db, conversationId))) {
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 

@@ -9,7 +9,7 @@ import { buildJobId } from "./job-ids.js";
 import { planTurn, themeQuestion, type PlanInput } from "./turn-planner.js";
 import { runReferencePath, compose, type ReferenceNext } from "./reference-path.js";
 import { OFF_SCRIPT_CLOSE, OFF_SCRIPT_OFFER, SERIOUS, type Concern } from "./bot-references.js";
-import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
+import { hasAnsweredTheme, recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
 import { openTicket, openTicketForConversation, type TicketHandle } from "./tickets/reader.js";
 import { countSignpost, isSupportPhase, loadSupportResources } from "./support.js";
@@ -600,6 +600,8 @@ async function handleConcern(
 
   const ending = next === "pause";
   const support = concern === "wellbeing" || concern === "safety";
+  // Ended on off-script replies: analysed only if they answered something first.
+  let answeredBefore = true;
   try {
     await db.transaction(async (tx) => {
       const now = new Date();
@@ -637,6 +639,7 @@ async function handleConcern(
         await markTicketDoneForConversation(tx, conv.id, "incomplete", now);
       }
       if (concern === "wellbeing" || concern === "safety" || concern === "conduct") await countSignpost(tx, concern, now);
+      if (streak >= 3) answeredBefore = await hasAnsweredTheme(tx, conv.id);
     });
   } catch (err) {
     if (err instanceof Superseded) return { status: "superseded" };
@@ -645,7 +648,7 @@ async function handleConcern(
   }
 
   // A support conversation is never analysed; a conduct report is, as before.
-  if (ending && !support) await queueAnalysis(deps, conv.id);
+  if (ending && !support && answeredBefore) await queueAnalysis(deps, conv.id);
   await deliverOutbox(db, deps, conv.id, opts);
   return ending ? { status: "closed" } : { status: "replied" };
 }

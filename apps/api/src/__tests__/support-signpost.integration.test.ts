@@ -305,7 +305,17 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
     expect(third.result.status).toBe("closed");
     expect(third.text).toBe("Let's leave it there for today. We'll pick this up another time.");
     expect(await conv(first.id)).toMatchObject({ status: "incomplete", phase: "closing" });
-    // Ended like a quiet one: analysed as partial.
+    // Nothing but off-script replies: nothing to analyse, by any route.
+    expect(analysis.map((a) => a.data.conversationId)).not.toContain(first.id);
+    const res = await runAnalysisPipeline(db, fakeLLM("none", "none"), first.id, quiet);
+    expect(res).toMatchObject({ success: true, feedbackEntryId: null });
+  });
+
+  it("an off-script close after a real answer is analysed as partial", async () => {
+    const first = await turn(fakeLLM("none", "none"), "Sam unblocked three of us on the release, calmly.");
+    const offScript = fakeLLM("off_script", "off_script");
+    for (const text of ["lol", "joke please", "football?"]) await again(first.id, offScript, text);
+    expect(await conv(first.id)).toMatchObject({ status: "incomplete", offScriptStreak: 3 });
     expect(analysis.map((a) => a.data.conversationId)).toContain(first.id);
   });
 
