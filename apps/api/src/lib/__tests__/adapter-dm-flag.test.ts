@@ -23,6 +23,13 @@ describe("Slack DM flag and message id", () => {
     expect((await slack.normalizeInbound(event("channel", "C999")))?.isDirectMessage).toBe(false);
   });
 
+  it("ignores messages posted by an app, even when they carry a user (review H4)", async () => {
+    const own = { type: "event_callback", event: { type: "message", user: "U1", bot_id: "B1", channel: "D1", channel_type: "im", ts: "1790000000.000200", text: "bot reply" } };
+    expect(await slack.normalizeInbound(own)).toBeNull();
+    const app = { type: "event_callback", event: { type: "message", user: "U1", app_id: "A1", channel: "D1", channel_type: "im", ts: "1790000000.000300", text: "bot reply" } };
+    expect(await slack.normalizeInbound(app)).toBeNull();
+  });
+
   it("makes the message id unique across channels (Slack ts is per channel)", async () => {
     const a = await slack.normalizeInbound(event("im", "D1"));
     const b = await slack.normalizeInbound(event("im", "D2"));

@@ -97,6 +97,12 @@ export class SlackAdapter implements ChatAdapter {
     if (!event || event.type !== "message" || event.subtype || !event.user) {
       return null; // Ignore non-message events, message edits/deletes, and bot messages
     }
+    // Messages posted by an app arrive with bot_id (and can still carry a
+    // user), so the subtype check alone would let the bot answer itself
+    // (review H4).
+    if (event.bot_id || event.app_id || event.bot_profile) {
+      return null;
+    }
 
     // Validate required fields
     if (typeof event.ts !== "string" || typeof event.channel !== "string" || typeof event.user !== "string") {
