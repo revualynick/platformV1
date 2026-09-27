@@ -12,7 +12,6 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Verify the 2026-09-26 merges end to end:** nothing has run against real models or Railway. Deploy the branch to the test tenant, re-run the topic grid on the Linux box against the ticket-based engine, and walk each build note's review checklist.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
-- **Concern wording per client:** each client's HR team signs off the wording in `/settings/support` before its people use check-ins (add to the provisioning checklist); re-run the concerns eval with the new default wording; one line on the concern flag in the client DPIA template.
 - **Revoke the eval API key** on the Linux box when its 7 days are up.
 
 ## Bugs
@@ -25,7 +24,6 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 ## Decisions waiting on Nick
 
 - **Concern checks on self-reflections: parked** (Nick, 2026-09-27). Needs a methodical design before anything is built; questions listed in the privacy design doc.
-- **Concerns follow-ups:** C2, keep conduct reports out of the subject's feedback until HR has reviewed them (recommended yes); a separate conduct contact; the model's acknowledgement sometimes repeats the fixed wording ("we'll stop here" twice); serious turns take 8-16 s; answers given before a wellbeing or safety disclosure are dropped with the conversation (accepted for now).
 - **Privacy design open questions** (5, at the end of the design doc).
 - **Calendar model:** priority weighting as client-adjustable sliders, possibly a learning algorithm later (Nick, 2026-09-26). Still open: focus when the title is hidden, one check-in per meeting, joiner dates, whether sensitive-looking titles reach Haiku at all.
 - **Imports:** users with direct reports in the file become managers automatically; new `read-excel-file` dependency; historical feedback is stored but nothing shows it.
@@ -34,6 +32,18 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Topic grid:** 8 borderline expectations in `apps/api/eval/lib/topic-grid.ts`.
 - **Admin assistant:** 11 open questions in `docs/design/admin-assistant.md`.
 - **Paraphrases file** is only on the Linux box; copying it back needs Nick's permission.
+
+- **C2:** should a conduct report become feedback about the colleague? Recommendation: keep it out until HR has reviewed it.
+- **Separate conduct contact:** today conduct reports point to the support contact.
+
+## Parked: concern wording (Nick, 2026-09-27)
+
+Important, but refined client by client with each HR team, so parked until a client onboards. The mechanism is built (templates, previews and HR sign-off in `/settings/support`).
+- HR sign-off as a provisioning checklist step; one line on the concern flag in the client DPIA template.
+- Voice of the model-written replies: they repeat the closing line ("we'll stop here" twice), and use em-dashes and "Good question".
+- The 19 wording proposals from the two books (`docs/research/coaching-habit.md`), and re-running the concerns eval against whatever default wording is chosen.
+- Serious turns take 8-16 s (Opus reading the playbook).
+- Answers given before a wellbeing or safety disclosure are dropped with the conversation (accepted).
 
 ## Features and later work
 

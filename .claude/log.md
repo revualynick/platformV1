@@ -428,3 +428,4 @@
 ## 2026-09-27: branch pushed
 - beta-hardening pushed to origin as its own branch (103 commits ahead of origin/main), no PR, main untouched (Nick: Railway builds from git, keep it on a branch). Railway deploy branch not verified: CLI not logged in
 - Local main still has one unpushed commit (c7ac771) from before; left alone
+- Nick: concern wording parked (refined client by client); backlog has a Parked section; C2 and a separate conduct contact stay as decisions
