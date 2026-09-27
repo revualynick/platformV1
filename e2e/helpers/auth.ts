@@ -32,6 +32,10 @@ export async function loginAs(page: Page, role: Role, redirect = "/home") {
 
 /** Clear the session cookie (sign-out simulation). */
 export async function logout(page: Page) {
+  // Let in-flight requests finish first: a session refresh still loading
+  // (/api/auth/session) sets the cookie again after it's cleared, which the
+  // fast production build exposed (staging, 2026-09-27).
+  await page.waitForLoadState("networkidle").catch(() => {});
   await page.context().clearCookies();
 }
 
