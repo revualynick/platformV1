@@ -1,6 +1,6 @@
 # Demo tenant and a simulated month
 
-Status: agreed 2026-09-28, in progress (step 1). Nick's decisions: run on the staging box first, then provision a Railway demo tenant from the result; a faked clock stepping a day at a time; the real models for the bot, analysis and calendar model, a local model for the 100 simulated people.
+Status: agreed 2026-09-28, in progress (step 1). Nick's decisions: run on the staging box first, then provision a Railway demo tenant from the result; a faked clock stepping a day at a time; every model call (the bot, analysis, calendar model and the 100 simulated people) through `claude -p` on the subscription, not the API (Nick: upgrading the subscription is cheaper than API spend).
 
 ## Why
 Everything is tested in pieces, but nothing has run for weeks with a real-sized organisation. Contact limits, fortnightly releases, streaks, digests, retention and the calendar model all interact over time. A simulated month shows whether they do the right thing together, and its output is a believable demo tenant, not mock data.
@@ -18,7 +18,7 @@ Everything is tested in pieces, but nothing has run for weeks with a real-sized 
    - Calendar: generated events written to `calendar_events`.
    - 1:1 notes: a fake `MeetingSource` serving generated Gemini-style notes for scheduled 1:1s.
    - Email: captured to a table or file, never sent.
-4. **Personas.** A local model on the box's GPU writes each person's replies from their persona and the conversation, through the OpenAI-compatible provider. Scripted edge cases, each on a set day:
+4. **Personas.** `claude -p` writes each person's replies from their persona and the conversation (`scripts/claude-llm-shim.mjs` already presents it as a provider). Scripted edge cases, each on a set day:
    - never replies; terse; off-topic three times; asks who sees their answers
    - a wellbeing disclosure; a possible-risk disclosure; a conduct report
    - a late addition; says stop, then starts again
@@ -51,6 +51,8 @@ Everything is tested in pieces, but nothing has run for weeks with a real-sized 
 - Integration tests that fail rather than skip when the database is expected (backlog).
 
 ## Cost and limits
-- Roughly $20-40 of API spend per month-run for the bot, analysis and calendar model. Not measured at this scale; the first days of the run will tell us.
-- Personas from a local model write less naturally than people. The run tests mechanics, limits and privacy rules; it's weaker evidence for how real people will feel about the bot.
+- No API spend: every call goes through `claude -p`. The run records each call's tokens and the equivalent API cost (`--output-format json`), so it still estimates what production would pay (roughly $20-40 a month for 100 people, unmeasured at this scale).
+- The subscription's usage limits: a month-run is several thousand calls. The driver pauses and resumes when a limit is hit; Nick may move to a higher plan.
+- `claude -p` is slower than the API (2.9 s against 2.2 s median in the 26 September comparison), so latency figures from the run overstate production.
+- Simulated people write less naturally than real ones. The run tests mechanics, limits and privacy rules; it's weaker evidence for how real people will feel about the bot.
 - The simulation doesn't exercise Google itself (Chat, Calendar, Meet); `docs/real-workspace-checklist.md` still covers that.
