@@ -417,3 +417,10 @@
 - Reference path live via handleConcern: privacy/off_script carry on; wellbeing/safety signpost, end, never analysed; conduct signposts HR-style and is analysed as before (C2 open); model failure still sends fixed wording
 - API 601/601, typecheck 17/17; staging deploy ran 0048; full browser suite 208 passed, 0 failed (no retries)
 - Not run: a live conversation with real models on staging; two-off-script stop offer not built
+
+## 2026-09-27: client-owned wording, off-script offer, real-model run
+- Nick: wording is signed off by each client's HR team and adjustable (not a Revualy review); build the off-script offer; run the real models
+- Wording templates with defaults, sign-off with a hash of the rendered wording (stale on any change), editor and previews in /settings/support (0049)
+- Off-script: 2nd in a row offers to stop, 3rd ends; real run found a 3x off-script check-in analysed into a junk reflection: fixed (analysed only after a real answer; purged otherwise)
+- Real-model run on staging: wellbeing (classed safety), safety, conduct, privacy, off-script, bad day all behaved; 8-16 s for serious turns; conduct still becomes feedback (C2 open)
+- API 608/608, typecheck 17/17; full browser suite on staging 208 passed, 0 failed (no retries)

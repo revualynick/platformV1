@@ -2,7 +2,7 @@
 
 What the bot does when a check-in turns into something other than feedback. The model **recognises** the situation; everything that happens next is fixed here and in code. The model never improvises a notification, a promise or a resource.
 
-Status: proposed defaults. Items marked **DECISION** need Nick's call. The safety section also needs review by someone with HR or clinical grounding before any real employee sees it.
+Status: proposed defaults. Items marked **DECISION** need Nick's call. The fixed wording is the client's: its HR team signs it off and can adjust it in `/settings/support` (Nick, 2026-09-27), so there is no separate Revualy review step.
 
 **Decided by Nick (2026-09-27): signpost, don't hand over.** Wellbeing and safety are one path, and the product doesn't judge risk or tell anyone. Above the threshold the bot does what Claude does with 111 or 999, except it points to a person at the organisation who is better placed to support them: it says it's only a feedback assistant, names who to reach out to, and shows the organisation's own support details (written by the client, in line with its safeguarding policy). Nothing is passed on and nothing is recorded about the person; the only data kept is a monthly count of how often each signpost was shown. This replaces live safety escalation, the consented request queue built and removed the same day, and decisions W1, W2, C1, S1 and S2 from the 2026-09-26 draft. The reference path is live in conversations (item 1 agreed the same day).
 
@@ -33,8 +33,10 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 ### off_script: asks the bot something unrelated, jokes, tests it, or is confused
 
 - One short, friendly redirect, or a one-line honest answer if it is about the check-in itself.
-- After two off-script replies in a row: offer to stop and pick up next time.
-- No record.
+- The second off-script reply in a row adds: "Is now a bad time? No problem if so: we can pick this up another day. If you'd like to carry on, just answer the question above." The check-in stays open.
+- A third in a row ends it: "Let's leave it there for today. We'll pick this up another time." It is analysed as partial only if they answered a theme first; otherwise there is nothing to analyse and it is purged after retention.
+- A privacy question or a real answer resets the run.
+- No record beyond the conversation itself.
 
 ### Threshold: a bad day is not a concern
 
@@ -77,6 +79,10 @@ Why this shape: judging risk is clinical triage, and telling anyone without the 
 - Keep asking feedback questions after a wellbeing, conduct or safety concern.
 - Pass on anyone's name or anything they wrote.
 - Use a support conversation as feedback.
+
+## The wording belongs to the client (Nick, 2026-09-27)
+
+The support and conduct wording are templates with `{contact}`, `{details}` and `{outside}`. Revualy's defaults apply until the client's HR team writes its own in `/settings/support`, which shows exactly what people will see. The HR team signs it off there (name, role, date, recorded with a hash of the wording as shown). Changing the wording, the contact or the details marks the sign-off as stale. Sign-off is not a gate: unsigned wording is used as it stands, and the page says so.
 
 ## Settings the organisation provides
 
