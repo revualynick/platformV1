@@ -106,7 +106,7 @@ fi
 USERS=$("${COMPOSE[@]}" exec -T postgres psql -U revualy -d revualy_staging -tAc "select count(*) from users" 2>/dev/null || echo 0)
 if [ "${USERS// /}" = "0" ] || [ "${SEED:-auto}" = "force" ]; then
   log "Seed demo org (database was empty, or SEED=force: this wipes staging data)"
-  (cd "$RELEASE" && CI=true pnpm install --frozen-lockfile >/dev/null && pnpm --filter @revualy/db seed)
+  (cd "$RELEASE" && CI=true pnpm install --frozen-lockfile >/dev/null && pnpm turbo build --filter=@revualy/db^... >/dev/null && pnpm --filter @revualy/db seed)
 fi
 
 echo "Staging is up at $SHA (api $api, web $web, test login $TEST_LOGIN_ENABLED)"
