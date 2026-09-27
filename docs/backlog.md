@@ -73,6 +73,8 @@ Important, but refined client by client with each HR team, so parked until a cli
 
 ## Technical debt
 
+- **Integration tests skip silently when the database check times out** (seen 2026-09-28: 8 tests skipped once under load, all passed on rerun). Make them fail instead when a database is expected (for example `REQUIRE_DB=1` in CI and the staging runner), so a skip can't hide a failure.
+
 - 1:1 screens follow-ups: admin view of which modes managers use and who has Google connected; test a real Gemini .docx and .vtt upload (a .txt was verified on staging).
 - `pnpm tenant:fleet migrate` runs migrations under the Postgres service's variables, which lack `REVIEWER_PSEUDONYM_SECRET`, so migration 0043 would refuse on a tenant with feedback rows. Deployed tenants migrate at API boot with the secret, so this only affects the fleet tool. Fix: run it through the API service, or pass the secret (found 2026-09-26).
 - Local Postgres (Docker bind mount on macOS) occasionally fails `CREATE DATABASE` under heavy parallel load with "could not open file ... Permission denied". Intermittent, environmental; seen twice on 2026-09-26.
