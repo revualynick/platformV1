@@ -123,7 +123,9 @@ test("admin: Add Person — create then Deactivate", async ({ page }) => {
   // (Assert the durable outcome — the row — rather than racing the modal close.)
   await page.waitForTimeout(1_500);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText(personEmail)).toBeVisible({ timeout: 10_000 });
+  // Settles to exactly one row (the list can briefly show the new person
+  // twice while it refreshes after the action; a lasting duplicate fails).
+  await expect(page.getByRole("cell", { name: personEmail }).filter({ visible: true })).toHaveCount(1, { timeout: 10_000 });
 
   // ── Deactivate ─────────────────────────────────────────────────────────────
   const personRow = page.locator("tr").filter({ hasText: personEmail });
@@ -203,7 +205,8 @@ test("admin: Goal Cycle — create cycle + reject invalid date range", async ({ 
 
   // The cycle name appears in the list — use first() to avoid strict-mode violation
   // when it also appears in the "Org Goals — <cycleName>" heading (if it becomes current).
-  await expect(page.getByText(cycleName).first()).toBeVisible({ timeout: 10_000 });
+  // visible: skip the hidden copy the production build streams through first.
+  await expect(page.getByText(cycleName).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
   expect(errors, `console errors:\n${errors.join("\n")}`).toHaveLength(0);
 });

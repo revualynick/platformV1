@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -19,6 +20,7 @@ export function CycleModal({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -29,6 +31,10 @@ export function CycleModal({
       } else {
         formRef.current?.reset();
         setOpen(false);
+        // The action revalidates the page, but in the production build the
+        // new cycle sometimes didn't appear until a reload (staging,
+        // 2026-09-27). Refresh explicitly so it always shows.
+        router.refresh();
       }
     });
   }

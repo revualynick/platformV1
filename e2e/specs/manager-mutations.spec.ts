@@ -56,7 +56,9 @@ test("manager: full CRUD on private notes for a direct report", async ({ page })
   await notesHeading.scrollIntoViewIfNeeded();
 
   // ── CREATE ──────────────────────────────────────────────────────────────────
-  const addTextarea = page.getByPlaceholder(/add a private note/i);
+  // visible: the production build streams parts of the page through a hidden
+  // holder first, so a locator can briefly match two copies.
+  const addTextarea = page.getByPlaceholder(/add a private note/i).filter({ visible: true });
   await addTextarea.waitFor({ timeout: 10_000 });
   await addTextarea.fill(noteText);
   await page.getByRole("button", { name: /add note/i }).click();
@@ -86,7 +88,9 @@ test("manager: full CRUD on private notes for a direct report", async ({ page })
   await page.goto(memberHref, { waitUntil: "domcontentloaded" });
   await page.getByText(/Private Notes/i).first().waitFor({ timeout: 20_000 });
   await page.getByText(/Private Notes/i).first().scrollIntoViewIfNeeded();
-  await expect(page.getByText(editedText)).toBeVisible({ timeout: 12_000 });
+  // Scoped to the page body, and exactly once: the note list shouldn't show
+  // it twice (a second copy outside <main> is layout, not data).
+  await expect(page.getByRole("main").getByText(editedText).filter({ visible: true })).toHaveCount(1, { timeout: 12_000 });
   await expect(page.getByText(noteText)).toBeHidden({ timeout: 5_000 });
 
   // ── DELETE ──────────────────────────────────────────────────────────────────
@@ -234,7 +238,7 @@ test("manager: create questionnaire at /team/questions and assert it appears in 
   // to assert persistence robustly (avoids racing the flash/close cycle).
   await page.waitForTimeout(2_500);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByText(qName)).toBeVisible({ timeout: 12_000 });
+  await expect(page.getByText(qName).filter({ visible: true })).toBeVisible({ timeout: 12_000 });
 
   expect(errors, `console errors:\n${errors.join("\n")}`).toHaveLength(0);
 });

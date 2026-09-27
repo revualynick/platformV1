@@ -6,6 +6,14 @@ import { loginAs, collectErrors } from "../helpers/auth";
  * and the admin limits. Round-trips leave settings as they found them.
  */
 
+/** Click Save and wait for the save to finish (the "Saved" label only lasts 2 s). */
+async function saveAndWait(page: import("@playwright/test").Page) {
+  const done = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/settings/one-on-ones"));
+  await page.getByRole("button", { name: "Save" }).click();
+  await done;
+  await expect(page.getByRole("button", { name: /^Save/ })).toBeEnabled();
+}
+
 test("manager 1:1 notes page: mode, approvals, upload, goals, recent imports", async ({ page }) => {
   const errors = collectErrors(page);
   await loginAs(page, "manager", "/team/one-on-ones");
@@ -39,15 +47,13 @@ test("admin sets the limit; lowering it lowers the default; restore", async ({ p
   await expect(page.getByLabel(/Up to automatic/)).toBeDisabled();
   await page.getByLabel(/Manual only/).check();
   await expect(page.locator("select option")).toHaveText(["Manual"]);
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("button", { name: /Saved/ })).toBeVisible();
+  await saveAndWait(page);
   await page.reload();
   await expect(page.getByLabel(/Manual only/)).toBeChecked();
 
   await page.getByLabel(/Up to semi-automatic/).check();
   await page.locator("select").selectOption("semi_automatic");
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("button", { name: /Saved/ })).toBeVisible();
+  await saveAndWait(page);
   await page.reload();
   await expect(page.getByLabel(/Up to semi-automatic/)).toBeChecked();
 });

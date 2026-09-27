@@ -50,7 +50,8 @@ test("B3 — engagement dashboard reflects real feedback (not seed/0)", async ({
   // reflects recent activity, not only the old fixed-date seed rows. (The seed
   // adds this week's engagement relative to today.)
   const now = new Date();
-  const month = now.toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+  // First three letters: "Sep" matches both "Sep" and "Sept" (locale data varies).
+  const month = now.toLocaleString("en-GB", { month: "short", timeZone: "UTC" }).slice(0, 3);
   const iso = now.toISOString().slice(0, 7);
   const body = await page.locator("body").innerText();
   expect(body, "B3: current-week engagement present").toMatch(new RegExp(`${month}|${iso}`));
