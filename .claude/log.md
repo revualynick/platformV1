@@ -436,3 +436,5 @@
 - Real-Workspace checklist written (docs/real-workspace-checklist.md), marks the Google Chat assumptions never seen live
 - Full code review of the branch running (code-review skill, high)
 - API 616/616, tenant scripts 34/34, typecheck 17/17
+- Code review, four passes (recent work, packages, API, web): 40 findings, 38 fixed (bf14fd6, 381719a, migration 0051), 2 for Nick (flagged items raw text to managers; org-wide raw export). Notable: admin conversation routes showed transcripts; per-person export let admins through; redirect host from X-Forwarded-Host; meeting stripper over-stripped; support follow-ups were added to feedback
+- API 636/636, typecheck 17/17; staging full suite 208 passed, 0 failed after 0051
