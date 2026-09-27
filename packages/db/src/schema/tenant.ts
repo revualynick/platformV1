@@ -1949,3 +1949,42 @@ export const auditLog = pgTable("audit_log", {
   prevHash: char("prev_hash", { length: 64 }).notNull(),
   rowHash: char("row_hash", { length: 64 }).notNull(),
 });
+
+// ── Break-glass access grants ─────────────────────────
+
+/**
+ * Break-glass (migration 0046, docs/design/privacy-and-agent-access.md):
+ * an admin who needs a person's content for a formal process records a
+ * reason and gets read-only access to what the direct manager sees, for a
+ * dated period and a limited time. Every grant, read, hold and revocation
+ * is also written to the audit log. The subject is told unless a hold is
+ * set, and a hold never outlasts the grant.
+ */
+export const accessGrants = pgTable(
+  "access_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    granteeId: uuid("grantee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Only "content" today; raw content will need a second approver. */
+    scope: varchar("scope", { length: 20 }).$type<"content">().notNull().default("content"),
+    reason: encryptedText("access_grants", "reason").notNull(),
+    periodStart: date("period_start", { mode: "string" }).notNull(),
+    periodEnd: date("period_end", { mode: "string" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Set: the subject isn't told until the hold is lifted or the grant ends. */
+    holdReason: encryptedText("access_grants", "hold_reason"),
+    holdLiftedAt: timestamp("hold_lifted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    index("idx_access_grants_grantee_subject").on(table.granteeId, table.subjectId),
+    index("idx_access_grants_subject").on(table.subjectId),
+  ],
+);

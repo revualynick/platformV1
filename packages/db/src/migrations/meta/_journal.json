@@ -323,6 +323,13 @@
       "when": 1790490000000,
       "tag": "0045_one_on_one_mode_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0046_access_grants",
+      "breakpoints": true
     }
   ]
 }

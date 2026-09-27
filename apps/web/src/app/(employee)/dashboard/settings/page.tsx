@@ -6,6 +6,7 @@ import { getNotificationPreferences as queryNotifPrefs } from "@revualy/db/queri
 import { getGoogleIntegrationStatus } from "@/lib/api";
 import { notificationPreferences as mockPreferences } from "@/lib/mock-data";
 import { PreferenceToggles } from "./preference-toggles";
+import { RecordAccessList } from "@/components/record-access";
 
 const PREF_LABELS: Record<string, { label: string; description: string }> = {
   weekly_digest: {
@@ -60,6 +61,8 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      {!isDemo && <RecordAccessList />}
+
       <div className="rounded-2xl border border-stone-200/80 bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-stone-900">
           Notification Preferences

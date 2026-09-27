@@ -2,6 +2,8 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { eq } from "drizzle-orm";
 import { users } from "@revualy/db";
 import { getReportingTree } from "@revualy/db/queries";
+import { appendAudit } from "./audit-log.js";
+import { findActiveGrant } from "./access-grants.js";
 
 type Role = "employee" | "manager" | "admin" | "super_admin";
 
@@ -136,14 +138,33 @@ export async function getAccessLevel(request: FastifyRequest, targetUserId: stri
 
 /**
  * Assert the caller may see a person's content: themselves or their direct
- * manager only. Skip-levels and admins get signals, not content (use
- * {@link assertCanAccessUser} for signal routes). Throws a 403 otherwise.
+ * manager. Skip-levels and admins get signals, not content (use
+ * {@link assertCanAccessUser} for signal routes), unless an admin holds an
+ * active break-glass grant for this person: then reads are allowed and each
+ * one is written to the audit log first. Grants never allow writes, so
+ * routes that change content pass `{ write: true }`. Throws a 403 otherwise.
  */
-export async function assertContentAccess(request: FastifyRequest, targetUserId: string): Promise<void> {
+export async function assertContentAccess(
+  request: FastifyRequest,
+  targetUserId: string,
+  opts: { write?: boolean } = {},
+): Promise<void> {
   const level = await getAccessLevel(request, targetUserId);
-  if (level !== "self" && level !== "content") {
-    throw Object.assign(new Error("Insufficient permissions"), { statusCode: 403 });
+  if (level === "self" || level === "content") return;
+  if (!opts.write && level === "signals") {
+    const grant = await findActiveGrant(request.tenant.db, getAuthenticatedUserId(request), targetUserId);
+    if (grant) {
+      await appendAudit(request.tenant.db, {
+        actorId: grant.granteeId,
+        action: "breakglass.read",
+        target: targetUserId,
+        outcome: "ok",
+        details: { grantId: grant.id, route: request.routeOptions.url ?? null },
+      });
+      return;
+    }
   }
+  throw Object.assign(new Error("Insufficient permissions"), { statusCode: 403 });
 }
 
 /**

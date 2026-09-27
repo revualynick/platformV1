@@ -21,6 +21,7 @@ import {
   oneOnOneSessions as mockOneOnOneSessions,
 } from "@/lib/mock-data";
 import Link from "next/link";
+import { RecordAccessNotice } from "@/components/record-access";
 import { sentimentColorFlat, dashboardSessionStatusStyles } from "@/lib/style-constants";
 
 // ── Skeleton fallbacks ─────────────────────────────────
@@ -520,6 +521,8 @@ export default async function EmployeeDashboard() {
           {userName.split(" ")[0]}
         </h1>
       </div>
+
+      {!isDemo && <RecordAccessNotice />}
 
       <DismissibleCard id="employee-orientation" title="New here? Two minutes of context">
         <p>

@@ -1499,3 +1499,86 @@ export async function updateBetweenMeetingGoal(
     body: JSON.stringify(data),
   });
 }
+
+// ── Break-glass access grants ─────────────────────────
+// docs/design/privacy-and-agent-access.md: an admin records a reason and gets
+// read-only content access to one person for a period. Every step is audited.
+
+export type AccessGrantRow = {
+  id: string;
+  granteeId: string;
+  subjectId: string;
+  granteeName: string;
+  subjectName: string;
+  reason: string;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+  expiresAt: string;
+  holdReason: string | null;
+  holdLiftedAt: string | null;
+  revokedAt: string | null;
+  status: "active" | "expired" | "revoked";
+  onHold: boolean;
+};
+
+export type OpenGrant = {
+  id: string;
+  reason: string;
+  periodStart: string;
+  periodEnd: string;
+  expiresAt: string;
+  onHold: boolean;
+};
+
+export type GrantAboutMe = {
+  id: string;
+  granteeName: string;
+  createdAt: string;
+  periodStart: string;
+  periodEnd: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  status: "active" | "expired" | "revoked";
+};
+
+export async function getAccessGrants() {
+  return apiFetch<{ data: AccessGrantRow[] }>("/api/v1/access-grants");
+}
+
+export async function createAccessGrant(data: {
+  subjectId: string;
+  reason: string;
+  periodStart: string;
+  periodEnd: string;
+  days: number;
+  holdReason?: string;
+}) {
+  return apiFetch<{ data: AccessGrantRow }>("/api/v1/access-grants", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function revokeAccessGrant(id: string) {
+  return apiFetch<{ data: AccessGrantRow }>(`/api/v1/access-grants/${id}/revoke`, { method: "POST" });
+}
+
+export async function liftAccessGrantHold(id: string) {
+  return apiFetch<{ data: AccessGrantRow }>(`/api/v1/access-grants/${id}/lift-hold`, { method: "POST" });
+}
+
+/** Opens (and logs a view of) the caller's active grant for a person; null if none. */
+export async function openAccessGrant(subjectId: string): Promise<OpenGrant | null> {
+  try {
+    const res = await apiFetch<{ data: OpenGrant }>(`/api/v1/access-grants/open/${subjectId}`, { method: "POST" });
+    return res.data;
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 403)) return null;
+    throw err;
+  }
+}
+
+export async function getAccessGrantsAboutMe() {
+  return apiFetch<{ data: GrantAboutMe[] }>("/api/v1/access-grants/about-me");
+}

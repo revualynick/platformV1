@@ -386,7 +386,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Goal not found" });
       }
 
-      await assertContentAccess(request, goal.userId);
+      await assertContentAccess(request, goal.userId, { write: true });
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       if (body.status !== undefined) updates.status = body.status;

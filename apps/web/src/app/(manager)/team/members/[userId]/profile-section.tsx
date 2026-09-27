@@ -30,9 +30,11 @@ interface Props {
     observed: ProfileSnapshotRow | null;
     drift: Record<string, number> | null;
   } | null;
+  /** Break-glass view: no invites, no goal changes. */
+  readOnly?: boolean;
 }
 
-export function ProfileSection({ userId, profiles, goals, drift }: Props) {
+export function ProfileSection({ userId, profiles, goals, drift, readOnly = false }: Props) {
   const colourProfile = profiles.find((p) => p.framework === "colour");
   const cdmProfile = profiles.find((p) => p.framework === "cdm");
 
@@ -45,7 +47,7 @@ export function ProfileSection({ userId, profiles, goals, drift }: Props) {
           Assessments map their communication and decision-making style —
           useful context for coaching.
         </p>
-        <InviteToAssessmentButton userId={userId} />
+        {!readOnly && <InviteToAssessmentButton userId={userId} />}
       </div>
     );
   }
@@ -74,7 +76,7 @@ export function ProfileSection({ userId, profiles, goals, drift }: Props) {
       )}
 
       {/* Goals */}
-      <GoalsSection userId={userId} goals={goals} profiles={profiles} />
+      <GoalsSection userId={userId} goals={goals} profiles={profiles} readOnly={readOnly} />
     </div>
   );
 }
@@ -232,10 +234,12 @@ function GoalsSection({
   userId,
   goals,
   profiles,
+  readOnly = false,
 }: {
   userId: string;
   goals: DevelopmentGoalRow[];
   profiles: ProfileSnapshotRow[];
+  readOnly?: boolean;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -299,13 +303,15 @@ function GoalsSection({
         <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-400">
           Development Goals
         </h4>
-        <button
-          type="button"
-          onClick={() => setShowForm(!showForm)}
-          className="text-xs font-medium text-forest hover:text-forest/80 transition-colors"
-        >
-          {showForm ? "Cancel" : "+ Add Goal"}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowForm(!showForm)}
+            className="text-xs font-medium text-forest hover:text-forest/80 transition-colors"
+          >
+            {showForm ? "Cancel" : "+ Add Goal"}
+          </button>
+        )}
       </div>
 
       {/* Goal creation form */}
@@ -419,7 +425,7 @@ function GoalsSection({
                   >
                     {goal.status}
                   </span>
-                  {goal.status === "active" && (
+                  {goal.status === "active" && !readOnly && (
                     <button
                       type="button"
                       onClick={() => handleUpdateGoal(goal.id, "achieved")}

@@ -22,7 +22,8 @@ import { ValuesRadar } from "@/components/charts/values-radar";
 import { ChartErrorBoundary } from "@/components/chart-error-boundary";
 import { NotesSection } from "./notes-section";
 import { ProfileSection } from "./profile-section";
-import { getUserProfile, getUserDrift } from "@/lib/api";
+import { getUserProfile, getUserDrift, openAccessGrant } from "@/lib/api";
+import type { OpenGrant } from "@/lib/api";
 import type { ProfileSnapshotRow, DevelopmentGoalRow } from "@/lib/api";
 import {
   teamMembers as mockTeamMembers,
@@ -54,6 +55,15 @@ type MockFlaggedItem = {
   excerpt: string | null;
   date: string;
 };
+
+/** A break-glass grant's period (YYYY-MM-DD, inclusive); content outside it is left out. */
+type Period = { start: string; end: string };
+function inPeriod(period: Period | undefined, d: Date | string | null | undefined): boolean {
+  if (!period) return true;
+  if (!d) return false;
+  const day = new Date(d).toISOString().slice(0, 10);
+  return day >= period.start && day <= period.end;
+}
 
 // ── Skeleton fallbacks ─────────────────────────────────
 
@@ -155,9 +165,11 @@ async function EmployeeHeader({
 async function ChartsRow({
   userId,
   isDemo,
+  period,
 }: {
   userId: string;
   isDemo: boolean;
+  period?: Period;
 }) {
   let engagementHistory = isDemo ? mockEngagementHistory : [];
   let valuesScores = isDemo ? mockValuesScores : [];
@@ -165,12 +177,12 @@ async function ChartsRow({
   try {
     const [engResult, feedbackResult, coreValuesResult] = await Promise.allSettled([
       getEngagementScoresForUser(getDb(), userId),
-      getFeedbackForSubject(getDb(), userId),
+      getFeedbackForSubject(getDb(), userId, period ? 500 : undefined),
       getActiveCoreValues(getDb()),
     ]);
 
     if (engResult.status === "fulfilled" && engResult.value.length > 0) {
-      const data = engResult.value;
+      const data = engResult.value.filter((e) => inPeriod(period, e.weekStarting));
       engagementHistory = data.map((e) => ({
         week: e.weekStarting,
         score: e.averageQualityScore,
@@ -189,6 +201,7 @@ async function ChartsRow({
     if (feedbackResult.status === "fulfilled" && feedbackResult.value.length > 0) {
       const scoreMap = new Map<string, { total: number; count: number }>();
       for (const entry of feedbackResult.value) {
+        if (!inPeriod(period, entry.releasedAt)) continue;
         for (const vs of entry.valueScores ?? []) {
           const existing = scoreMap.get(vs.coreValueId) ?? { total: 0, count: 0 };
           existing.total += vs.score;
@@ -234,15 +247,17 @@ async function ChartsRow({
 async function FeedbackSection({
   userId,
   isDemo,
+  period,
 }: {
   userId: string;
   isDemo: boolean;
+  period?: Period;
 }) {
   let feedback: MockFeedbackEntry[] = isDemo ? (mockFeedback as MockFeedbackEntry[]) : [];
 
   try {
     const [entriesResult, coreValuesResult] = await Promise.allSettled([
-      getFeedbackForSubject(getDb(), userId),
+      getFeedbackForSubject(getDb(), userId, period ? 500 : undefined),
       getActiveCoreValues(getDb()),
     ]);
 
@@ -255,7 +270,7 @@ async function FeedbackSection({
     }
 
     if (entriesResult.status === "fulfilled" && entriesResult.value.length > 0) {
-      feedback = entriesResult.value.map((e) => ({
+      feedback = entriesResult.value.filter((e) => inPeriod(period, e.releasedAt)).map((e) => ({
         id: e.id,
         fromName: "Peer", // intentional anonymity — reviewer identity is not exposed to managers either
         date: new Date(e.releasedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
@@ -323,10 +338,12 @@ async function FlaggedSection({
   userId,
   employeeName,
   isDemo,
+  period,
 }: {
   userId: string;
   employeeName: string;
   isDemo: boolean;
+  period?: Period;
 }) {
   const mockMember = isDemo ? (mockTeamMembers.find((m) => m.id === userId) ?? mockTeamMembers[0]) : null;
   let flaggedItems: MockFlaggedItem[] = isDemo
@@ -339,7 +356,7 @@ async function FlaggedSection({
       return [];
     });
     if (items.length > 0) {
-      flaggedItems = items.map((item) => ({
+      flaggedItems = items.filter((item) => inPeriod(period, item.escalation.createdAt)).map((item) => ({
         id: item.escalation.id,
         severity: item.escalation.severity,
         subjectName: item.subjectName ?? employeeName,
@@ -499,9 +516,11 @@ async function SessionsSection({
 async function ProfileWrapper({
   userId,
   isDemo,
+  readOnly = false,
 }: {
   userId: string;
   isDemo: boolean;
+  readOnly?: boolean;
 }) {
   let profiles: ProfileSnapshotRow[] = [];
   let goals: DevelopmentGoalRow[] = [];
@@ -543,6 +562,7 @@ async function ProfileWrapper({
         profiles={profiles}
         goals={goals}
         drift={driftData}
+        readOnly={readOnly}
       />
     </div>
   );
@@ -551,9 +571,11 @@ async function ProfileWrapper({
 async function ThreeSixtySection({
   userId,
   isDemo,
+  period,
 }: {
   userId: string;
   isDemo: boolean;
+  period?: Period;
 }) {
   // subjectId/subjectName live on the review row itself, not inside aggregatedData
   type ThreeSixtyAggData = Omit<ThreeSixtyAggregation, "subjectId" | "subjectName">;
@@ -570,12 +592,12 @@ async function ThreeSixtySection({
   let reviews: ReviewItem[] = isDemo ? (mockThreeSixtyReviews as ReviewItem[]) : [];
 
   try {
-    const rows = await getCompletedThreeSixtyReviews(getDb(), userId).catch((err) => {
+    const rows = await getCompletedThreeSixtyReviews(getDb(), userId, period ? 200 : undefined).catch((err) => {
       logPageError("member-detail:360", err);
       return [];
     });
     if (rows.length > 0) {
-      reviews = rows.map((r) => ({
+      reviews = rows.filter((r) => inPeriod(period, r.completedAt)).map((r) => ({
         id: r.id,
         status: r.status,
         completedAt: r.completedAt
@@ -725,6 +747,82 @@ async function NotesWrapper({
   );
 }
 
+// ── Break-glass view ──────────────────────────────────
+
+const fmtDay = (d: Date | string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/**
+ * Read-only 1:1 history between the person and their direct manager, within
+ * the grant's period: dates and summaries only, no links into the sessions.
+ */
+async function GrantSessions({ userId, directManagerId, period }: { userId: string; directManagerId: string | null; period: Period }) {
+  const sessions = directManagerId
+    ? await getSessionsForPair(getDb(), directManagerId, { employeeId: userId }).catch((err) => {
+        logPageError("member-detail:grant-sessions", err);
+        return [];
+      })
+    : [];
+  const inRange = sessions
+    .filter((s) => s.status === "completed" && inPeriod(period, s.scheduledAt))
+    .sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt));
+
+  return (
+    <div className="card-enter mb-8">
+      <h3 className="mb-4 font-display text-base font-semibold text-stone-800">1:1s with their manager</h3>
+      {inRange.length === 0 ? (
+        <p className="text-sm text-stone-400">No completed 1:1s in this period.</p>
+      ) : (
+        <div className="space-y-3">
+          {inRange.map((s) => (
+            <div key={s.id} className="rounded-2xl border border-stone-200/60 bg-surface p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+              <span className="text-sm font-medium text-stone-800">{fmtDay(s.scheduledAt)}</span>
+              <p className="mt-2 text-sm text-stone-600">{s.summary || "No summary recorded."}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What an admin with a break-glass grant sees (privacy design, "Triggered
+ * access"): the direct manager's content view, read-only and limited to the
+ * grant's period, without the manager's private notes.
+ */
+function BreakGlassView({
+  userId,
+  employeeName,
+  directManagerId,
+  grant,
+}: {
+  userId: string;
+  employeeName: string;
+  directManagerId: string | null;
+  grant: OpenGrant;
+}) {
+  const period = { start: grant.periodStart, end: grant.periodEnd };
+  return (
+    <>
+      <div className="card-enter mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <p className="font-medium">Break-glass access, read-only, until {fmtDay(grant.expiresAt)}</p>
+        <p className="mt-1">Reason: {grant.reason}</p>
+        <p className="mt-1">
+          Showing {fmtDay(grant.periodStart)} to {fmtDay(grant.periodEnd)}. This view is recorded in the audit log.{" "}
+          {grant.onHold ? "The person hasn't been told yet (hold)." : "The person can see that you have access."} The
+          manager&apos;s private notes are not included.
+        </p>
+      </div>
+      <ChartsRow userId={userId} isDemo={false} period={period} />
+      <FeedbackSection userId={userId} isDemo={false} period={period} />
+      <FlaggedSection userId={userId} employeeName={employeeName} isDemo={false} period={period} />
+      <GrantSessions userId={userId} directManagerId={directManagerId} period={period} />
+      <ProfileWrapper userId={userId} isDemo={false} readOnly />
+      <ThreeSixtySection userId={userId} isDemo={false} period={period} />
+    </>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────
 
 /**
@@ -791,8 +889,9 @@ export default async function EmployeeDetailPage({
   // Access level before loading any data (privacy design, 2026-09-27):
   // the direct manager sees content; a manager further up, or an admin,
   // sees signals only; anyone else is sent back.
-  let level: "content" | "signals" = "content";
+  let level: "content" | "signals" | "grant" = "content";
   let directManagerId: string | null = null;
+  let grant: OpenGrant | null = null;
   if (!isDemo) {
     if (!session?.user?.id) {
       redirect("/team/members");
@@ -813,6 +912,19 @@ export default async function EmployeeDetailPage({
     }
     if (!allowed) redirect("/team/members");
     level = allowed;
+
+    // Break-glass: an admin with an active grant gets a read-only content
+    // view for the grant's period. Asking the API logs the view; if the API
+    // can't be reached, the admin stays on signals.
+    const role = (session as { role?: string }).role ?? "";
+    if (level === "signals" && (role === "admin" || role === "super_admin")) {
+      try {
+        grant = await openAccessGrant(userId);
+      } catch (err) {
+        logPageError("member-detail:grant", err);
+      }
+      if (grant) level = "grant";
+    }
   }
 
   const managerId = session?.user?.id ?? "p2";
@@ -849,7 +961,9 @@ export default async function EmployeeDetailPage({
           <EmployeeHeader userId={userId} managerId={managerId} isDemo={isDemo} />
         
 
-        {level === "signals" ? (
+        {level === "grant" && grant ? (
+          <BreakGlassView userId={userId} employeeName={employeeName} directManagerId={directManagerId} grant={grant} />
+        ) : level === "signals" ? (
           
             <SignalsView userId={userId} directManagerId={directManagerId} />
           
