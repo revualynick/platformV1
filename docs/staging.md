@@ -34,6 +34,14 @@ It unpacks that commit into `~/revualy-staging/releases/<sha>`, builds the two i
 
 `TEST_LOGIN=off scripts/staging/deploy.sh` deploys with the test login disabled, as production runs; `/api/test-login` then returns 404. Deploy again without it to turn it back on.
 
+## Test it
+```bash
+scripts/staging/e2e.sh            # full browser suite (e2e/) against staging
+scripts/staging/e2e.sh smoke      # quick set: auth guards, every route renders, 1:1 notes
+scripts/staging/e2e.sh full -g onboarding --retries=0   # extra args go to Playwright
+```
+It opens its own tunnel on local ports 4000/4001 and reads the test-login key and internal secret from the box without printing them. `deploy.sh` runs the smoke set after every deploy (`E2E=off` to skip). `SEED=force scripts/staging/deploy.sh` reseeds staging (wipes its data, including sign-ins).
+
 ## Look after it
 ```bash
 ssh nick@linuxbox.local 'docker compose -p revualy-staging ps'

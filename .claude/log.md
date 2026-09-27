@@ -382,3 +382,9 @@
 - Fixed along the way: stale migrations in the db build, one migration path, dedicated test DB, serial test files, redirects built from the bind address (likely affected Railway)
 - Next (agreed order): make the browser suite environment-aware and add a smoke run after staging deploys; wire the reference path into live conversations (tested safety wording as the beta version, pending Nick's yes); then the beta gate (C3 step 8). Nick to confirm: sign in to staging with Google and be made a manager to try real calendar 1:1s
 - Open decisions and all follow-ups: docs/backlog.md. Eval API key on the box expires about 7 days after 2026-09-26; staging's model calls stop then
+
+## 2026-09-27: browser suite runs anywhere; smoke tests after staging deploys
+- e2e env helper (URLs, secret, psql via stdin, ids by email); seed adds date-relative fixtures and clears auth tables; staging e2e runner + smoke after deploy; SEED=force reseed
+- Found on the production build: reseed locked seeded users out (auth_user email unique) - fixed; new goal cycle sometimes not shown until reload - partly fixed, still intermittent (backlog); test races only the fast build exposes (logout, streaming duplicates) - fixed in tests
+- Staging full suite, no retries: 190 passed, 12 failed (11 known mobile overflow, 1 goal cycle refresh)
+- My mistake: a trace script printed staging's test-login key; rotated on the box and the old key verified rejected. Traces now strip query strings

@@ -17,6 +17,8 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Bugs
 
+- **New goal cycle sometimes doesn't appear until a reload** (admin Settings, Goals; production build only; found on staging 2026-09-27). The cycle is saved; the list doesn't update. An explicit `router.refresh()` after saving (96e92ab) made it pass 4 of 4 in isolation, but it still failed once in a full browser-suite run. Not yet understood.
+
 - **H4 Slack bot may process its own messages** (checked 2026-09-26: no `bot_id` filter in the Slack adapter). Only matters once Slack is a tenant platform (C3 step 10).
 - **M4 demo LLM spend** (not re-checked): the 3-a-day limit is per unverified email; on real tenants the authenticated `/demo/start` creates real conversations about a real colleague.
 - **B17 `next build` prerender failure on /404** (not re-checked; Railway builds may have since passed).
@@ -61,7 +63,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Technical debt
 
-- **Make the browser suite environment-aware** (found running it against staging, 2026-09-26): `onboarding.spec.ts` resets its user with local `psql`, `realtime.spec.ts` uses the laptop's `INTERNAL_API_SECRET` and a hard-coded `ws://localhost:3000`, and three `regression.spec.ts` checks depend on old local data (one hard-codes July 2026). Delete `diag.spec.ts` (no assertions). Then run a smoke set on the box after each staging deploy.
+- **Audit other create/edit dialogs for the same refresh gap** as the goal cycle one (people, notes, questionnaires, core values): they rely on the action's revalidation alone.
 - `pnpm dev` doesn't pass `.env` to the servers: Turborepo runs in strict env mode and the `dev` task declares no variables, so the API exits with "INTERNAL_API_SECRET env var is required". Workaround: start `apps/api` (`npx tsx src/server.ts`) and `apps/web` (`npx next dev -p 3001`) directly with `.env` loaded. Fix: `passThroughEnv` or `envMode: "loose"` for `dev` (found 2026-09-26).
 - 1:1 screens follow-ups: admin view of which modes managers use and who has Google connected; process an approved import straight away instead of at the next hourly run; test a real Gemini .docx and .vtt upload (a .txt was verified on staging).
 - `pnpm tenant:fleet migrate` runs migrations under the Postgres service's variables, which lack `REVIEWER_PSEUDONYM_SECRET`, so migration 0043 would refuse on a tenant with feedback rows. Deployed tenants migrate at API boot with the secret, so this only affects the fleet tool. Fix: run it through the API service, or pass the secret (found 2026-09-26).
