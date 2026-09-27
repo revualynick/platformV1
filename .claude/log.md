@@ -410,3 +410,10 @@
 - API 622/622, typecheck 17/17; full browser suite on staging 208 passed, 0 failed (no retries)
 - Not wired: reference path must call recordSupportOffer when it goes live (item 1). Backlog: qualified review of wording, lawyer on special category data, conduct through the same queue
 - Nick asked the cost of Opus as the conversation agent: estimated $12-30/month for 120 employees typical (Sonnet $5-12), from eval spend totals; offered a ~$1-2 measured run, not run
+
+## 2026-09-27: signpost instead of a request queue; reference path live
+- Nick: "take the Claude route" (like 111/999, but to a named person at the organisation), track how often; he had item 1 as agreed (my notes had it pending; took his message as the yes)
+- 0048 drops the consent queue (requests, emails, reminders, queue page, consent parsing); free-text support contact; support_signposts counts by month and level
+- Reference path live via handleConcern: privacy/off_script carry on; wellbeing/safety signpost, end, never analysed; conduct signposts HR-style and is analysed as before (C2 open); model failure still sends fixed wording
+- API 601/601, typecheck 17/17; staging deploy ran 0048; full browser suite 208 passed, 0 failed (no retries)
+- Not run: a live conversation with real models on staging; two-off-script stop offer not built

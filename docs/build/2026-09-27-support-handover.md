@@ -1,6 +1,6 @@
 # Support handover: consented requests, no watchlist
 
-Status: merged 2026-09-27, not reviewed
+Status: merged 2026-09-27, superseded the same day by `2026-09-27-support-signpost.md` (queue removed in 0048)
 Commits: fd833ef.. · Migration: 0047 · Design: `docs/bot/concerns-playbook.md` ("wellbeing and safety: the support handover")
 
 ## What and why
@@ -75,3 +75,6 @@ Nick asked whether the product should handle wellbeing and safety at all. We agr
 ## Decisions pending
 - Who reviews the wording. Recommendation: the beta client's EAP provider.
 - Whether the conduct route gets the same consent-queue shape. Recommendation: yes, with HR as its own contact.
+
+## Later changes
+- 2026-09-27: replaced by the signpost (Nick: "take the Claude route"). The request queue, consent parsing, contact emails and reminders were removed in 0048; see `2026-09-27-support-signpost.md`.

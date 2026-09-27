@@ -197,9 +197,9 @@ The customer admin assistant (`docs/admin-assistant.md`) acts as the signed-in a
 
 Steps 1 to 3 should land before real employees use the bot, because the bot's anonymity promise depends on them.
 
-## Support requests (2026-09-27)
+## Support signposting (2026-09-27)
 
-Wellbeing and safety concerns are handed over, not judged (`docs/bot/concerns-playbook.md`). The rule that fits this design: **a name reaches a person only if the person asked for that; counts can go wider.** Support requests hold who asked and how soon, never content, and only the organisation's support contacts see them (audited). The conversation is never analysed and is purged after the delivery retention window. Admins see monthly counts with small numbers hidden.
+Wellbeing and safety concerns get a signpost, not a handover (`docs/bot/concerns-playbook.md`): the bot tells the person who at their organisation is better placed to support them and shows the organisation's details. Nothing is passed on and nothing is recorded about the person. The conversation is never analysed and is purged after the delivery retention window. The only data kept is a count per month and level, with small numbers hidden on screen.
 
 ## Reflections and concern checks (parked, 2026-09-27)
 

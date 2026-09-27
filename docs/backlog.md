@@ -12,8 +12,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Verify the 2026-09-26 merges end to end:** nothing has run against real models or Railway. Deploy the branch to the test tenant, re-run the topic grid on the Linux box against the ticket-based engine, and walk each build note's review checklist.
 - **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
-- **Wire the reference path into live conversations.** Needs the consent flow. Safety wording will be refined later from established literature on professional feedback, not invented (Nick, 2026-09-26). Sources read: `docs/research/humble-inquiry.md` and `docs/research/coaching-habit.md` (the latter has the merged list of proposed changes for Nick's review). Neither gives any basis for the wellbeing or safety levels, which need clinical and HR sources.
-- **Support handover** (`docs/build/2026-09-27-support-handover.md`): wire `recordSupportOffer` into the reference path when it goes live; have the fixed wording reviewed once by someone qualified (EAP provider or MHFA trainer); a lawyer on whether inferring support needs is special category data and a DPIA template for clients; re-run the concerns eval with the new tail wording.
+- **Support signpost** (`docs/build/2026-09-27-support-signpost.md`): run one live conversation per concern level against the real models on staging; have the fixed wording reviewed once by someone qualified (EAP provider or MHFA trainer); re-run the concerns eval with the new wording; one line on the flag in the client DPIA template.
 - **Revoke the eval API key** on the Linux box when its 7 days are up.
 
 ## Bugs
@@ -26,7 +25,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 ## Decisions waiting on Nick
 
 - **Concern checks on self-reflections: parked** (Nick, 2026-09-27). Needs a methodical design before anything is built; questions listed in the privacy design doc.
-- **Support handover follow-ups:** conduct reports through the same consent queue with HR as its own contact; due times from organisation hours and bank holidays; chat DM to contacts as well as email; answers given before a disclosure are dropped with the conversation (accepted for now).
+- **Concerns follow-ups:** C2, keep conduct reports out of the subject's feedback until HR has reviewed them (recommended yes); a separate conduct contact; the offer to stop after two off-script replies in a row; answers given before a wellbeing or safety disclosure are dropped with the conversation (accepted for now).
 - **Privacy design open questions** (5, at the end of the design doc).
 - **Calendar model:** priority weighting as client-adjustable sliders, possibly a learning algorithm later (Nick, 2026-09-26). Still open: focus when the title is hidden, one check-in per meeting, joiner dates, whether sensitive-looking titles reach Haiku at all.
 - **Imports:** users with direct reports in the file become managers automatically; new `read-excel-file` dependency; historical feedback is stored but nothing shows it.
