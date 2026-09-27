@@ -31,7 +31,7 @@ export interface HttpAction {
   purpose: string;
   method: "GET" | "POST";
   url: string;
-  auth?: "cloudflare" | "railway";
+  auth?: "cloudflare" | "railway" | "ops";
   body?: unknown;
   dryResult?: HttpResult;
 }
@@ -74,6 +74,7 @@ export function shellQuote(arg: string): string {
 const AUTH_HEADER: Record<NonNullable<HttpAction["auth"]>, string> = {
   cloudflare: "Authorization: Bearer $CLOUDFLARE_API_TOKEN",
   railway: "Authorization: Bearer $RAILWAY_API_TOKEN (or the token in ~/.railway/config.json)",
+  ops: "Authorization: Bearer $OPS_TOKEN",
 };
 
 /** Human-readable, copy-pasteable form of an action, with secrets redacted. */
@@ -231,7 +232,12 @@ function indent(text: string): string {
   return text.split("\n").map((l) => `    ${l}`).join("\n");
 }
 
-function resolveToken(kind: "cloudflare" | "railway"): string {
+function resolveToken(kind: "cloudflare" | "railway" | "ops"): string {
+  if (kind === "ops") {
+    const token = process.env.OPS_TOKEN;
+    if (!token) throw new Error("OPS_TOKEN is not set (the fleet-wide ops token each tenant's web service has)");
+    return token;
+  }
   if (kind === "cloudflare") {
     const token = process.env.CLOUDFLARE_API_TOKEN;
     if (!token) throw new Error("CLOUDFLARE_API_TOKEN is not set (needs Zone.DNS edit on the revualy.com zone)");

@@ -68,6 +68,26 @@ export function planMigrationOrder(
   return { order: eligible, skipped };
 }
 
+/** The tenant's ops checks (C3 step 8), read through the web app with the fleet-wide OPS_TOKEN. */
+export function opsStatusUrl(state: TenantState): string {
+  return `${tenantOrigin(state.input.subdomain)}/api/ops/status`;
+}
+
+/** One table row per check that isn't ok, or a single ok row. */
+export function opsRows(tenant: string, status: number, body: string): Record<string, string>[] {
+  let parsed: { status?: string; checks?: Array<{ name: string; status: string; detail: string }> };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [{ tenant, check: "ops status", result: `FAIL (${status}, not JSON)` }];
+  }
+  if (status === 404) return [{ tenant, check: "ops status", result: "not enabled (OPS_TOKEN not set on web)" }];
+  if (status === 401) return [{ tenant, check: "ops status", result: "FAIL (ops token rejected)" }];
+  const bad = (parsed.checks ?? []).filter((c) => c.status !== "ok");
+  if (!bad.length && parsed.status === "ok") return [{ tenant, check: "ops status", result: "ok" }];
+  return bad.map((c) => ({ tenant, check: `ops ${c.name}`, result: `${c.status.toUpperCase()}: ${c.detail}` }));
+}
+
 export function healthUrls(state: TenantState): { label: string; url: string; expect: number }[] {
   const urls: { label: string; url: string; expect: number }[] = [];
   if (state.dns.apiDomain) urls.push({ label: "api /health", url: `https://${state.dns.apiDomain}/health`, expect: 200 });

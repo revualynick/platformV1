@@ -71,8 +71,8 @@ export type GeneratedSecretName = (typeof GENERATED_SECRET_NAMES)[number];
  * tokens into another.
  */
 export const SHARED_OPERATOR_VARS = {
-  api: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ANTHROPIC_API_KEY", "RESEND_API_KEY"],
-  web: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+  api: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ANTHROPIC_API_KEY", "RESEND_API_KEY", "OPS_ALERT_EMAIL"],
+  web: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "OPS_TOKEN"],
 } as const;
 
 /** Per-tenant chat credentials: always a manual follow-up in the Railway dashboard. */

@@ -11,7 +11,7 @@
 import { parseArgs } from "node:util";
 import { tenantPaths } from "./lib/context.js";
 import { DryRunExecutor, LiveExecutor, type Executor } from "./lib/executor.js";
-import { formatTable, healthUrls, planMigrationOrder, summarise } from "./lib/fleet.js";
+import { formatTable, healthUrls, opsRows, opsStatusUrl, planMigrationOrder, summarise } from "./lib/fleet.js";
 import { listStates, type TenantState } from "./lib/state.js";
 import { migrateAction, statusAction } from "./lib/steps.js";
 import { parseRailwayStatus } from "./lib/railway.js";
@@ -92,9 +92,26 @@ async function main(): Promise<number> {
         rows.push({ tenant: state.input.subdomain, check: h.label, result: `FAIL (${(err as Error).message})` });
       }
     }
+    // The pipeline's own checks (counts only), when this machine has the fleet ops token.
+    if (process.env.OPS_TOKEN || !values.apply) {
+      try {
+        const res = await exec.http({
+          purpose: `${state.input.subdomain} ops status`,
+          method: "GET",
+          url: opsStatusUrl(state),
+          auth: "ops",
+          dryResult: { status: 200, body: '{"status":"ok","checks":[]}' },
+        });
+        rows.push(...opsRows(state.input.subdomain, res.status, res.body));
+      } catch (err) {
+        rows.push({ tenant: state.input.subdomain, check: "ops status", result: `FAIL (${(err as Error).message})` });
+      }
+    } else {
+      rows.push({ tenant: state.input.subdomain, check: "ops status", result: "skipped (OPS_TOKEN not set here)" });
+    }
   }
   if (values.apply) for (const line of formatTable(rows)) console.log(line);
-  return values.apply && rows.some((r) => r.result !== "ok") ? 1 : 0;
+  return values.apply && rows.some((r) => /^(FAIL|WARN)/.test(r.result)) ? 1 : 0;
 }
 
 async function migrateTenant(exec: Executor, state: TenantState): Promise<void> {

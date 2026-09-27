@@ -30,6 +30,8 @@ import {
 } from "../lib/conversation-orchestrator.js";
 import { handleInbound } from "../lib/inbound-router.js";
 import { runSweep } from "../lib/conversation-sweeper.js";
+import { runOpsAlerts } from "../lib/ops-alerts.js";
+import { recordHeartbeat } from "../lib/ops-status.js";
 import { purgeExpiredImportRows } from "../lib/imports/pipeline.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { writeBackForConversation } from "../lib/tickets/writeback.js";
@@ -171,6 +173,21 @@ export async function closeStateRedis(): Promise<void> {
 
 // ── Worker factory ────────────────────────────────────────
 
+/** When this process started: a job that hasn't had its first chance yet isn't late. */
+export const BOOTED_AT = new Date();
+
+/**
+ * Ops alerts go to the logs always (counts only, safe for Railway logs) and
+ * by email to OPS_ALERT_EMAIL when it is set.
+ */
+async function sendOpsAlert(subject: string, text: string) {
+  console.warn(`[ops-alert] ${subject}\n${text}`);
+  const to = process.env.OPS_ALERT_EMAIL;
+  if (!to) return;
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  await sendEmail({ to, subject, html: `<pre style="font-family:monospace;font-size:13px">${escaped}</pre>` });
+}
+
 export function createWorkers(config: WorkerConfig) {
   const connection = parseRedisConnection(config.redisUrl);
   const { llm, adapters, queues } = config;
@@ -249,6 +266,13 @@ export function createWorkers(config: WorkerConfig) {
             truncatedInbound: data.truncated ?? false,
           });
           job.log(`Turn for ${data.conversationId}: ${result.status}`);
+          break;
+        }
+
+        case "ops_check": {
+          const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
+          const decision = await runOpsAlerts(tenantDb(orgId), sendOpsAlert, { queues, bootedAt: BOOTED_AT });
+          job.log(`Ops check: ${decision.raised.length} raised, ${decision.resolved.length} resolved`);
           break;
         }
 
@@ -1087,6 +1111,31 @@ export function createWorkers(config: WorkerConfig) {
     },
     { connection, lockDuration: 300_000, lockRenewTime: 60_000 },
   );
+
+  // Heartbeats for the scheduled jobs (ops-status.ts HEARTBEATS). Only the
+  // error's class name is kept, never its message.
+  const beat = (name: (job: { name: string; data: unknown }) => string | null) => ({
+    completed: (job: { name: string; data: unknown }) => {
+      const n = name(job);
+      const orgId = (job.data as { orgId?: string })?.orgId;
+      if (n && orgId) recordHeartbeat(getTenantDb(orgId, process.env.DATABASE_URL ?? ""), n, true).catch((e) => console.error("[heartbeat]", e));
+    },
+    failed: (job: { name: string; data: unknown } | undefined, err: Error) => {
+      if (!job) return;
+      const n = name(job);
+      const orgId = (job.data as { orgId?: string })?.orgId;
+      if (n && orgId) recordHeartbeat(getTenantDb(orgId, process.env.DATABASE_URL ?? ""), n, false, err?.name ?? "Error").catch((e) => console.error("[heartbeat]", e));
+    },
+  });
+  const sweepBeat = beat((job) => ((job.data as { type?: string })?.type === "sweep" ? "sweep" : null));
+  conversationWorker.on("completed", sweepBeat.completed);
+  conversationWorker.on("failed", sweepBeat.failed);
+  const schedulerBeat = beat((job) => (job.name === "calendar-model" || job.name === "scheduling-pass" ? job.name : null));
+  schedulerWorker.on("completed", schedulerBeat.completed);
+  schedulerWorker.on("failed", schedulerBeat.failed);
+  const syncBeat = beat((job) => (job.name === "calendar-sync" ? "calendar-sync" : null));
+  calendarSyncWorker.on("completed", syncBeat.completed);
+  calendarSyncWorker.on("failed", syncBeat.failed);
 
   // Attach error listeners to prevent unhandled rejections
   const logWorkerError = (name: string) => (err: Error) => console.error(`[Worker:${name}] Error:`, err);

@@ -351,6 +351,13 @@
       "when": 1790530000000,
       "tag": "0049_wording_signoff_off_script",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790540000000,
+      "tag": "0050_ops_heartbeats",
+      "breakpoints": true
     }
   ]
 }

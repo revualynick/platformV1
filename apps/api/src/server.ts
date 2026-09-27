@@ -35,6 +35,7 @@ import { assessmentRoutes } from "./modules/assessments/routes.js";
 import { privacyRoutes } from "./modules/privacy/routes.js";
 import { accessGrantRoutes } from "./modules/access-grants/routes.js";
 import { supportRoutes } from "./modules/support/routes.js";
+import { opsRoutes, setOpsQueues } from "./modules/ops/routes.js";
 import { assertPseudonymReady } from "./lib/pseudonym.js";
 import { profileRoutes, setProfilesNotificationQueue } from "./modules/profiles/routes.js";
 import { registerOneOnOneWs, closeWsRedis } from "./modules/one-on-one/ws.js";
@@ -154,6 +155,7 @@ export async function buildApp() {
   await app.register(privacyRoutes, { prefix: "/api/v1/admin/privacy" });
   await app.register(accessGrantRoutes, { prefix: "/api/v1/access-grants" });
   await app.register(supportRoutes, { prefix: "/api/v1/support" });
+  await app.register(opsRoutes, { prefix: "/api/v1/ops" });
   await app.register(devRoutes, { prefix: "/api/v1/dev" });
 
   // WebSocket routes
@@ -202,6 +204,7 @@ async function start() {
   initStateRedis(REDIS_URL);
 
   const queues = createQueues(REDIS_URL);
+  setOpsQueues(queues);
   setConversationQueue(queues.conversationQueue);
   setCheckInQueue(queues.checkInQueue);
   setDemoAnalysisQueue(queues.analysisQueue);
@@ -354,6 +357,14 @@ async function start() {
     "sweep",
     { type: "sweep", orgId: cronOrgId },
     { repeat: { pattern: "*/5 * * * *" }, jobId: "conversation-sweep-cron" },
+  );
+
+  // Ops check: every 15 minutes. Emails OPS_ALERT_EMAIL (the operator) when
+  // a pipeline check goes wrong; counts only. See lib/ops-alerts.ts.
+  await queues.conversationQueue.add(
+    "ops-check",
+    { type: "ops_check", orgId: cronOrgId },
+    { repeat: { pattern: "*/15 * * * *" }, jobId: "ops-check-cron" },
   );
 
   // Weekly digest: Monday 9:00 AM UTC

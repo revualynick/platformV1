@@ -61,6 +61,10 @@ LOG_LEVEL=info
 EOF
   chmod 600 "$ENV_FILE"
 fi
+# Added later: the fleet ops token (C3 step 8), generated here if missing, never printed.
+if ! grep -q '^OPS_TOKEN=' "$ENV_FILE"; then
+  printf 'OPS_TOKEN=%s\n' "$(openssl rand -hex 32)" >> "$ENV_FILE"
+fi
 set -a; . "$ENV_FILE"; set +a
 export STAGING_ROOT="$ROOT" RELEASE_SHA="$SHA"
 if [ "${TEST_LOGIN:-on}" = "off" ]; then export TEST_LOGIN_ENABLED=false; fi

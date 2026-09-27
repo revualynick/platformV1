@@ -2026,3 +2026,19 @@ export const supportSignposts = pgTable(
   },
   (table) => [primaryKey({ columns: [table.month, table.level], name: "support_signposts_pkey" })],
 );
+
+// ── Ops heartbeats ────────────────────────────────────
+
+/**
+ * Monitoring for the beta gate (migration 0050): when each scheduled job
+ * last ran and last succeeded, and the alert job's record of what it has
+ * already reported. No personal data.
+ */
+export const opsHeartbeats = pgTable("ops_heartbeats", {
+  job: varchar("job", { length: 50 }).primaryKey(),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }).notNull(),
+  lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+  /** An error class or short code, never a message that could carry content. */
+  lastError: varchar("last_error", { length: 200 }),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+});
