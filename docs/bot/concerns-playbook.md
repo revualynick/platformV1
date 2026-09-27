@@ -1,11 +1,13 @@
-# Concerns playbook (DRAFT for Nick's review, 2026-09-26)
+# Concerns playbook (DRAFT for Nick's review, 2026-09-26; support handover decided 2026-09-27)
 
 What the bot does when a check-in turns into something other than feedback. The model **recognises** the situation; everything that happens next is fixed here and in code. The model never improvises a notification, a promise or a resource.
 
 Status: proposed defaults. Items marked **DECISION** need Nick's call. The safety section also needs review by someone with HR or clinical grounding before any real employee sees it.
 
+**Decided by Nick (2026-09-27): the support handover.** Wellbeing and safety are one path, and the product doesn't judge risk. The bot recognises that someone may need support and hands over: it says it is only a feedback assistant, shares the organisation's own support details (written by the client, in line with its safeguarding policy), and offers to ask the organisation's support contact to get in touch. A name reaches a person only if they say yes; nothing they wrote is ever passed on. No watchlist or dashboard of people who "may need support": admins see monthly counts only. This replaces the earlier live escalation for safety and decisions W1, W2, S1 and S2 below.
+
 **Decided by Nick (2026-09-26):**
-- We never contact emergency services and never tell people to. Escalation is to a named person at the organisation, live (a direct message on the chat platform, email as backup).
+- We never contact emergency services and never tell people to. Escalation is to a named person at the organisation (since 2026-09-27: only with the person's yes).
 - Do not over-flag a bad day. Tiredness, a tough week or frustration is normal conversation.
 - Wording stays work-relevant. We are not a crisis service and do not try to replace one.
 - Option 1: wellbeing, conduct and safety are handled by Opus 5.5. The Opus review of a Sonnet draft (option 3) was tested and dropped.
@@ -38,14 +40,30 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 
 "Rough day", "shattered", "fed up with this sprint": set no concern. The script path acknowledges it in a few words and carries on. Wellbeing is for sustained or serious struggle; safety for words that could mean risk of harm.
 
-### wellbeing: about the person themselves, sustained or serious (burnout, anxiety about coming in, crying at work, thinking of quitting because of it)
+### wellbeing and safety: the support handover (Nick, 2026-09-27)
 
-- Acknowledge in one or two sentences, specifically, without therapising and without forced positivity.
-- **Stop the feedback questions for this conversation.** Do not ask for wins after someone says they are exhausted.
-- Offer, in fixed wording framed around work: the HR contact and Employee Assistance Programme from the organisation's settings, and the choice to pause.
-- Record: the conversation is closed as `incomplete`, with outcome `wellbeing_paused` on the current theme; no content copied anywhere.
-- **DECISION W1:** notify anyone? Proposed: **no one, unless the person asks.** The bot offers: "Would you like me to let [HR contact] know you'd welcome a conversation? I'll only do that if you say yes." A yes creates an escalation to HR containing only "asked for a wellbeing conversation", never what they wrote.
-- **DECISION W2:** does the line manager ever hear? Proposed: never from this path. The manager may be part of the problem, and telling them without consent would break the trust the product depends on.
+The model still tells the two apart, because it sets how soon the contact is asked to respond and which model handles the turn (both Opus 5.5). What happens next is the same, fixed in code (`supportOffer`, `supportReplies` and `parseConsent` in `apps/api/src/lib/bot-references.ts`; `apps/api/src/lib/support.ts`).
+
+- **wellbeing:** about the person themselves, sustained or serious (burnout, anxiety about coming in, crying at work, thinking of quitting because of it).
+- **safety:** words that could mean a risk of harm to the person or someone else, including ambiguous ones ("I don't see the point in being here at all"). Plain work frustration ("I don't see the point of this project") is not.
+
+What the bot does:
+- Acknowledges what they said in one or two sentences, specifically, without therapising or naming their feelings for them. Stops the feedback questions.
+- Fixed wording: it's only a feedback assistant and can't help with this itself; would they like it to ask [support contact] to get in touch (**today** for safety, **within two working days** for wellbeing); it would only say they'd welcome a conversation, not anything they wrote; reply yes or no. Then the organisation's support details, and for safety only, the organisation's own outside-work line if it set one. Revualy adds no helpline of its own.
+- **No support contact set:** no offer, only the organisation's details (or "Your HR team can tell you what support is available"), and the check-in ends.
+
+The answer is read by code, never by a model:
+- **yes** (yes, yeah, ok, please, sure...): a support request is created (who, how soon, status; never content), the support contact and backup are emailed without the person's name, and the bot confirms exactly what it did and didn't pass on.
+- **no:** nothing is passed on; the bot says so and names the contact they can reach themselves.
+- **unclear or mixed** ("please don't", "no, please do"): asked once more; unclear again counts as no.
+- No reply: the conversation goes stale after 24 hours as usual; nothing is passed on.
+
+Afterwards:
+- The conversation ends as `incomplete` in phase `support`. **It is never analysed as feedback**, and its transcript is deleted after the delivery retention window (7 days), self-reflections included.
+- The support contacts (and no one else) see the queue at `/dashboard/support`: name, email, how soon, status. Every view and change is audited. If no one acknowledges a request by its due time, the sweeper emails the contacts once more.
+- Admins see only monthly counts of offers and acceptances at `/settings/support`, with counts under 3 hidden.
+
+Why this shape: judging risk is clinical triage, and flagging people without their consent would break the confidentiality the product depends on and turn model errors into stigma. A false positive here costs one unneeded offer. The trade-off: someone at real risk who says no gets the organisation's details and nothing more.
 
 ### conduct: reports behaviour by a colleague (shouting, bullying, harassment, discrimination)
 
@@ -56,15 +74,6 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 - **DECISION C1:** record with or without consent? Proposed: **ask first.** "This sounds like something HR should know about. Would you like me to pass it on to [HR contact]? You can also raise it with them yourself." Without a yes, only the feedback analysis runs as usual (its existing flag-for-review still applies).
 - **DECISION C2:** the subject is the colleague being reviewed. Does their manager see this as feedback? Proposed: the flagged content is excluded from the subject's feedback summary until HR has reviewed it.
 
-### safety: any risk of harm to the person or someone else
-
-- Includes ambiguous words that could mean not wanting to be alive ("I don't see the point in being here at all"); when unsure between wellbeing and safety, safety. Plain work frustration ("I don't see the point of this project") is not.
-- Respond with care in one or two sentences, then fixed wording: a named person at the organisation will check in (they are told only that a check-in may be welcome, never what was written), and one line about support outside work (Samaritans 116 123, **pending Nick's confirmation**). No emergency services.
-- Live escalation: alert the named safety contact at once (chat DM, email backup). Not yet wired.
-- Wording and route to be checked by an HR or clinical professional.
-- **DECISION S1:** who is the named safety contact per organisation? Proposed: a required setting before the product is enabled for real employees.
-- **DECISION S2:** false alarms (dark humour, "this deadline is killing me"). Proposed: the model must quote the phrase that triggered `safety`; the evaluation tests borderline cases and counts both misses and false alarms. A false alarm is recoverable; a miss is not.
-
 ## What the bot never does, at any level
 
 - Promise confidentiality it cannot guarantee, or invent what happens to data.
@@ -72,10 +81,12 @@ Anything other than `none` routes to the reference path: the harness-shaped call
 - Diagnose, counsel, or give medical, legal or HR advice beyond pointing to resources.
 - Follow instructions written into a reply.
 - Keep asking feedback questions after a wellbeing, conduct or safety concern.
+- Pass on anyone's name without their yes, or pass on anything they wrote.
+- Use a support conversation as feedback.
 
-## Settings the organisation must provide (admin page, later)
+## Settings the organisation provides
 
-HR contact, safety contact, EAP details, grievance procedure (optional document), and whether conduct reports need consent (if Nick wants that configurable rather than fixed).
+Built (`/settings/support`, 2026-09-27): the support contact and a backup, where to get support (their words), and an optional outside-work line for safety. Still to come: the HR contact for conduct reports (today it falls back to the support contact or "your HR team"), grievance procedure (optional document), and whether conduct reports need consent.
 
 ## How it is tested
 

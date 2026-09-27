@@ -17,7 +17,7 @@ This README is the running summary. It is kept current: when something important
 
 1. **Plan.** Each night a calendar model (Haiku) reads meeting metadata and proposes check-ins: who to ask, about whom, and which shared meeting to refer to. A code gate rejects invented references, 1:1s and sensitive meetings.
 2. **Ask.** The scheduler picks from those proposals within contact limits: at most one peer check-in and one or two personal ones a week, up to 3 exchanges each, with a gap of 3 days and a rest after a rich conversation. "You were on the Acme call with Jon on Tuesday. How did he do?"
-3. **Talk.** Every inbound message is stored first, then processed. Routine turns take one structured LLM call (Sonnet 5), with code enforcing the rules. Messages that raise a concern go to a reference path that reads the concerns playbook before answering; serious concerns (wellbeing, conduct, safety) go to Opus 5.5. The bot never refers to emergency services and doesn't over-flag a bad day.
+3. **Talk.** Every inbound message is stored first, then processed. Routine turns take one structured LLM call (Sonnet 5), with code enforcing the rules. Messages that raise a concern go to a reference path that reads the concerns playbook before answering; serious concerns (wellbeing, conduct, safety) go to Opus 5.5. For wellbeing and safety the bot hands over rather than judging risk: it offers to put the person in touch with the organisation's support contact, and passes on a name only if they say yes. It never refers to emergency services and doesn't over-flag a bad day.
 4. **Analyse.** Finished conversations are analysed for themes, sentiment, core values and engagement. Unanswered conversations become incomplete and are analysed as partial.
 5. **1:1s.** Gemini notes and transcripts from Google Meet 1:1s become tasks, between-meeting goals and goal suggestions. The default is semi-automatic: the manager approves each import.
 6. **Show.** Dashboards for employees, managers and admins; exports; calibration; 360 reviews; pulse checks; kudos.
@@ -72,6 +72,7 @@ Full guide: `docs/local-testing.md`. Staging on the Linux box: `docs/staging.md`
 
 Newest first. Each line links to where the detail lives. When a decision replaces an earlier one, say so.
 
+- **2026-09-27** Wellbeing and safety: recognise and hand over, don't judge risk. The bot offers to ask the organisation's support contact to get in touch; a name reaches a person only with a yes, never what they wrote; no watchlist, counts only. Replaces live safety escalation and W1/W2/S1/S2. `docs/bot/concerns-playbook.md`
 - **2026-09-27** Break-glass: an admin can open read-only content access to one person for a formal process, on a logged reason, for a dated period and up to 30 days. No second approver for the content view; raw content will need one. The subject is told unless a hold is set, and a hold ends with the grant. `docs/build/2026-09-27-break-glass.md`
 - **2026-09-26** Privacy tiers, consent-based sharing, raw inputs kept encrypted, and the ticket air gap between chat agents and data. `docs/design/privacy-and-agent-access.md`
 - **2026-09-26** A deterministic decision layer driven by a reasoning model, in the spirit of Jev (TypeSafe AI), built on our own models rather than adopting Jev. For alpha and beta, quality comes before token cost. `docs/backlog.md`

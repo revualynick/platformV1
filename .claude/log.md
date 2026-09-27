@@ -403,3 +403,10 @@
 - Limits to backlog: API content routes not period-limited, page DB reads audited as one view, in-app notice only, reason hidden from subject (pending Nick)
 - Safety wording (item 1, Nick still deciding): agent read Schein, Humble Inquiry (2nd ed. 2021) -> docs/research/humble-inquiry.md; Bungay Stanier, The Coaching Habit (2016) -> docs/research/coaching-habit.md with a merged list of 19 proposals. Both books back "no digging"; neither covers wellbeing or safety. Epubs sit untracked in the repo root; *.epub now gitignored
 - macOS blocks this session from ~/Downloads; Nick moved the books into the repo
+
+## 2026-09-27: support handover (wellbeing and safety)
+- Nick: should we handle wellbeing/safety at all? Agreed: recognise and hand over, don't judge risk; his proposal of a dashboard of people who may need support replaced by a consented queue plus anonymous counts ("a name reaches a person only with a yes")
+- Built: 0047 (support phases, org support settings, support_requests, support_signals), fixed offer wording and code-read consent, orchestrator branch with no model call, no analysis and 7-day purge for support conversations, overdue reminder, /settings/support, /dashboard/support for contacts only; Samaritans default removed (client supplies any outside line)
+- API 622/622, typecheck 17/17; full browser suite on staging 208 passed, 0 failed (no retries)
+- Not wired: reference path must call recordSupportOffer when it goes live (item 1). Backlog: qualified review of wording, lawyer on special category data, conduct through the same queue
+- Nick asked the cost of Opus as the conversation agent: estimated $12-30/month for 120 employees typical (Sonnet $5-12), from eval spend totals; offered a ~$1-2 measured run, not run
