@@ -35,6 +35,8 @@ export interface LLMCompletionRequest {
   effort?: EffortLevel;
   /** Anthropic: JSON Schema the reply must match (structured outputs). Use with jsonMode. */
   jsonSchema?: Record<string, unknown>;
+  /** Aborts the request (the gateway sets it on timeout, so an abandoned call stops). */
+  signal?: AbortSignal;
 }
 
 export interface LLMCompletionResponse {

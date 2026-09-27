@@ -55,7 +55,12 @@ export async function getFeedbackForSubject(
   now: Date = new Date(),
 ) {
   const releases = await getReleasedFeedbackIds(db, [subjectId], now);
-  const ids = [...releases.keys()];
+  // Order and cut by release first, so only the rows returned are read and
+  // decrypted (review finding 2026-09-28: it decrypted the whole history).
+  const ids = [...releases.entries()]
+    .sort((a, b) => b[1].getTime() - a[1].getTime() || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([id]) => id);
   if (ids.length === 0) return [];
 
   const entries = await db

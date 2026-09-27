@@ -46,7 +46,7 @@ type LeaderboardEntry = {
 // ── Shared data loader ─────────────────────────────────
 // Wrapped in React.cache so the three sections (StatsSection,
 // ChartAndLeaderboardSection, FlaggedSection) that each call it with the same
-// (userId, isDemo) args share a single execution per render pass — the
+// (userId, isDemo) args share a single execution per render pass, the
 // listActiveUsers + getBulkLatestEngagement + getFlaggedItemsForReports
 // queries run once, not once per section.
 
@@ -119,26 +119,6 @@ const loadTeamData = cache(async function loadTeamData(
     return { teamMembers: [], flaggedItems: [], loadFailed: true };
   }
 });
-
-// ── Skeleton fallbacks ─────────────────────────────────
-
-function StatsSkeleton() {
-  return (
-    <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="h-24 animate-pulse rounded-2xl bg-stone-100" />
-      ))}
-    </div>
-  );
-}
-
-function ChartSkeleton() {
-  return <div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />;
-}
-
-function SectionSkeleton() {
-  return <div className="h-48 animate-pulse rounded-2xl bg-stone-100" />;
-}
 
 // ── Async sub-components ───────────────────────────────
 
@@ -320,7 +300,7 @@ async function FlaggedSection({
                     <p className="mt-2 rounded-lg bg-surface/60 px-3 py-2 text-xs italic text-stone-500">{item.excerpt}</p>
                   )}
                 </div>
-                {/* Link to flagged page — full review flow lives there */}
+                {/* Link to flagged page, full review flow lives there */}
                 <Link
                   href="/team/flagged"
                   className="rounded-xl border border-stone-200 bg-surface px-4 py-2 text-xs font-medium text-stone-600 hover:bg-stone-50"

@@ -7,7 +7,8 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
-import { getUserById, getReportingTree } from "@revualy/db/queries";
+import { getUserById as getUserByIdUncached, getReportingTree } from "@revualy/db/queries";
+import { cache } from "react";
 import { getEngagementScoresForUser } from "@revualy/db/queries";
 import { getFeedbackForSubject, getFlaggedItemsForReports } from "@revualy/db/queries";
 import { getManagerNotes } from "@revualy/db/queries";
@@ -36,6 +37,9 @@ import {
 } from "@/lib/mock-data";
 import { sentimentStyles, severityStyles } from "@/lib/style-constants";
 
+// The access check, the name and the header all need this person: one query per render.
+const getUserById = cache(getUserByIdUncached);
+
 type MockFeedbackEntry = {
   id: string;
   fromName: string;
@@ -63,22 +67,6 @@ function inPeriod(period: Period | undefined, d: Date | string | null | undefine
   if (!d) return false;
   const day = new Date(d).toISOString().slice(0, 10);
   return day >= period.start && day <= period.end;
-}
-
-// ── Skeleton fallbacks ─────────────────────────────────
-
-function HeaderSkeleton() {
-  return (
-    <div className="card-enter mb-8 h-32 animate-pulse rounded-2xl bg-stone-100" style={{ boxShadow: "var(--shadow-sm)" }} />
-  );
-}
-
-function ChartSkeleton() {
-  return <div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />;
-}
-
-function SectionSkeleton() {
-  return <div className="h-48 animate-pulse rounded-2xl bg-stone-100" />;
 }
 
 // ── Async sub-components ───────────────────────────────

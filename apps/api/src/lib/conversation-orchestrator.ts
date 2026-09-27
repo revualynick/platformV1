@@ -869,7 +869,7 @@ async function generateQuestion(
   }[params.interactionType];
 
   const safeReviewerName = stripControlChars(params.reviewerName);
-  // For self-reflections the reviewer IS the subject — framing questions in
+  // For self-reflections the reviewer IS the subject, framing questions in
   // the second person ("you") avoids awkward self-referential phrasing like
   // "How has [Name] been doing this week?"
   const isSelfReflection = params.interactionType === "self_reflection";

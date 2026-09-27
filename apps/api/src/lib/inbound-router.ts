@@ -10,6 +10,8 @@ import {
 } from "@revualy/db";
 import type { ChatPlatform } from "@revualy/shared";
 import { findIdentity } from "./chat-identity.js";
+import { supportSignpost } from "./bot-references.js";
+import { loadSupportResources } from "./support.js";
 import {
   appendLateAddition,
   appendUserMessage,
@@ -112,6 +114,14 @@ export async function handleInbound(
 
   // 5. Something they forgot to say in a conversation that just finished.
   const late = await findLateAdditionTarget(db, userId, platform);
+  // A check-in that ended with a support signpost is never added to: a
+  // follow-up isn't feedback, and saying "added to your feedback" to someone
+  // who is struggling would be wrong. They get the signpost again; the
+  // message stays only in the ledger, which retention purges.
+  if (late && late.phase === "support") {
+    await reply(supportSignpost("safety", await loadSupportResources(db)));
+    return finish(db, msg, "no_open_conversation", userId);
+  }
   if (late) {
     await appendLateAddition(db, late.id, msg.content, meta);
     await queueAnalysis(deps, late.id, "late", msg.id);

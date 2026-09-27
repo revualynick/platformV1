@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * claude-llm-shim — a minimal OpenAI-compatible chat-completions server that
+ * claude-llm-shim, a minimal OpenAI-compatible chat-completions server that
  * proxies every request to the local `claude -p` CLI. This lets the Revualy
  * app's LLMGateway (via its OpenAI-compat adapter) generate the bot's turns
- * with NO paid API key — `claude -p` is the model.
+ * with NO paid API key, `claude -p` is the model.
  *
  * Run:  node scripts/claude-llm-shim.mjs            # listens on :8787
  * Point the API at it:

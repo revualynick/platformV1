@@ -28,7 +28,7 @@ import type { InternalSimulatorAdapter } from "../../lib/internal-simulator-adap
  * through the same path as a chat webhook (stored in inbound_messages, then
  * routed by the sender's identity), so routing bugs are not hidden; only
  * the queue hop is skipped, so the turn runs within the request. Lets `claude -p` (or curl)
- * play the employee side of a feedback conversation locally — no Slack/Teams.
+ * play the employee side of a feedback conversation locally, no Slack/Teams.
  *
  * Gated exactly like the web test-login endpoint: TEST_LOGIN_ENABLED must be
  * "true" AND the caller must present the matching TEST_LOGIN_KEY. So even if

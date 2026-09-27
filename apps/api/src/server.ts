@@ -16,7 +16,7 @@ import { engagementRoutes } from "./modules/engagement/routes.js";
 import { kudosRoutes } from "./modules/kudos/routes.js";
 import { escalationRoutes } from "./modules/escalation/routes.js";
 import { relationshipsRoutes } from "./modules/relationships/routes.js";
-import { conversationRoutes } from "./modules/conversation/routes.js";
+import { conversationRoutes, setConversationAdminQueue } from "./modules/conversation/routes.js";
 import { calibrationRoutes } from "./modules/calibration/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
 import { integrationsRoutes } from "./modules/integrations/routes.js";
@@ -205,6 +205,7 @@ async function start() {
 
   const queues = createQueues(REDIS_URL);
   setOpsQueues(queues);
+  setConversationAdminQueue(queues.analysisQueue);
   setConversationQueue(queues.conversationQueue);
   setCheckInQueue(queues.checkInQueue);
   setDemoAnalysisQueue(queues.analysisQueue);
@@ -292,7 +293,7 @@ async function start() {
     }
   }
 
-  // Internal chat-simulation harness (dev only — the /dev routes are inert
+  // Internal chat-simulation harness (dev only, the /dev routes are inert
   // unless TEST_LOGIN_ENABLED=true, and still require the TEST_LOGIN_KEY).
   const simulator = new InternalSimulatorAdapter();
   adapters.register(simulator);
@@ -375,7 +376,7 @@ async function start() {
     { repeat: { pattern: "0 9 * * 1" }, jobId: "weekly-digest-cron" },
   );
 
-  // Nudge reminders: Wednesday and Friday 9:00 AM UTC — remind users behind their weekly target
+  // Nudge reminders: Wednesday and Friday 9:00 AM UTC, remind users behind their weekly target
   await queues.notificationQueue.add(
     "schedule_nudges",
     { type: "schedule_nudges", orgId: cronOrgId },

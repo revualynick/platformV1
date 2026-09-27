@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * chat-sim — drive a Revualy feedback conversation locally against the running
+ * chat-sim, drive a Revualy feedback conversation locally against the running
  * API's /api/v1/dev/simulate-chat harness. Designed so `claude -p` can play the
  * employee side of a chat across turns.
  *

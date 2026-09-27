@@ -3,7 +3,7 @@ import { createTenantClient, type TenantDb } from "@revualy/db";
 
 // Persist the pool on globalThis so Next.js dev HMR (which re-evaluates modules
 // on every edit) reuses one connection pool instead of leaking a new pool per
-// reload — which otherwise exhausts Postgres' max_connections during dev.
+// reload, which otherwise exhausts Postgres' max_connections during dev.
 const globalForDb = globalThis as unknown as { __revualyWebDb?: TenantDb };
 
 /**

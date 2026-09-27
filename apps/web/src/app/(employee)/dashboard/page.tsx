@@ -24,30 +24,6 @@ import Link from "next/link";
 import { RecordAccessNotice } from "@/components/record-access";
 import { sentimentColorFlat, dashboardSessionStatusStyles } from "@/lib/style-constants";
 
-// ── Skeleton fallbacks ─────────────────────────────────
-
-function TopRowSkeleton() {
-  return (
-    <div className="mb-8 grid gap-6 lg:grid-cols-12">
-      <div className="h-48 animate-pulse rounded-2xl bg-stone-100 lg:col-span-3" />
-      <div className="grid grid-cols-2 gap-4 lg:col-span-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-2xl bg-stone-100" />
-        ))}
-      </div>
-      <div className="h-48 animate-pulse rounded-2xl bg-stone-100 lg:col-span-5" />
-    </div>
-  );
-}
-
-function ChartSkeleton() {
-  return <div className="h-[300px] animate-pulse rounded-2xl bg-stone-100" />;
-}
-
-function SectionSkeleton() {
-  return <div className="h-48 animate-pulse rounded-2xl bg-stone-100" />;
-}
-
 // ── Async sub-components ───────────────────────────────
 
 async function TopRow({

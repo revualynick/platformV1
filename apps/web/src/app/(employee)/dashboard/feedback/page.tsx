@@ -95,7 +95,7 @@ async function loadFeedbackData(session: Awaited<ReturnType<typeof auth>>, isDem
       }
     }
 
-    // 360 reviews — use real data when available, fall through to mock in demo mode
+    // 360 reviews, use real data when available, fall through to mock in demo mode
     let threeSixtyReviews: ThreeSixtyReviewItem[] = isDemo
       ? (mockThreeSixtyReviews as ThreeSixtyReviewItem[])
       : [];

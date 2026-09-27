@@ -1330,7 +1330,7 @@ export const threeSixtyReviews = [
   },
 ];
 
-// Pulse triggers (manager view — "who needs a check-in?")
+// Pulse triggers (manager view, "who needs a check-in?")
 export const pulseTriggers = [
   {
     id: "pt1",

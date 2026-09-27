@@ -29,6 +29,12 @@ export function UploadNotes({
 
   function submit() {
     if (!file || !counterpartId) return;
+    // Checked here too: over the server action body limit the server's own
+    // check never runs and the upload fails silently (review finding 2026-09-28).
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File is too large (5 MB limit)");
+      return;
+    }
     setError(null);
     setOutcome(null);
     const fd = new FormData();

@@ -200,7 +200,11 @@ export function detectOneOnOne(
   reportingTree: Set<string>,
 ): Detection | null {
   if (matchesMarker(event.title, marker)) {
-    return { subjectUserId: resolveSubject(event.attendees, owner.id, people, reportingTree), detectedBy: "marker" };
+    // The subject must report to the owner (directly or further down). On a
+    // report's own calendar the other attendee is their manager: without
+    // this the roles came out inverted (review finding 2026-09-28).
+    const subject = resolveSubject(event.attendees, owner.id, people, reportingTree);
+    return { subjectUserId: subject && reportingTree.has(subject) ? subject : null, detectedBy: "marker" };
   }
   if (event.visibility === "private" || event.visibility === "confidential") return null;
 

@@ -25,6 +25,7 @@ import type { AdapterRegistry } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import {
   initiateConversation,
+  markIncomplete,
   processTurn,
   turnJobId,
 } from "../lib/conversation-orchestrator.js";
@@ -292,17 +293,9 @@ export function createWorkers(config: WorkerConfig) {
         case "close": {
           const data = closeJobSchema.parse(job.data);
 
-          const db = tenantDb(data.orgId);
-          await db
-            .update(conversations)
-            .set({ status: "closed", closedAt: new Date() })
-            .where(eq(conversations.id, data.conversationId));
-
-          await queues.analysisQueue.add(
-            "analyze",
-            { conversationId: data.conversationId, orgId: data.orgId },
-            { jobId: buildJobId("analyze", data.conversationId) },
-          );
+          // Legacy job: end it through the engine (claims the turn, closes
+          // the ticket, analyses as partial unless it ended for support).
+          await markIncomplete(tenantDb(data.orgId), deps, data.conversationId);
           break;
         }
 

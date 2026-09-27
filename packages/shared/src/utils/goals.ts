@@ -29,7 +29,7 @@ export function computeEffectiveProgress(goal: GoalProgressFields): number {
   ) {
     return clamp(Math.round(goal.progressPercent), 0, 100);
   }
-  // Degenerate case: start and target are identical — the metric can't
+  // Degenerate case: start and target are identical, the metric can't
   // express a meaningful range, so treat it as binary: 100 once current has
   // reached (or passed) the target value, else 0. With no start/target spread
   // there is no direction, so "reached" is defined as current >= target.

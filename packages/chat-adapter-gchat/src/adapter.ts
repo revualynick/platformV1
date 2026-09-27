@@ -113,8 +113,10 @@ export class GoogleChatAdapter implements ChatAdapter {
     const result = await this.verifier.verify(bearer);
     if (result.ok) return { isValid: true };
 
-    // Deprecated shared-token scheme, only when explicitly enabled.
-    if (this.legacyToken && typeof payload.token === "string") {
+    // Deprecated shared-token scheme, only when explicitly enabled. The token
+    // never expires, so it needs the event time to bound replay (review
+    // finding 2026-09-28): no eventTime, no entry by this route.
+    if (this.legacyToken && typeof payload.token === "string" && payload.eventTime !== undefined) {
       return { isValid: this.timingSafeTokenCompare(payload.token, this.legacyToken) };
     }
     return { isValid: false };
@@ -272,7 +274,7 @@ export class GoogleChatAdapter implements ChatAdapter {
     // TODO: call the Google Directory/People API to resolve a real display name
     // and email from the "users/{userId}" resource path. This requires a Google
     // Workspace admin granting the service account domain-wide delegation with
-    // the `https://www.googleapis.com/auth/directory.readonly` scope — a known
+    // the `https://www.googleapis.com/auth/directory.readonly` scope, a known
     // gap documented in CLAUDE.md ("GChat adapter: needs Google Workspace admin
     // setup to test end-to-end"). Until that is wired, strip the resource prefix
     // to produce a cleaner fallback rather than returning the raw path.

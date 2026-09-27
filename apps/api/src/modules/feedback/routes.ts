@@ -101,7 +101,7 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  // GET /users/:id/export — Data export (self, manager, or admin only)
+  // GET /users/:id/export: data export (the person, their direct manager, or a break-glass grant)
   app.get("/users/:id/export", async (request, reply) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db, userId } = request.tenant;
@@ -110,29 +110,10 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: "Authentication required" });
     }
 
-    if (id !== userId) {
-      const [caller] = await db
-        .select({ role: users.role })
-        .from(users)
-        .where(eq(users.id, userId));
-
-      if (!caller || caller.role === "employee") {
-        return reply.code(403).send({ error: "You can only export your own feedback" });
-      }
-
-      // Managers must manage the subject to export their data
-      if (caller.role === "manager") {
-        const [subject] = await db
-          .select({ managerId: users.managerId })
-          .from(users)
-          .where(eq(users.id, id));
-
-        if (!subject || subject.managerId !== userId) {
-          return reply.code(403).send({ error: "You can only export feedback for your direct reports" });
-        }
-      }
-      // Admins pass through
-    }
+    // The same rule as every content route (review finding 2026-09-28):
+    // the person, their direct manager, or a break-glass grant within its
+    // period, audited. Admins without a grant get signals, not exports.
+    const access = await assertContentAccess(request, id);
 
     // Exports page at 1000 entries — fetch one extra to signal more,
     // callers pass ?offset= to continue.
@@ -141,7 +122,9 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
 
     // The subject's (or their manager's) export is the released view too:
     // raw peer text and arrival times would identify reviewers.
-    const released = await getFeedbackForSubject(db, id, Number.MAX_SAFE_INTEGER);
+    const released = (await getFeedbackForSubject(db, id, Number.MAX_SAFE_INTEGER)).filter((e) =>
+      withinAccess(access, e.releasedAt),
+    );
     const entries = released.slice(offset, offset + EXPORT_PAGE_SIZE + 1);
 
     const hasMore = entries.length > EXPORT_PAGE_SIZE;

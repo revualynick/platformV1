@@ -245,8 +245,10 @@ async function decide(
     proposals = await proposeTicketContext(opts.agent, { type, available: [...available], ...agentInput }, { logger: opts.logger }).catch(() => null);
   }
   return {
-    result: decideTicketItems({ type, available, inScopeNames, otherNames }, proposals),
-    preparedBy: proposals ? "agent" : "default",
+    ...(() => {
+      const result = decideTicketItems({ type, available, inScopeNames, otherNames }, proposals);
+      return { result, preparedBy: proposals && !result.usedDefaults ? ("agent" as const) : ("default" as const) };
+    })(),
   };
 }
 

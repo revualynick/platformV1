@@ -6,6 +6,8 @@ import type { FastifyInstance } from "fastify";
 import {
   getTenantDb,
   conversations,
+  conversationMessages,
+  inboundMessages,
   orgSettings,
   questionnaires,
   questionnaireThemes,
@@ -26,6 +28,7 @@ import {
 import { runSweep, DELIVERY_RETENTION_DAYS } from "../lib/conversation-sweeper.js";
 import { runAnalysisPipeline } from "../lib/analysis-pipeline.js";
 import { monthKey } from "../lib/support.js";
+import { handleInbound } from "../lib/inbound-router.js";
 import type { Concern } from "../lib/bot-references.js";
 import { buildApp } from "../server.js";
 
@@ -384,5 +387,23 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
     await app.inject({ method: "PUT", url: "/api/v1/support/settings", headers: as(ids.admin), payload: { supportContact: CONTACT, supportDetails: DETAILS, supportOutside: "" } });
     const nonAdmin = await app.inject({ method: "POST", url: "/api/v1/support/wording/sign-off", headers: as(ids.person), payload: { name: "Me", role: "Me", hash: "0".repeat(64) } });
     expect(nonAdmin.statusCode).toBe(403);
+  });
+
+  it("a follow-up after a signpost isn't added to the check-in: the signpost is repeated", async () => {
+    // Review finding 2026-09-28: it was appended and "added to your feedback".
+    const { id } = await turn(fakeLLM("safety", "safety"));
+    const before = (await db.select().from(conversationMessages).where(eq(conversationMessages.conversationId, id))).length;
+    const [row] = await db
+      .insert(inboundMessages)
+      .values({ platform: "internal", platformMessageId: `m-${crypto.randomUUID()}`, platformUserId: `users/signpost-${tag}`, platformChannelId: channel, content: "Sorry, I just feel really low" })
+      .returning({ id: inboundMessages.id });
+    chat.sent = [];
+    await handleInbound(db, { ...depsFor(fakeLLM("none", "none")), scheduleTurn: async () => {} }, row.id);
+    const text = chat.sent.map((m) => m.text).join("\n");
+    expect(text).toContain(`${CONTACT} is better placed to support you`);
+    expect(text).not.toMatch(/added that to your feedback/i);
+    expect((await db.select().from(conversationMessages).where(eq(conversationMessages.conversationId, id))).length).toBe(before);
+    expect(analysis).toHaveLength(0);
+    await db.delete(inboundMessages).where(eq(inboundMessages.id, row.id));
   });
 });

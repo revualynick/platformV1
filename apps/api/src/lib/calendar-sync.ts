@@ -114,7 +114,7 @@ export async function syncCalendarForUser(
 
       // In-run dedup via existingSet above; the uq_user_relationship_pair
       // constraint (migration 0031) backstops concurrent syncs landing on the
-      // same directional pair — onConflictDoNothing makes those inserts no-ops.
+      // same directional pair, onConflictDoNothing makes those inserts no-ops.
       const inserted = await db
         .insert(userRelationships)
         .values({

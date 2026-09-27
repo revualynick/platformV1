@@ -24,6 +24,10 @@ const PREF_LABELS: Record<string, { label: string; description: string }> = {
     description:
       "Gentle reminders when you have pending interactions or overdue action items.",
   },
+  assessment_invite: {
+    label: "Assessment Invites",
+    description: "Emails from your manager inviting you to take a profile assessment.",
+  },
 };
 
 export default async function SettingsPage() {

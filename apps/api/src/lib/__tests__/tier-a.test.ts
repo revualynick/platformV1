@@ -103,3 +103,18 @@ describe("stripMeetingReferences", () => {
     expect(stripMeetingReferences(text)).toBe(text);
   });
 });
+
+describe("stripMeetingReferences keeps ordinary phrases (review finding 2026-09-28)", () => {
+  it.each([
+    ["He is at his best on the whiteboard in a session with customers.", "He is at his best on the whiteboard in a session with customers."],
+    ["Sarah gives clear feedback in code review and mentors juniors.", "Sarah gives clear feedback in code review and mentors juniors."],
+    ["In the team he was always helpful and calm during planning.", "In the team he was always helpful and calm during planning."],
+    ["Sam is thorough. On the Acme call on Tuesday she was clear.", "Sam is thorough. She was clear."],
+    ["During Tuesday's planning meeting she kept everyone on track.", "She kept everyone on track."],
+    ["In our 1:1 last week he raised a good point.", "He raised a good point."],
+    ["During the product demo he answered every question.", "He answered every question."],
+    ["In our weekly sync he unblocked two people.", "He unblocked two people."],
+  ])("%j", (input, expected) => {
+    expect(stripMeetingReferences(input)).toBe(expected);
+  });
+});

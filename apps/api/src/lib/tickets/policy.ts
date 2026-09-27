@@ -120,6 +120,8 @@ export interface DroppedItem {
 export interface GateResult {
   accepted: AcceptedItem[];
   dropped: DroppedItem[];
+  /** The agent proposed something, but none of it passed, so the defaults were used. */
+  usedDefaults?: boolean;
 }
 
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
@@ -218,8 +220,21 @@ export function decideTicketItems(input: GateInput, agentProposals: Proposal[] |
   const policy = POLICY[input.type];
   const required = policy.required.filter((c) => input.available.has(c)).map((c) => ({ category: c, about: policy.allowed[c]! }));
   const proposals = agentProposals ?? defaultProposals(input.type, input.available);
-  const result = gateProposals(input, [...required, ...proposals]);
-  // A required item proposed again by the agent is not a refusal worth logging.
+  let result = gateProposals(input, [...required, ...proposals]);
   const requiredSet = new Set<string>(policy.required);
-  return { accepted: result.accepted, dropped: result.dropped.filter((d) => !(d.reason === "duplicate" && requiredSet.has(d.category))) };
+  // The agent proposed things but the gate refused all of them: fall back to
+  // the defaults (review finding 2026-09-28), keeping the agent's refusals in
+  // the log, rather than leave the ticket with only the required items.
+  let usedDefaults = false;
+  if (agentProposals && !result.accepted.some((a) => !requiredSet.has(a.category))) {
+    const fallback = gateProposals(input, [...required, ...defaultProposals(input.type, input.available)]);
+    result = { accepted: fallback.accepted, dropped: [...result.dropped, ...fallback.dropped] };
+    usedDefaults = fallback.accepted.some((a) => !requiredSet.has(a.category));
+  }
+  // A required item proposed again (by the agent or the defaults) is not a refusal worth logging.
+  return {
+    accepted: result.accepted,
+    dropped: result.dropped.filter((d) => !(d.reason === "duplicate" && requiredSet.has(d.category))),
+    ...(usedDefaults ? { usedDefaults } : {}),
+  };
 }

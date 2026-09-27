@@ -200,6 +200,9 @@ export function encrypt(plaintext: string): string {
  * decrypts, or on a pre-v1 value once ENCRYPTION_LEGACY_READS=off.
  */
 export function decrypt(stored: string): string {
+  // encrypt("") stores "" (see encryptField), so read it back as "" rather
+  // than refuse it as a pre-v1 secret (review finding 2026-09-28).
+  if (stored === "") return "";
   if (stored.startsWith(PREFIX)) return decryptField(stored, "");
   if (!legacyReadsAllowed()) {
     throw new Error("Refusing a pre-v1 secret (ENCRYPTION_LEGACY_READS=off). Run the encryption backfill.");

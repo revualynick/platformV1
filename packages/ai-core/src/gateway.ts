@@ -72,12 +72,18 @@ export class LLMGateway {
     if (!adapter) {
       throw new Error(`No LLM provider registered: ${target}`);
     }
+    // On timeout, abort the request too, so it doesn't run on (and bill) in
+    // the background after the caller has moved on (review finding 2026-09-28).
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const result = await Promise.race([
-      adapter.complete(request),
+      adapter.complete({ ...request, signal: controller.signal }),
       new Promise<never>((_, reject) => {
         // Newer models think before replying, so allow more than a plain call needs.
-        timer = setTimeout(() => reject(new Error("LLM completion timed out after 60s")), 60_000);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("LLM completion timed out after 60s"));
+        }, 60_000);
       }),
     ]).finally(() => clearTimeout(timer));
     return result;
@@ -93,12 +99,16 @@ export class LLMGateway {
     const target = provider ?? this.defaultProvider;
     const adapter = this.providers.get(target);
     if (!adapter?.completeWithTools) throw new Error(`Provider ${target} does not support tool use`);
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     return Promise.race([
-      adapter.completeWithTools(request),
+      adapter.completeWithTools({ ...request, signal: controller.signal }),
       new Promise<never>((_, reject) => {
         // Several model calls in one loop, each of which may think.
-        timer = setTimeout(() => reject(new Error("LLM tool loop timed out after 180s")), 180_000);
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("LLM tool loop timed out after 180s"));
+        }, 180_000);
       }),
     ]).finally(() => clearTimeout(timer));
   }

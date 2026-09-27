@@ -24,6 +24,9 @@ import { requireLiveSession, requireRole } from "@/lib/session-utils";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 const MODES: IngestionMode[] = ["manual", "semi_automatic", "automatic"];
+// Server actions are callable with any arguments: check them before they go
+// into API paths and bodies (review finding 2026-09-28).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 function revalidateOneOnOnePages() {
@@ -35,6 +38,7 @@ function revalidateOneOnOnePages() {
 export async function decideImportAction(id: string, action: "approve" | "decline"): Promise<ActionResult> {
   const guard = await requireLiveSession();
   if (!guard.ok) return { ok: false, error: guard.error };
+  if (!UUID.test(id) || (action !== "approve" && action !== "decline")) return { ok: false, error: "Unknown import" };
   try {
     await decideImport(id, action);
     revalidateOneOnOnePages();
@@ -54,7 +58,7 @@ export async function uploadNotesAction(
   const counterpartId = formData.get("counterpartId");
   const meetingDate = formData.get("meetingDate");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a file to upload" };
-  if (typeof counterpartId !== "string" || !counterpartId) return { ok: false, error: "Choose who the 1:1 was with" };
+  if (typeof counterpartId !== "string" || !UUID.test(counterpartId)) return { ok: false, error: "Choose who the 1:1 was with" };
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "File is too large (5 MB limit)" };
 
   try {
@@ -78,9 +82,14 @@ export async function updateGoalAction(
 ): Promise<ActionResult> {
   const guard = await requireLiveSession();
   if (!guard.ok) return { ok: false, error: guard.error };
-  if (change.text !== undefined && !change.text.trim()) return { ok: false, error: "The goal can't be empty" };
+  if (!UUID.test(id)) return { ok: false, error: "Unknown goal" };
+  // Only the fields the page can change, whatever the caller sent.
+  const text = typeof change?.text === "string" ? change.text : undefined;
+  const status = change?.status && ["active", "done", "dropped"].includes(change.status) ? change.status : undefined;
+  if (text !== undefined && !text.trim()) return { ok: false, error: "The goal can't be empty" };
+  if (text === undefined && status === undefined) return { ok: false, error: "Nothing to change" };
   try {
-    await updateBetweenMeetingGoal(id, { ...change, ...(change.text !== undefined ? { text: change.text.trim() } : {}) });
+    await updateBetweenMeetingGoal(id, { ...(text !== undefined ? { text: text.trim() } : {}), ...(status ? { status } : {}) });
     revalidateOneOnOnePages();
     return { ok: true };
   } catch (err) {

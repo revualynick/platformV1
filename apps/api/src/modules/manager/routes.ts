@@ -436,7 +436,7 @@ export const managerRoutes: FastifyPluginAsync = async (app) => {
     const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const monthStarting = monthStart.toISOString().split("T")[0];
 
-    // Previous month — used to compute sentimentTrend
+    // Previous month, used to compute sentimentTrend
     const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
     const prevMonthStarting = prevMonthStart.toISOString().split("T")[0];
 

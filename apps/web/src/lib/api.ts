@@ -45,7 +45,7 @@ async function apiFetch<T>(
   const res = await fetch(url, {
     ...init,
     headers: {
-      // Only send Content-Type when there's actually a body — Fastify rejects an
+      // Only send Content-Type when there's actually a body, Fastify rejects an
       // empty body with content-type application/json (400), which silently broke
       // every bodyless POST/DELETE (deactivate, note delete, ws-token → realtime).
       ...(init?.body != null ? { "Content-Type": "application/json" } : {}),
@@ -63,9 +63,16 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    // Truncate body to prevent large dumps; log in all envs for observability
+    // Error bodies can echo what someone wrote (validation messages, goal
+    // text): outside development, log the status and route only (review
+    // finding 2026-09-28).
     const body = await res.text().catch(() => "");
-    console.error(`API error ${res.status}: ${path} — ${body.slice(0, 500)}`);
+    const logPath = path.split("?")[0];
+    console.error(
+      process.env.NODE_ENV === "development"
+        ? `API error ${res.status}: ${logPath}: ${body.slice(0, 500)}`
+        : `API error ${res.status}: ${logPath}`,
+    );
     let apiMessage: string | undefined;
     try {
       const parsed = JSON.parse(body) as { error?: unknown };

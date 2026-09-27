@@ -23,13 +23,31 @@ export interface AsyncStore {
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
 }
 
+/**
+ * The default store: in memory, honouring each entry's TTL and capped, so it
+ * can't grow for the life of the process (review finding 2026-09-28).
+ * Oldest entries go first when full (Map keeps insertion order).
+ */
 class InMemoryStore implements AsyncStore {
-  private data = new Map<string, string>();
+  private data = new Map<string, { value: string; expiresAt: number }>();
+  constructor(private readonly maxEntries = 10_000) {}
   async get(key: string): Promise<string | null> {
-    return this.data.get(key) ?? null;
+    const hit = this.data.get(key);
+    if (!hit) return null;
+    if (hit.expiresAt <= Date.now()) {
+      this.data.delete(key);
+      return null;
+    }
+    return hit.value;
   }
-  async set(key: string, value: string, _ttlSeconds: number): Promise<void> {
-    this.data.set(key, value);
+  async set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    this.data.delete(key);
+    this.data.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    while (this.data.size > this.maxEntries) {
+      const oldest = this.data.keys().next().value;
+      if (oldest === undefined) break;
+      this.data.delete(oldest);
+    }
   }
 }
 
@@ -185,12 +203,20 @@ export class TeamsAdapter implements ChatAdapter {
           // Validate minimum required fields before trusting the cached value.
           // A schema-drifted or corrupt entry with missing serviceUrl/conversation
           // would cause serviceUrl.replace(...) to throw in sendMessage.
-          if (parsed && typeof parsed.serviceUrl === "string" && parsed.serviceUrl && parsed.conversation) {
+          // The bot's bearer token goes to serviceUrl, so a stored ref must
+          // pass the same allowlist as an inbound one (review finding 2026-09-28).
+          if (
+            parsed &&
+            typeof parsed.serviceUrl === "string" &&
+            parsed.serviceUrl &&
+            parsed.conversation &&
+            ALLOWED_SERVICE_URLS.some((u) => parsed.serviceUrl.startsWith(u))
+          ) {
             ref = parsed;
             this.conversationRefs.set(message.channelId, ref);
           }
         } catch {
-          // corrupt entry — fall through to throw below
+          // corrupt entry, fall through to throw below
         }
       }
     }
@@ -274,7 +300,7 @@ export class TeamsAdapter implements ChatAdapter {
           return { platformUserId, displayName: entry.name, email: entry.email };
         }
       } catch {
-        // corrupt entry — fall through
+        // corrupt entry, fall through
       }
     }
 

@@ -8,7 +8,7 @@ import type {
 import type { ChatPlatform } from "@revualy/shared";
 
 /**
- * InternalSimulatorAdapter — an in-process ChatAdapter for the "internal"
+ * InternalSimulatorAdapter, an in-process ChatAdapter for the "internal"
  * platform used by the local chat-simulation harness (see modules/dev/routes).
  *
  * Instead of calling out to a real chat platform, `sendMessage` records the

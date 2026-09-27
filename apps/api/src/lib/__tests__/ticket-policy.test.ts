@@ -87,8 +87,13 @@ describe("ticket policy gate", () => {
       { category: "angle", about: "subject", text: "Sam's 1:1 notes say Jon struggled" },
       { category: "self_data", about: "subject" },
     ]);
-    expect(r.accepted.map((a) => a.category)).toEqual(["subject_name", "themes"]);
-    expect(r.dropped).toHaveLength(4);
+    // Every proposal refused, so the policy's own defaults stand in (review
+    // finding 2026-09-28); none of the injected categories gets through.
+    const accepted = r.accepted.map((a) => a.category);
+    expect(accepted).toEqual(expect.arrayContaining(["subject_name", "themes"]));
+    for (const c of ["one_on_one_content", "peer_feedback", "self_data"]) expect(accepted).not.toContain(c);
+    expect(r.dropped.filter((d) => ["one_on_one_content", "peer_feedback", "angle", "self_data"].includes(d.category))).toHaveLength(4);
+    expect(r.usedDefaults).toBe(accepted.length > 2);
     expect(JSON.stringify(r.accepted)).not.toMatch(/Sam|1:1/);
   });
 
@@ -167,5 +172,12 @@ describe("ticket write-back", () => {
     expect(RESULT_SCHEMAS.peer_checkin.safeParse({ outcome: "closed", answers: [], wordCount: 0 }).success).toBe(false);
     expect(RESULT_SCHEMAS.peer_checkin.safeParse({ outcome: "closed", answers: ["x"], wordCount: 1, reviewerId: "p" }).success).toBe(false);
     expect(RESULT_SCHEMAS.peer_checkin.safeParse({ outcome: "closed", answers: ["x"], wordCount: 1 }).success).toBe(true);
+  });
+
+  it("falls back to the defaults when the agent proposed only things the gate refuses", () => {
+    const r = decideTicketItems(peer(), [{ category: "self_data", about: "subject" }]);
+    const withDefaults = decideTicketItems(peer(), null);
+    expect(r.accepted.map((a) => a.category).sort()).toEqual(withDefaults.accepted.map((a) => a.category).sort());
+    expect(r.dropped.some((d) => d.category === "self_data")).toBe(true);
   });
 });

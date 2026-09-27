@@ -31,7 +31,8 @@ import {
  *                  job failed for good), past their expiry -> expired
  *  7. retention:   peer conversations (tier D, named) analysed more than
  *                  DELIVERY_RETENTION_DAYS ago -> deleted with their
- *                  transcript, inbound copies and schedule rows; used
+ *                  transcript, inbound copies and schedule rows; incoming
+ *                  messages that never joined a conversation -> deleted; used
  *                  check-in jobs past the anchor lookback -> deleted. The
  *                  feedback stays, under the reviewer's pseudonym only.
  *  8. tickets:     any ticket past its expiry (prepared but never used,
@@ -72,6 +73,7 @@ export interface SweepResult {
   conversationsPurged: number;
   jobsPurged: number;
   ticketsExpired: number;
+  inboundPurged: number;
   errors: number;
 }
 
@@ -93,6 +95,7 @@ export async function runSweep(
     conversationsPurged: 0,
     jobsPurged: 0,
     ticketsExpired: 0,
+    inboundPurged: 0,
     errors: 0,
   };
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS);
@@ -242,6 +245,15 @@ export async function runSweep(
     .where(and(eq(checkinJobs.status, "used"), lt(checkinJobs.createdAt, jobsBefore)))
     .returning({ id: checkinJobs.id });
   result.jobsPurged = purgedJobs.length;
+
+  // Incoming messages that never joined a conversation (after a check-in
+  // window closed, after a support signpost, keywords, unknown senders) are
+  // named free text too: the same retention (review finding 2026-09-28).
+  const orphans = await db
+    .delete(inboundMessages)
+    .where(and(isNull(inboundMessages.conversationId), sql`${inboundMessages.status} <> 'pending'`, lt(inboundMessages.receivedAt, retentionCutoff)))
+    .returning({ id: inboundMessages.id });
+  result.inboundPurged = orphans.length;
 
   // 8. Tickets past their expiry, whatever state they were stuck in.
   result.ticketsExpired = await expireTickets(db, now);

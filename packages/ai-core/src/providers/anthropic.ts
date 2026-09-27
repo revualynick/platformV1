@@ -29,7 +29,7 @@ export class AnthropicAdapter implements LLMProviderAdapter {
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
     const model = this.models[request.tier];
     const start = performance.now();
-    const response = await this.client.messages.create(buildAnthropicRequest(request, model));
+    const response = await this.client.messages.create(buildAnthropicRequest(request, model), { signal: request.signal });
     const latencyMs = Math.round(performance.now() - start);
 
     // Thinking blocks come first on models that think; only text is the reply.
@@ -76,7 +76,9 @@ export class AnthropicAdapter implements LLMProviderAdapter {
     const start = performance.now();
 
     for (let round = 1; round <= maxRounds + 1; round++) {
-      const response = await this.client.messages.create({ ...base, messages, tools });
+      // Timed out by the gateway: stop instead of paying for more rounds.
+      if (request.signal?.aborted) throw new Error("LLM tool loop aborted");
+      const response = await this.client.messages.create({ ...base, messages, tools }, { signal: request.signal });
       inputTokens += response.usage.input_tokens;
       outputTokens += response.usage.output_tokens;
       const uses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
@@ -152,7 +154,7 @@ function extractMessages(
   }
 
   // Anthropic requires at least one user message.
-  // Most call sites send only system messages — promote the last system
+  // Most call sites send only system messages, promote the last system
   // message to a user message so the API call succeeds.
   if (nonSystem.length === 0 && systemMsgs.length > 0) {
     const last = systemMsgs.pop()!;

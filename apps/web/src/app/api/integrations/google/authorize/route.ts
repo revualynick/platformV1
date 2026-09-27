@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { publicUrl } from "@/lib/public-url";
+import { safeRelativePath } from "@/lib/safe-path";
 
 const API_BASE = process.env.INTERNAL_API_URL ?? "http://localhost:3000";
 
@@ -17,11 +18,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(publicUrl("/login", request));
   }
 
-  // Same-site paths only: an absolute or protocol-relative value would
-  // redirect off-site.
-  const requested = request.nextUrl.searchParams.get("returnTo");
-  const returnTo =
-    requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : "/dashboard/settings";
+  // Same-site paths only: anything else could redirect off-site.
+  const returnTo = safeRelativePath(request.nextUrl.searchParams.get("returnTo"), "/dashboard/settings")!;
 
   const apiRes = await fetch(
     `${API_BASE}/api/v1/integrations/google/authorize?returnTo=${encodeURIComponent(returnTo)}`,

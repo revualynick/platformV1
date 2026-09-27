@@ -19,6 +19,8 @@ const NOTIFICATION_TYPES = [
   "weekly_digest",
   "flag_alert",
   "nudge",
+  // Unsubscribe links cover it, so settings must show it to turn back on.
+  "assessment_invite",
 ] as const;
 
 export async function getNotificationPreferences(

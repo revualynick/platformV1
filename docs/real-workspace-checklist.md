@@ -13,6 +13,7 @@ You need: the beta tenant deployed from the release commit, two or three test pe
 - [ ] `REVIEWER_PSEUDONYM_SECRET` is set on the api service, and `GET /api/v1/admin/privacy/audit/verify` as a super admin returns ok.
 - [ ] `OPS_ALERT_EMAIL` and `RESEND_API_KEY` are set on the api service. To prove alerts arrive, stop the worker for 30 minutes on a quiet evening, or wait for the first natural one. The email names no one.
 - [ ] `TEST_LOGIN_ENABLED` is false: `/api/test-login` returns 404.
+- [ ] Redirects land on the public domain: open `https://<tenant>.revualy.com/dashboard` signed out and check the redirect goes to `https://<tenant>.revualy.com/login`, not an internal address. (Since 2026-09-28 redirects are built from the `Host` header, not `X-Forwarded-Host`; this confirms Railway passes the public host.)
 - [ ] Support settings (`/settings/support`): the client's contact and details are filled in, and the HR team has signed off the wording, or has knowingly chosen to go with the defaults for now.
 - [ ] A Railway Postgres backup exists and a restore to a scratch database has been tried once.
 

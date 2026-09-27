@@ -878,7 +878,9 @@ export const checkinJobs = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (table) => [
-    unique("uq_checkin_jobs_pair").on(table.reviewerId, table.subjectId, table.anchorEventId),
+    // NULLS NOT DISTINCT (migration 0051): a proposal with no subject or no
+    // meeting is still one row, not a new one every night.
+    unique("uq_checkin_jobs_pair").on(table.reviewerId, table.subjectId, table.anchorEventId).nullsNotDistinct(),
     index("idx_checkin_jobs_lookup").on(table.reviewerId, table.status, table.priority.desc()),
   ],
 );
@@ -1112,7 +1114,7 @@ export const selfReflections = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
-    conversationId: uuid("conversation_id").references(() => conversations.id),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
     weekStarting: date("week_starting").notNull(),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     mood: varchar("mood", { length: 20 }),

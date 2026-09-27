@@ -5,13 +5,14 @@ import { or, eq } from "drizzle-orm";
 import { users, authUsers, authSessions } from "@revualy/db/schema";
 import { getDb } from "@/lib/db";
 import { publicUrl } from "@/lib/public-url";
+import { safeRelativePath } from "@/lib/safe-path";
 
 /**
  * Dev-only test-login endpoint.
  *
  * Mints a real database-backed NextAuth session for a seeded user so automated
  * tests (Playwright) can exercise authenticated + mutation flows without Google
- * OAuth. DEFENCE IN DEPTH — this is not "just a flag":
+ * OAuth. DEFENCE IN DEPTH, this is not "just a flag":
  *   1. `TEST_LOGIN_ENABLED` must be exactly "true", AND
  *   2. the caller must present a secret that matches `TEST_LOGIN_KEY`
  *      (constant-time compared), AND
@@ -39,7 +40,7 @@ function keyMatches(provided: string | null, expected: string | undefined): bool
 
 export async function GET(request: NextRequest) {
   const enabled = process.env.TEST_LOGIN_ENABLED === "true";
-  // Hide the endpoint entirely when disabled — no signal that it exists.
+  // Hide the endpoint entirely when disabled, no signal that it exists.
   if (!enabled) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -131,17 +132,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Same-origin relative paths only, never an open redirect.
-  const rawRedirect = url.searchParams.get("redirect");
-  // Rejects "//host" and "/\\host" (a URL parser treats "\\" as "/"), and
-  // anything that resolves off this origin.
-  const redirectTo =
-    rawRedirect &&
-    rawRedirect.startsWith("/") &&
-    !rawRedirect.startsWith("//") &&
-    !rawRedirect.includes("\\") &&
-    new URL(rawRedirect, "http://same.origin").origin === "http://same.origin"
-      ? rawRedirect
-      : null;
+  const redirectTo = safeRelativePath(url.searchParams.get("redirect"), null);
   const response = redirectTo
     ? NextResponse.redirect(publicUrl(redirectTo, request))
     : NextResponse.json({
@@ -149,8 +140,10 @@ export async function GET(request: NextRequest) {
         loggedInAs: { email: bizUser.email, role: bizUser.role, id: bizUser.id },
       });
 
-  // NextAuth reads the __Secure- prefixed cookie name over HTTPS.
-  const isHttps = url.protocol === "https:";
+  // NextAuth reads the __Secure- prefixed cookie name over HTTPS. Behind a
+  // TLS proxy request.url says http (the bind address), so take the scheme
+  // the browser used (review finding 2026-09-28).
+  const isHttps = publicUrl("/", request).protocol === "https:";
   response.cookies.set(isHttps ? `__Secure-${SESSION_COOKIE}` : SESSION_COOKIE, sessionToken, {
     httpOnly: true,
     sameSite: "lax",

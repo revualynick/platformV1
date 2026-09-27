@@ -12,7 +12,7 @@ const bulkEngagementQuerySchema = z.object({
 export const engagementRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", requireAuth);
 
-  // GET /leaderboard — Weekly leaderboard (manager+ only)
+  // GET /leaderboard, Weekly leaderboard (manager+ only)
   // TODO(review): could be scoped to reporting tree for managers vs full org for admins
   app.get("/leaderboard", { preHandler: requireRole("manager") }, async (request, reply) => {
     const { db } = request.tenant;

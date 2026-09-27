@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { pseudonymSecret } from "../pseudonym.js";
 import { findManagerCycles } from "./graph.js";
 import type { FeedbackRow, GoalLevel, GoalRow, PersonRow, RowResult } from "./mapping.js";
 import { matchChartPeople, type ChartPerson } from "./org-chart.js";
@@ -433,9 +434,17 @@ export interface FeedbackPlan {
   report: ImportReport;
 }
 
+/**
+ * Dedupe key for imported feedback. Keyed with the pseudonym secret (review
+ * finding 2026-09-28): a plain hash of the author's email could be matched
+ * against every user's email by anyone with the database, re-identifying
+ * the author without the secret. HMAC over the plain hash, so migration
+ * 0051 can rekey stored rows without knowing the emails.
+ */
 export function feedbackSourceKey(row: FeedbackRow): string {
   const text = row.text.replace(/\s+/g, " ").trim();
-  return crypto.createHash("sha256").update([row.authorEmail, row.recipientEmail, row.date, text].join("\n")).digest("hex");
+  const plain = crypto.createHash("sha256").update([row.authorEmail, row.recipientEmail, row.date, text].join("\n")).digest("hex");
+  return crypto.createHmac("sha256", pseudonymSecret()).update(plain).digest("hex");
 }
 
 /**
