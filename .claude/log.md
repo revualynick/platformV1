@@ -424,3 +424,7 @@
 - Off-script: 2nd in a row offers to stop, 3rd ends; real run found a 3x off-script check-in analysed into a junk reflection: fixed (analysed only after a real answer; purged otherwise)
 - Real-model run on staging: wellbeing (classed safety), safety, conduct, privacy, off-script, bad day all behaved; 8-16 s for serious turns; conduct still becomes feedback (C2 open)
 - API 608/608, typecheck 17/17; full browser suite on staging 208 passed, 0 failed (no retries)
+
+## 2026-09-27: branch pushed
+- beta-hardening pushed to origin as its own branch (103 commits ahead of origin/main), no PR, main untouched (Nick: Railway builds from git, keep it on a branch). Railway deploy branch not verified: CLI not logged in
+- Local main still has one unpushed commit (c7ac771) from before; left alone
