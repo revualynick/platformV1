@@ -985,13 +985,15 @@ async function seed() {
     promptTheme: "weekly",
     completedAt: new Date(),
   });
+  // Raised by a colleague (an escalation needs a reporter or a feedback entry).
   await db.insert(escalations).values({
+    reporterId: u("Marcus Rivera"),
     subjectId: u("David Kim"),
     type: "other",
     severity: "medium",
     status: "open",
-    reason: "Repeated low-effort responses and a dismissive tone in recent check-ins",
-    description: "Flagged by the analysis pipeline for a coaching conversation.",
+    reason: "Dismissive tone towards teammates in recent stand-ups",
+    description: "Raised by a colleague for a coaching conversation.",
     flaggedContent: "",
   });
   await db.insert(pulseCheckTriggers).values({
