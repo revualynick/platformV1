@@ -1,6 +1,5 @@
 import { requireManagerPage } from "@/lib/page-guards";
 import { PartialBadge } from "@/components/partial-badge";
-import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PathNameProvider } from "@/lib/path-context";
@@ -216,9 +215,7 @@ async function ChartsRow({
       >
         <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Engagement Trend</h3>
         <ChartErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
             <EngagementChart data={engagementHistory} />
-          </Suspense>
         </ChartErrorBoundary>
       </div>
       <div
@@ -227,9 +224,7 @@ async function ChartsRow({
       >
         <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Values Alignment</h3>
         <ChartErrorBoundary>
-          <Suspense fallback={<ChartSkeleton />}>
             <ValuesRadar data={valuesScores} />
-          </Suspense>
         </ChartErrorBoundary>
       </div>
     </div>
@@ -850,61 +845,50 @@ export default async function EmployeeDetailPage({
         )}
 
         {/* Employee header — streams in quickly (just getUser + getEngagementScores) */}
-        <Suspense fallback={<HeaderSkeleton />}>
+        
           <EmployeeHeader userId={userId} managerId={managerId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {level === "signals" ? (
-          <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+          
             <SignalsView userId={userId} directManagerId={directManagerId} />
-          </Suspense>
+          
         ) : (
         <>
         {/* Charts row */}
-        <Suspense
-          fallback={
-            <div className="mb-8 grid gap-6 lg:grid-cols-2">
-              <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
-                <ChartSkeleton />
-              </div>
-              <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
-                <ChartSkeleton />
-              </div>
-            </div>
-          }
-        >
+        
           <ChartsRow userId={userId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* Recent feedback */}
-        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+        
           <FeedbackSection userId={userId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* Flagged items */}
-        <Suspense fallback={null}>
+        
           <FlaggedSection userId={userId} employeeName={employeeName} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* 1:1 Sessions */}
-        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+        
           <SessionsSection userId={userId} managerId={managerId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* Profile & Development */}
-        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+        
           <ProfileWrapper userId={userId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* 360 Reviews */}
-        <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+        
           <ThreeSixtySection userId={userId} isDemo={isDemo} />
-        </Suspense>
+        
 
         {/* Manager notes */}
-        <Suspense fallback={<SectionSkeleton />}>
+        
           <NotesWrapper userId={userId} managerId={managerId} isDemo={isDemo} />
-        </Suspense>
+        
         </>
         )}
       </div>
