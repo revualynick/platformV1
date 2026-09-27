@@ -17,18 +17,15 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Bugs
 
-- **New goal cycle sometimes doesn't appear until a reload** (admin Settings, Goals; production build only; found on staging 2026-09-27). The cycle is saved; the list doesn't update. An explicit `router.refresh()` after saving (96e92ab) made it pass 4 of 4 in isolation, but it still failed once in a full browser-suite run. Not yet understood.
-
-- **H4 Slack bot may process its own messages** (checked 2026-09-26: no `bot_id` filter in the Slack adapter). Only matters once Slack is a tenant platform (C3 step 10).
 - **M4 demo LLM spend** (not re-checked): the 3-a-day limit is per unverified email; on real tenants the authenticated `/demo/start` creates real conversations about a real colleague.
-- **B17 `next build` prerender failure on /404** (not re-checked; Railway builds may have since passed).
 - **Live 1:1 sessions in production:** can the browser reach the API's WebSocket, given the API isn't public? `NEXT_PUBLIC_WS_URL` itself is fine (read at runtime by server pages, checked in the production image 2026-09-26); it must be set on Railway's web service and point somewhere public.
 - **Redirects on Railway:** the bind-address redirect bug fixed on 2026-09-26 (`publicUrl()`) probably affected the Railway deployment; confirm after its next deploy.
-- **First-review leftovers** (C3 step 11, not re-checked): nudge query misses zero-activity users; `engagement_scores.streak` has no writer; duplicate or re-created relationships 500; self-reflection analysis never retried and skips flag detection; 360 aggregation runs inside a transaction; team-insight month keys use local time; member detail page scope differs between web and API; `test-login` open redirect, insecure cookie, key in query string.
+- **Self-reflection analysis retry** (first review, not re-checked since the sweeper was added, which re-queues missing analysis): confirm reflections are covered.
 
 ## Decisions waiting on Nick
 
-
+- **Member detail page scope:** the web page allows a manager's direct reports only; the API allows the whole reporting tree and admins. Which is intended, given the privacy design gives skip-levels signals only? (first review)
+- **Self-reflections and concern detection:** reflections skip the flag detection peer feedback gets. Should a reflection that mentions wellbeing or safety go through the concern handling? (first review; a safeguarding decision)
 - **Privacy design open questions** (5, at the end of the design doc).
 - **Calendar model:** priority weighting as client-adjustable sliders, possibly a learning algorithm later (Nick, 2026-09-26). Still open: focus when the title is hidden, one check-in per meeting, joiner dates, whether sensitive-looking titles reach Haiku at all.
 - **Imports:** users with direct reports in the file become managers automatically; new `read-excel-file` dependency; historical feedback is stored but nothing shows it.
@@ -53,7 +50,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Deterministic layer driven by a reasoning model** (Nick, 2026-09-26): a typed decision layer in the spirit of Jev, built on our own models. The reasoning model returns choices and scores against a fixed schema, and code decides what happens. For alpha and beta, quality comes before token cost.
 - C3 step 9: re-presentation engine (re-ask weak or unanswered themes), tuned with beta data.
 - C3 step 10: Slack and Teams linking.
-- Automatic 1:1 source (Meet REST API or a shared Drive folder) behind `MeetingSource`; web UI for approvals, uploads, between-meeting goals and the mode setting; verify Gemini notes format and location on a real Workspace; proper PDF parsing.
+- Automatic 1:1 source (Meet REST API or a shared Drive folder) behind `MeetingSource`; verify Gemini notes format and location on a real Workspace; proper PDF parsing.
 - Employee handover system (spec in `docs/plan.md`), now shaped by the handover summary in the privacy design.
 - Outlook calendar integration.
 - Stripe billing.
@@ -63,17 +60,15 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Technical debt
 
-- **Audit other create/edit dialogs for the same refresh gap** as the goal cycle one (people, notes, questionnaires, core values): they rely on the action's revalidation alone.
-- `pnpm dev` doesn't pass `.env` to the servers: Turborepo runs in strict env mode and the `dev` task declares no variables, so the API exits with "INTERNAL_API_SECRET env var is required". Workaround: start `apps/api` (`npx tsx src/server.ts`) and `apps/web` (`npx next dev -p 3001`) directly with `.env` loaded. Fix: `passThroughEnv` or `envMode: "loose"` for `dev` (found 2026-09-26).
-- 1:1 screens follow-ups: admin view of which modes managers use and who has Google connected; process an approved import straight away instead of at the next hourly run; test a real Gemini .docx and .vtt upload (a .txt was verified on staging).
+- 1:1 screens follow-ups: admin view of which modes managers use and who has Google connected; test a real Gemini .docx and .vtt upload (a .txt was verified on staging).
 - `pnpm tenant:fleet migrate` runs migrations under the Postgres service's variables, which lack `REVIEWER_PSEUDONYM_SECRET`, so migration 0043 would refuse on a tenant with feedback rows. Deployed tenants migrate at API boot with the secret, so this only affects the fleet tool. Fix: run it through the API service, or pass the secret (found 2026-09-26).
 - Local Postgres (Docker bind mount on macOS) occasionally fails `CREATE DATABASE` under heavy parallel load with "could not open file ... Permission denied". Intermittent, environmental; seen twice on 2026-09-26.
-
-
 - Read-only Postgres role for the web app.
 - Parity tests for endpoints migrated to direct reads; auth matrix tests.
 - Service-layer caching.
 - Timezone-aware scheduling (`date-fns-tz`) before non-UTC customers.
-- Dialog escape and backdrop close; duplicated `COMMON_TIMEZONES`.
-- Mobile layout for the app shell.
-- Dead control-plane code (`packages/db/src/client.ts` exports, `schema/control-plane.ts`, `drizzle.config.control-plane.ts`, `migrations-control-plane/`).
+- Dead control-plane code (`packages/db/src/client.ts` exports, `schema/control-plane.ts`, `drizzle.config.control-plane.ts`, `migrations-control-plane/`). Kept for a possible marketing-site database; delete if that's not coming.
+
+## Done 2026-09-27 (for the record; details in docs/build/2026-09-27-mechanical-fixes.md)
+
+Goal cycle refresh (root cause: loading boundaries), mobile layout, `pnpm dev` env, Slack bot messages (H4), engagement streak, UTC month keys, shared timezone list, approved 1:1s processed at once. Found already fixed: relationship duplicates, 360 aggregation transaction, nudges for zero-activity users, test-login cookie and open redirect, dialog Escape and backdrop, B17 `next build` (the production web image builds).

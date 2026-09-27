@@ -388,3 +388,10 @@
 - Found on the production build: reseed locked seeded users out (auth_user email unique) - fixed; new goal cycle sometimes not shown until reload - partly fixed, still intermittent (backlog); test races only the fast build exposes (logout, streaming duplicates) - fixed in tests
 - Staging full suite, no retries: 190 passed, 12 failed (11 known mobile overflow, 1 goal cycle refresh)
 - My mistake: a trace script printed staging's test-login key; rotated on the box and the old key verified rejected. Traces now strip query strings
+
+## 2026-09-27: goal cycle root cause, mobile layout, mechanical backlog
+- Root cause of saved items not appearing (goal cycle and other flaky tests): route-level loading.tsx + streamed server action response in the production build; measured 35-55% failure vs 20/20 after removing the 22 boundaries above saving pages; rule in CLAUDE.md
+- Mobile: sidebar drawer below lg, goal card badges wrap, settings grid shrinks; 0 overflow at 390px
+- Mechanical: pnpm dev env, Slack bot_id (H4), streak writer, UTC month keys, shared timezones, approved 1:1s processed at once; several backlog items found already fixed and removed
+- Browser suite vs staging, no retries: 202 passed, 0 failed. API 575/575
+- Left for Nick: member page scope, concern checks on reflections (moved to Decisions), plus earlier decisions
