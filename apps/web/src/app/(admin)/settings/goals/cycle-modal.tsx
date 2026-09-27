@@ -36,7 +36,6 @@ export function CycleModal({
       }
       formRef.current?.reset();
       setOpen(false);
-      router.refresh();
     } finally {
       setPending(false);
     }
