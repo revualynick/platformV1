@@ -85,6 +85,8 @@ export function opsRows(tenant: string, status: number, body: string): Record<st
   if (status === 401) return [{ tenant, check: "ops status", result: "FAIL (ops token rejected)" }];
   const bad = (parsed.checks ?? []).filter((c) => c.status !== "ok");
   if (!bad.length && parsed.status === "ok") return [{ tenant, check: "ops status", result: "ok" }];
+  // An error body, or a status with nothing to explain it: never silently healthy.
+  if (!bad.length) return [{ tenant, check: "ops status", result: `FAIL (${status}${(parsed as { error?: string }).error ? `: ${(parsed as { error?: string }).error}` : ""})` }];
   return bad.map((c) => ({ tenant, check: `ops ${c.name}`, result: `${c.status.toUpperCase()}: ${c.detail}` }));
 }
 

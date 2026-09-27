@@ -1,4 +1,4 @@
-import { and, eq, ne, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { TenantDb, ThemeOutcome } from "@revualy/db";
 import { conversationThemeOutcomes } from "@revualy/db";
 
@@ -68,12 +68,16 @@ export async function recordUnreachedThemes(db: Writer, conv: OutcomeConversatio
     .onConflictDoNothing();
 }
 
-/** Whether any theme in this conversation got a real answer (answered or weak). */
-export async function hasAnsweredTheme(db: Writer, conversationId: string): Promise<boolean> {
-  const [row] = await db
-    .select({ id: conversationThemeOutcomes.id })
-    .from(conversationThemeOutcomes)
-    .where(and(eq(conversationThemeOutcomes.conversationId, conversationId), ne(conversationThemeOutcomes.outcome, "unanswered")))
-    .limit(1);
-  return Boolean(row);
+/**
+ * Whether a conversation that ended on off-script replies holds anything
+ * worth analysing: more user turns than the off-script run itself. Counted
+ * from the messages, not theme outcomes, because a check-in without themes
+ * (or past its last theme) records no outcome for a real answer. Errs on
+ * the side of analysing.
+ */
+export async function saidMoreThanOffScript(db: Writer, conversationId: string, offScriptStreak: number): Promise<boolean> {
+  const rows = (await db.execute(
+    sql`SELECT count(*) AS n FROM conversation_messages WHERE conversation_id = ${conversationId} AND role = 'user'`,
+  )) as unknown as Array<{ n: string | number }>;
+  return Number(rows[0]?.n ?? 0) > offScriptStreak;
 }

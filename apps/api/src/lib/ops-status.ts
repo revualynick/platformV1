@@ -31,6 +31,9 @@ export interface OpsStatus {
   checks: OpsCheck[];
 }
 
+const AUDIT_JOB = "audit-chain";
+const MIN_MS = 60_000;
+
 type Tx = Parameters<Parameters<TenantDb["transaction"]>[0]>[0];
 type DbOrTx = TenantDb | Tx;
 
@@ -107,7 +110,7 @@ export async function computeOpsStatus(
           AND EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user')
           AND NOT EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
           AND NOT EXISTS (SELECT 1 FROM self_reflections r WHERE r.conversation_id = c.id)
-          AND NOT (c.off_script_streak >= 3 AND NOT EXISTS (SELECT 1 FROM conversation_theme_outcomes o WHERE o.conversation_id = c.id AND o.outcome <> 'unanswered'))`,
+          AND NOT (c.off_script_streak >= 3 AND (SELECT count(*) FROM conversation_messages um WHERE um.conversation_id = c.id AND um.role = 'user') <= c.off_script_streak)`,
   );
   add("analysis_missing", unanalysed > 0 ? "warn" : "ok", unanalysed, unanalysed ? `${unanalysed} finished conversations not analysed after 2 hours` : "Finished conversations are being analysed");
 
@@ -156,8 +159,25 @@ export async function computeOpsStatus(
   }
 
   // ── Integrity ──
-  const chain = await verifyAuditChain(db);
-  add("audit_chain", chain.ok ? "ok" : "fail", chain.rows, chain.ok ? `Audit log intact (${chain.rows} entries)` : `Audit log chain broken at entry ${chain.brokenAt} (${chain.problem})`);
+  // New entries since the last good check; the whole chain once a day.
+  const chainBeat = byJob.get(AUDIT_JOB);
+  const saved = chainBeat?.details as { seq?: number; rowHash?: string; fullAt?: string } | undefined;
+  const fullDue = !saved?.fullAt || now.getTime() - new Date(saved.fullAt).getTime() > 24 * 60 * MIN_MS;
+  const from = !fullDue && saved?.seq && saved.rowHash ? { seq: saved.seq, rowHash: saved.rowHash } : undefined;
+  const chain = await verifyAuditChain(db, 1000, from);
+  if (chain.ok && chain.head) {
+    const details = { seq: chain.head.seq, rowHash: chain.head.rowHash, fullAt: from ? saved?.fullAt : now.toISOString() };
+    await db
+      .insert(opsHeartbeats)
+      .values({ job: AUDIT_JOB, lastRunAt: now, lastOkAt: now, details })
+      .onConflictDoUpdate({ target: opsHeartbeats.job, set: { lastRunAt: now, lastOkAt: now, lastError: null, details } });
+  }
+  add(
+    "audit_chain",
+    chain.ok ? "ok" : "fail",
+    chain.head?.seq ?? 0,
+    chain.ok ? `Audit log intact (${chain.head?.seq ?? 0} entries; ${from ? `${chain.rows} new checked` : "full check"})` : `Audit log chain broken at entry ${chain.brokenAt} (${chain.problem})`,
+  );
 
   const legacy = (process.env.ENCRYPTION_LEGACY_READS ?? "").trim().toLowerCase() === "on";
   add("encryption_legacy_reads", legacy ? "warn" : "ok", legacy ? 1 : 0, legacy ? "Legacy (unencrypted) reads are still on: run the encryption backfill and turn them off" : "All data read as encrypted");

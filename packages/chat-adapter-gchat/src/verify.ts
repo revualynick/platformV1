@@ -49,10 +49,21 @@ export interface ChatTokenVerifier {
  * X.509 certificates for chat@system.gserviceaccount.com, cached for an hour
  * and refetched once when a token names a kid we have not seen (rotation).
  */
+const UNKNOWN_KID_REFETCH_MS = 60_000;
+
 function chatCertKeys(fetchImpl: typeof fetch): JWTVerifyGetKey {
   let cache: { at: number; keys: Map<string, KeyLike> } | null = null;
+  let inflight: Promise<Map<string, KeyLike>> | null = null;
 
-  async function load(): Promise<Map<string, KeyLike>> {
+  // One fetch at a time, however many requests arrive together.
+  function load(): Promise<Map<string, KeyLike>> {
+    inflight ??= fetchKeys().finally(() => {
+      inflight = null;
+    });
+    return inflight;
+  }
+
+  async function fetchKeys(): Promise<Map<string, KeyLike>> {
     const res = await fetchImpl(CHAT_CERTS_URL);
     if (!res.ok) throw new Error(`Google Chat certs fetch failed: ${res.status}`);
     const pems = (await res.json()) as Record<string, string>;
@@ -67,7 +78,9 @@ function chatCertKeys(fetchImpl: typeof fetch): JWTVerifyGetKey {
   return async (header) => {
     const kid = header.kid ?? "";
     let keys = cache && Date.now() - cache.at < CERT_CACHE_MS ? cache.keys : await load();
-    if (!keys.has(kid)) keys = await load();
+    // An unknown kid may mean Google rotated keys, but refetch at most once a
+    // minute: forged tokens with random kids must not each cost a fetch.
+    if (!keys.has(kid) && Date.now() - (cache?.at ?? 0) > UNKNOWN_KID_REFETCH_MS) keys = await load();
     const key = keys.get(kid);
     if (!key) throw new Error(`Unknown Google Chat signing key ${kid}`);
     return key;

@@ -32,7 +32,7 @@ export async function saveSupportWordingAction(data: { support: string; conduct:
   }
 }
 
-export async function signOffSupportWordingAction(data: { name: string; role: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function signOffSupportWordingAction(data: { name: string; role: string; hash: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const guard = await requireRole("admin");
   if (!guard.ok) return { ok: false, error: guard.error };
   try {

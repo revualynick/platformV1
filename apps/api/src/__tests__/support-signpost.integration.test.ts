@@ -347,11 +347,19 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
     expect(data.previews.wellbeing).toBe(`We're sorry things are hard. Please speak to ${CONTACT}. ${DETAILS}`);
     expect(data.signoff).toBeNull();
 
+    // A sign-off for wording other than what's stored now is refused.
+    const stale = await app.inject({
+      method: "POST",
+      url: "/api/v1/support/wording/sign-off",
+      headers: as(ids.admin),
+      payload: { name: "Priya Shah", role: "Head of People", hash: "0".repeat(64) },
+    });
+    expect(stale.statusCode).toBe(409);
     const sign = await app.inject({
       method: "POST",
       url: "/api/v1/support/wording/sign-off",
       headers: as(ids.admin),
-      payload: { name: "Priya Shah", role: "Head of People" },
+      payload: { name: "Priya Shah", role: "Head of People", hash: data.wordingHash },
     });
     expect(sign.statusCode).toBe(200);
     data = (await app.inject({ method: "GET", url: "/api/v1/support/settings", headers: as(ids.admin) })).json().data;
@@ -374,7 +382,7 @@ describe.skipIf(!dbUp)("concerns in live conversations (integration)", () => {
     // Back to the defaults for the other tests.
     await app.inject({ method: "PUT", url: "/api/v1/support/wording", headers: as(ids.admin), payload: { support: "", conduct: "" } });
     await app.inject({ method: "PUT", url: "/api/v1/support/settings", headers: as(ids.admin), payload: { supportContact: CONTACT, supportDetails: DETAILS, supportOutside: "" } });
-    const nonAdmin = await app.inject({ method: "POST", url: "/api/v1/support/wording/sign-off", headers: as(ids.person), payload: { name: "Me", role: "Me" } });
+    const nonAdmin = await app.inject({ method: "POST", url: "/api/v1/support/wording/sign-off", headers: as(ids.person), payload: { name: "Me", role: "Me", hash: "0".repeat(64) } });
     expect(nonAdmin.statusCode).toBe(403);
   });
 });

@@ -113,12 +113,21 @@ export interface AuditVerification {
   head: { seq: number; rowHash: string } | null;
 }
 
-/** Recompute the whole chain. Pass a transaction to verify uncommitted state. */
-export async function verifyAuditChain(db: DbOrTx, pageSize = 1000): Promise<AuditVerification> {
-  let expectedSeq = 1;
-  let prevHash = GENESIS_HASH;
+/**
+ * Recompute the chain. Pass a transaction to verify uncommitted state.
+ * `from` resumes after a head verified earlier (its seq and hash), checking
+ * only newer rows: the frequent ops check does this, with a full pass daily.
+ * `rows` then counts only the rows checked.
+ */
+export async function verifyAuditChain(
+  db: DbOrTx,
+  pageSize = 1000,
+  from?: { seq: number; rowHash: string },
+): Promise<AuditVerification> {
+  let expectedSeq = (from?.seq ?? 0) + 1;
+  let prevHash = from?.rowHash ?? GENESIS_HASH;
   let rows = 0;
-  let head: AuditVerification["head"] = null;
+  let head: AuditVerification["head"] = from ? { seq: from.seq, rowHash: from.rowHash } : null;
   const fail = (seq: number, problem: NonNullable<AuditVerification["problem"]>): AuditVerification => ({
     ok: false,
     rows,

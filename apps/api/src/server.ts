@@ -360,9 +360,10 @@ async function start() {
   );
 
   // Ops check: every 15 minutes. Emails OPS_ALERT_EMAIL (the operator) when
-  // a pipeline check goes wrong; counts only. See lib/ops-alerts.ts.
-  await queues.conversationQueue.add(
-    "ops-check",
+  // a pipeline check goes wrong; counts only. See lib/ops-alerts.ts. On the
+  // notification queue, so it never holds up people's chat replies.
+  await queues.notificationQueue.add(
+    "ops_check",
     { type: "ops_check", orgId: cronOrgId },
     { repeat: { pattern: "*/15 * * * *" }, jobId: "ops-check-cron" },
   );

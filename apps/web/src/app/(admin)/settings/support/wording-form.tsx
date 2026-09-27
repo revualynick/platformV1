@@ -77,7 +77,8 @@ export function WordingForm({
   );
 }
 
-export function SignOffForm() {
+/** `hash` fingerprints the previews on the page: the sign-off covers exactly those. */
+export function SignOffForm({ hash }: { hash: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
@@ -88,7 +89,7 @@ export function SignOffForm() {
     setError(null);
     if (name.trim().length < 2 || role.trim().length < 2) return setError("Give the name and role of the person who signed it off");
     startTransition(async () => {
-      const result = await signOffSupportWordingAction({ name: name.trim(), role: role.trim() });
+      const result = await signOffSupportWordingAction({ name: name.trim(), role: role.trim(), hash });
       if (!result.ok) return setError(result.error);
       setName("");
       setRole("");

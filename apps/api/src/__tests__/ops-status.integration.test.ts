@@ -123,7 +123,20 @@ describe.skipIf(!dbUp)("ops status and alerts (integration)", () => {
     expect(again.raised.filter((c) => c.status === "fail")).toHaveLength(0);
   });
 
-  it("the endpoint: internal calls and super admins only; 503 while failing", async () => {
+  it("an alert whose email fails is raised again next run", async () => {
+    // Review finding 2026-09-28: a failed send used to be remembered as sent.
+    await db.delete(opsHeartbeats);
+    const failing = async () => {
+      throw new Error("Email send failed: validation_error");
+    };
+    await expect(runOpsAlerts(db, failing)).rejects.toThrow(/Email send failed/);
+    const sent: string[] = [];
+    const retry = await runOpsAlerts(db, async (subject) => void sent.push(subject));
+    expect(retry.raised.map((c) => c.name)).toEqual(expect.arrayContaining(["inbound_stuck"]));
+    expect(sent).toHaveLength(1);
+  });
+
+    it("the endpoint: internal calls and super admins only; 503 while failing", async () => {
     const internal = await app.inject({ method: "GET", url: "/api/v1/ops/status", headers: { "x-internal-secret": SECRET } });
     expect(internal.statusCode).toBe(503);
     expect(internal.json().status).toBe("fail");

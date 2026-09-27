@@ -59,4 +59,9 @@ describe("the organisation's own wording", () => {
     expect(unknownPlaceholders(DEFAULT_WORDING.support)).toEqual([]);
     expect(unknownPlaceholders(DEFAULT_WORDING.conduct)).toEqual([]);
   });
+
+  it("inserts the organisation's text literally, including $ signs", () => {
+    const org = { ...EVAL_ORG, supportDetails: "Calls cost $$0 and $& nothing." };
+    expect(supportSignpost("wellbeing", org)).toContain("Calls cost $$0 and $& nothing.");
+  });
 });

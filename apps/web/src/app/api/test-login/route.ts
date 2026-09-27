@@ -132,8 +132,14 @@ export async function GET(request: NextRequest) {
 
   // Same-origin relative paths only, never an open redirect.
   const rawRedirect = url.searchParams.get("redirect");
+  // Rejects "//host" and "/\\host" (a URL parser treats "\\" as "/"), and
+  // anything that resolves off this origin.
   const redirectTo =
-    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
+    rawRedirect &&
+    rawRedirect.startsWith("/") &&
+    !rawRedirect.startsWith("//") &&
+    !rawRedirect.includes("\\") &&
+    new URL(rawRedirect, "http://same.origin").origin === "http://same.origin"
       ? rawRedirect
       : null;
   const response = redirectTo

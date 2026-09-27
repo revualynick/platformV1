@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import crypto from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { getTenantDb, accessGrants, auditLog, profileDevelopmentGoals, users } from "@revualy/db";
+import { getTenantDb, accessGrants, auditLog, profileDevelopmentGoals, profileSnapshots, users } from "@revualy/db";
 import { buildApp } from "../server.js";
 
 /**
@@ -74,6 +74,7 @@ describe.skipIf(!dbUp)("break-glass access grants (integration)", () => {
   afterAll(async () => {
     await app?.close();
     await db.delete(profileDevelopmentGoals).where(eq(profileDevelopmentGoals.userId, ids.report));
+    await db.delete(profileSnapshots).where(eq(profileSnapshots.userId, ids.report));
     await db.delete(users).where(inArray(users.id, [ids.report, ids.other]));
     await db.delete(users).where(inArray(users.id, Object.values(ids)));
     // audit_log rows stay: the table refuses deletes, by design.
@@ -224,5 +225,28 @@ describe.skipIf(!dbUp)("break-glass access grants (integration)", () => {
         expiresAt: new Date(Date.now() + 31 * 86_400_000),
       }),
     ).rejects.toThrow();
+  });
+
+  it("the API returns only content dated within the grant's period", async () => {
+    // Review finding 2026-09-28: the period used to be applied by the web page only.
+    const dims = { red: 0.5, blue: 0.2, green: 0.2, yellow: 0.1 };
+    await db.insert(profileSnapshots).values([
+      { userId: ids.report, framework: "colour", source: "assessment", dimensions: dims, createdAt: new Date(Date.now() - 200 * 86_400_000) },
+      { userId: ids.report, framework: "colour", source: "behavioral", dimensions: dims, createdAt: new Date(Date.now() - 10 * 86_400_000) },
+    ]);
+    const res = await grant(ids.superAdmin, { ...base(ids.report), periodStart: daysAgo(90) });
+    expect(res.statusCode).toBe(201);
+
+    const timeline = (who: string) =>
+      app.inject({ method: "GET", url: `/api/v1/profiles/users/${ids.report}/timeline?framework=colour`, headers: as(who) });
+    const viaGrant = await timeline(ids.superAdmin);
+    expect(viaGrant.statusCode).toBe(200);
+    expect(viaGrant.json().data).toHaveLength(1);
+    expect(viaGrant.json().data[0].source).toBe("behavioral");
+    // The direct manager isn't limited.
+    expect((await timeline(ids.manager)).json().data).toHaveLength(2);
+    // Drift needs the baseline assessment, which is outside the period.
+    const drift = await app.inject({ method: "GET", url: `/api/v1/profiles/users/${ids.report}/drift?framework=colour`, headers: as(ids.superAdmin) });
+    expect(drift.statusCode).toBe(404);
   });
 });

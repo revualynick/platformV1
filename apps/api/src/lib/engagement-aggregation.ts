@@ -67,15 +67,25 @@ export async function recomputeWeeklyEngagement(
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : 0;
 
-  // Streak: consecutive weeks meeting the target, carried on from last week's
-  // row; a week below target resets it (nothing wrote it before; it read 0).
-  const prevWeek = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Streak: consecutive weeks meeting the target. Last week counts only if it
+  // met its target (its row may hold a carried value from while it was open).
+  // This week: +1 once the target is met; while the week is still open and
+  // not yet met, the streak carries (the dashboard shows this week's row);
+  // a finished week below target resets it.
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const prevWeek = new Date(weekStart.getTime() - WEEK_MS).toISOString().slice(0, 10);
   const [prev] = await db
-    .select({ streak: engagementScores.streak })
+    .select({
+      streak: engagementScores.streak,
+      completed: engagementScores.interactionsCompleted,
+      target: engagementScores.interactionsTarget,
+    })
     .from(engagementScores)
     .where(and(eq(engagementScores.userId, userId), eq(engagementScores.weekStarting, prevWeek)));
+  const prevStreak = prev && prev.target > 0 && prev.completed >= prev.target ? prev.streak : 0;
   const metTarget = interactionsTarget > 0 && interactionsCompleted >= interactionsTarget;
-  const streak = metTarget ? (prev?.streak ?? 0) + 1 : 0;
+  const weekOpen = Date.now() < weekStart.getTime() + WEEK_MS;
+  const streak = metTarget ? prevStreak + 1 : weekOpen ? prevStreak : 0;
 
   await db
     .insert(engagementScores)

@@ -25,6 +25,11 @@ describe("opsRows", () => {
     ]);
   });
 
+  it("an error body is never shown as healthy", () => {
+    expect(opsRows("acme", 500, '{"error":"Not configured"}')).toEqual([{ tenant: "acme", check: "ops status", result: "FAIL (500: Not configured)" }]);
+    expect(opsRows("acme", 500, '{"error":"Internal server error"}')[0].result).toMatch(/^FAIL/);
+  });
+
   it("says when the route isn't enabled or the token is wrong", () => {
     expect(opsRows("acme", 404, '{"error":"Not found"}')[0].result).toMatch(/not enabled/);
     expect(opsRows("acme", 401, '{"error":"Unauthorized"}')[0].result).toMatch(/^FAIL/);

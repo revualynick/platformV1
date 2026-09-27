@@ -23,6 +23,7 @@ import {
   requireRole,
   getAuthenticatedUserId,
   assertContentAccess,
+  withinAccess,
   assertCanAccessUsers,
   getUserRole,
   isAdminRole,
@@ -96,7 +97,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertContentAccess(request, userId);
+      const access = await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileQuerySchema, request.query);
 
@@ -105,11 +106,13 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         conditions.push(eq(profileSnapshots.framework, query.framework));
       }
 
-      const snapshots = await db
-        .select()
-        .from(profileSnapshots)
-        .where(and(...conditions))
-        .orderBy(desc(profileSnapshots.createdAt));
+      const snapshots = (
+        await db
+          .select()
+          .from(profileSnapshots)
+          .where(and(...conditions))
+          .orderBy(desc(profileSnapshots.createdAt))
+      ).filter((snap) => withinAccess(access, snap.createdAt));
 
       const latest: Record<string, typeof snapshots[number]> = {};
       for (const s of snapshots) {
@@ -124,11 +127,13 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         goalConditions.push(eq(profileDevelopmentGoals.framework, query.framework));
       }
 
-      const goals = await db
-        .select()
-        .from(profileDevelopmentGoals)
-        .where(and(...goalConditions))
-        .orderBy(desc(profileDevelopmentGoals.createdAt));
+      const goals = (
+        await db
+          .select()
+          .from(profileDevelopmentGoals)
+          .where(and(...goalConditions))
+          .orderBy(desc(profileDevelopmentGoals.createdAt))
+      ).filter((g) => withinAccess(access, g.createdAt));
 
       return reply.send({
         profiles: Object.values(latest),
@@ -143,7 +148,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertContentAccess(request, userId);
+      const access = await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -155,11 +160,13 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         conditions.push(eq(profileSnapshots.source, query.source));
       }
 
-      const snapshots = await db
-        .select()
-        .from(profileSnapshots)
-        .where(and(...conditions))
-        .orderBy(profileSnapshots.createdAt);
+      const snapshots = (
+        await db
+          .select()
+          .from(profileSnapshots)
+          .where(and(...conditions))
+          .orderBy(profileSnapshots.createdAt)
+      ).filter((snap) => withinAccess(access, snap.createdAt));
 
       return reply.send({ data: snapshots });
     },
@@ -171,7 +178,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertContentAccess(request, userId);
+      const access = await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -180,11 +187,13 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         eq(profileSnapshots.framework, query.framework),
       ];
 
-      const snapshots = await db
-        .select()
-        .from(profileSnapshots)
-        .where(and(...conditions))
-        .orderBy(desc(profileSnapshots.createdAt));
+      const snapshots = (
+        await db
+          .select()
+          .from(profileSnapshots)
+          .where(and(...conditions))
+          .orderBy(desc(profileSnapshots.createdAt))
+      ).filter((snap) => withinAccess(access, snap.createdAt));
 
       const latestAssessment = snapshots.find((s) => s.source === "assessment");
       const latestBehavioral = snapshots.find((s) => s.source === "behavioral");

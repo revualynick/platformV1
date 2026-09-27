@@ -38,6 +38,8 @@ const wordingSchema = z.object({ support: template, conduct: template });
 const signoffSchema = z.object({
   name: z.string().trim().min(2).max(200),
   role: z.string().trim().min(2).max(200),
+  /** wordingHash of the previews the admin was looking at. */
+  hash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
 export const supportRoutes: FastifyPluginAsync = async (app) => {
@@ -70,6 +72,7 @@ export const supportRoutes: FastifyPluginAsync = async (app) => {
         defaults: DEFAULT_WORDING,
         placeholders: WORDING_PLACEHOLDERS,
         previews: wordingPreviews(resources),
+        wordingHash: wordingHash(resources),
         signoff: settings.signoff
           ? { name: settings.signoff.name, role: settings.signoff.role, at: settings.signoff.at, current: settings.signoff.hash === wordingHash(resources) }
           : null,
@@ -116,6 +119,10 @@ export const supportRoutes: FastifyPluginAsync = async (app) => {
     const actorId = getAuthenticatedUserId(request);
     const body = parseBody(signoffSchema, request.body);
     const hash = wordingHash(await loadSupportResources(db));
+    // The sign-off covers the wording the reviewer saw, not whatever is stored now.
+    if (body.hash !== hash) {
+      return reply.code(409).send({ error: "The wording changed since this page loaded. Reload, check it again, then record the sign-off." });
+    }
     const signoff = { name: body.name, role: body.role, at: new Date().toISOString(), recordedBy: actorId, hash };
     const [existing] = await db.select({ id: orgSettings.id }).from(orgSettings).limit(1);
     if (existing) await db.update(orgSettings).set({ supportWordingSignoff: signoff, updatedAt: new Date() }).where(eq(orgSettings.id, existing.id));

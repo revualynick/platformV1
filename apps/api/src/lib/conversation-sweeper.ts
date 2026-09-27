@@ -191,7 +191,7 @@ export async function runSweep(
       AND NOT EXISTS (SELECT 1 FROM feedback_entries f WHERE f.conversation_id = c.id)
       AND NOT EXISTS (SELECT 1 FROM self_reflections r WHERE r.conversation_id = c.id)
       AND c.phase <> 'support'
-      AND NOT (c.off_script_streak >= 3 AND NOT EXISTS (SELECT 1 FROM conversation_theme_outcomes o WHERE o.conversation_id = c.id AND o.outcome <> 'unanswered'))
+      AND NOT (c.off_script_streak >= 3 AND (SELECT count(*) FROM conversation_messages um WHERE um.conversation_id = c.id AND um.role = 'user') <= c.off_script_streak)
   `)) as unknown as Array<{ id: string }>;
   result.analysisRequeued = await each(unanalysed, "re-queue analysis", (c) => queueAnalysis(deps, c.id, bucket));
 
@@ -220,7 +220,7 @@ export async function runSweep(
       AND COALESCE(c.closed_at, c.last_activity_at, c.created_at) < ${ts(retentionCutoff)}
       AND (
         c.phase = 'support'
-        OR (c.off_script_streak >= 3 AND NOT EXISTS (SELECT 1 FROM conversation_theme_outcomes o WHERE o.conversation_id = c.id AND o.outcome <> 'unanswered'))
+        OR (c.off_script_streak >= 3 AND (SELECT count(*) FROM conversation_messages um WHERE um.conversation_id = c.id AND um.role = 'user') <= c.off_script_streak)
         OR (
           c.interaction_type <> 'self_reflection'
           AND (

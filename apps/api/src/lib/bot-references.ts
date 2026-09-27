@@ -176,11 +176,15 @@ export function unknownPlaceholders(template: string): string[] {
 export function renderWording(template: string, org: OrgResources, opts: { outside: boolean }): string {
   const contact = org.supportContact?.trim() || "your HR team";
   const capitalised = contact.charAt(0).toUpperCase() + contact.slice(1);
+  // Function replacements: the organisation's text is inserted literally
+  // ("$$", "$&" in it are not replacement patterns).
+  const details = org.supportDetails.trim();
+  const outside = opts.outside ? org.supportOutside.trim() : "";
   return template
     .replace(/(^|[.!?]\s+)\{contact\}/g, (_m, lead: string) => lead + capitalised)
-    .replaceAll("{contact}", contact)
-    .replaceAll("{details}", org.supportDetails.trim())
-    .replaceAll("{outside}", opts.outside ? org.supportOutside.trim() : "")
+    .replaceAll("{contact}", () => contact)
+    .replaceAll("{details}", () => details)
+    .replaceAll("{outside}", () => outside)
     .replace(/\s+/g, " ")
     .trim();
 }

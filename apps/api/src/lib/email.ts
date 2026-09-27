@@ -60,11 +60,14 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
     headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
   }
 
-  await client.emails.send({
+  // Resend reports failures in the result rather than throwing: make them
+  // throw, so callers (and job retries) know the email didn't go.
+  const { error } = await client.emails.send({
     from: FROM_ADDRESS,
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
     headers,
   });
+  if (error) throw new Error(`Email send failed: ${error.name ?? "error"}`);
 }

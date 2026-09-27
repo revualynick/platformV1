@@ -269,13 +269,6 @@ export function createWorkers(config: WorkerConfig) {
           break;
         }
 
-        case "ops_check": {
-          const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
-          const decision = await runOpsAlerts(tenantDb(orgId), sendOpsAlert, { queues, bootedAt: BOOTED_AT });
-          job.log(`Ops check: ${decision.raised.length} raised, ${decision.resolved.length} resolved`);
-          break;
-        }
-
         case "sweep": {
           const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
           const result = await runSweep(tenantDb(orgId), { ...deps, conversationQueue: queues.conversationQueue });
@@ -596,6 +589,13 @@ export function createWorkers(config: WorkerConfig) {
             html: flagAlertTemplate(alertData),
             unsubscribeUrl: unsubscribeUrlFor(subject.managerId, "flag_alert"),
           });
+          break;
+        }
+
+        case "ops_check": {
+          const { orgId } = z.object({ orgId: z.string() }).parse(job.data);
+          const decision = await runOpsAlerts(getTenantDb(orgId, process.env.DATABASE_URL ?? ""), sendOpsAlert, { queues, bootedAt: BOOTED_AT });
+          job.log(`Ops check: ${decision.raised.length} raised, ${decision.resolved.length} resolved`);
           break;
         }
 

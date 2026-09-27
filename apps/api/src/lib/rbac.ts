@@ -141,16 +141,34 @@ export async function getAccessLevel(request: FastifyRequest, targetUserId: stri
  * manager. Skip-levels and admins get signals, not content (use
  * {@link assertCanAccessUser} for signal routes), unless an admin holds an
  * active break-glass grant for this person: then reads are allowed and each
- * one is written to the audit log first. Grants never allow writes, so
+ * one is written to the audit log first. The grant's period comes back so
+ * the route returns only content dated within it. Grants never allow writes, so
  * routes that change content pass `{ write: true }`. Throws a 403 otherwise.
  */
+export interface ContentAccess {
+  /**
+   * Set when access comes from a break-glass grant: only content dated
+   * within these days (YYYY-MM-DD, inclusive) may be returned. Null for the
+   * person themselves and their direct manager.
+   */
+  period: { start: string; end: string } | null;
+}
+
+/** Whether a dated item may be returned under this access. */
+export function withinAccess(access: ContentAccess, date: Date | string | null | undefined): boolean {
+  if (!access.period) return true;
+  if (!date) return false;
+  const day = new Date(date).toISOString().slice(0, 10);
+  return day >= access.period.start && day <= access.period.end;
+}
+
 export async function assertContentAccess(
   request: FastifyRequest,
   targetUserId: string,
   opts: { write?: boolean } = {},
-): Promise<void> {
+): Promise<ContentAccess> {
   const level = await getAccessLevel(request, targetUserId);
-  if (level === "self" || level === "content") return;
+  if (level === "self" || level === "content") return { period: null };
   if (!opts.write && level === "signals") {
     const grant = await findActiveGrant(request.tenant.db, getAuthenticatedUserId(request), targetUserId);
     if (grant) {
@@ -161,7 +179,7 @@ export async function assertContentAccess(
         outcome: "ok",
         details: { grantId: grant.id, route: request.routeOptions.url ?? null },
       });
-      return;
+      return { period: { start: grant.periodStart, end: grant.periodEnd } };
     }
   }
   throw Object.assign(new Error("Insufficient permissions"), { statusCode: 403 });

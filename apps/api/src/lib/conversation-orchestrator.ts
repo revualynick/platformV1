@@ -9,7 +9,7 @@ import { buildJobId } from "./job-ids.js";
 import { planTurn, themeQuestion, type PlanInput } from "./turn-planner.js";
 import { runReferencePath, compose, type ReferenceNext } from "./reference-path.js";
 import { OFF_SCRIPT_CLOSE, OFF_SCRIPT_OFFER, SERIOUS, type Concern } from "./bot-references.js";
-import { hasAnsweredTheme, recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
+import { saidMoreThanOffScript, recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
 import { openTicket, openTicketForConversation, type TicketHandle } from "./tickets/reader.js";
 import { countSignpost, isSupportPhase, loadSupportResources } from "./support.js";
@@ -639,7 +639,7 @@ async function handleConcern(
         await markTicketDoneForConversation(tx, conv.id, "incomplete", now);
       }
       if (concern === "wellbeing" || concern === "safety" || concern === "conduct") await countSignpost(tx, concern, now);
-      if (streak >= 3) answeredBefore = await hasAnsweredTheme(tx, conv.id);
+      if (streak >= 3) answeredBefore = await saidMoreThanOffScript(tx, conv.id, streak);
     });
   } catch (err) {
     if (err instanceof Superseded) return { status: "superseded" };

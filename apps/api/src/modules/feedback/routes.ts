@@ -7,7 +7,7 @@ import {
   users,
 } from "@revualy/db";
 import { parseBody, idParamSchema } from "../../lib/validation.js";
-import { requireAuth, requireRole, assertContentAccess } from "../../lib/rbac.js";
+import { requireAuth, requireRole, assertContentAccess, withinAccess } from "../../lib/rbac.js";
 import { getFeedbackForSubject } from "@revualy/db/queries";
 import { z } from "zod";
 
@@ -27,12 +27,14 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
 
     // Content: the person themselves or their direct manager only
     // (skip-levels and admins see signals, not themes).
-    await assertContentAccess(request, id);
+    const access = await assertContentAccess(request, id);
 
     const { limit } = feedbackLimitSchema.parse(request.query);
     // Tier A: only released batches (3+ reviewers, fortnightly), as
     // paraphrased summaries dated by release. No raw text, no reviewer.
-    const result = await getFeedbackForSubject(db, id, limit);
+    // Under a break-glass grant, only batches released within its period.
+    const all = await getFeedbackForSubject(db, id, access.period ? 500 : limit);
+    const result = access.period ? all.filter((e) => withinAccess(access, e.releasedAt)).slice(0, limit) : all;
 
     return reply.send({ data: result, userId: id });
   });

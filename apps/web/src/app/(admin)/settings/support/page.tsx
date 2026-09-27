@@ -97,7 +97,7 @@ export default async function SupportSettingsPage() {
           </dl>
           <h3 className="mt-8 text-xs font-medium uppercase tracking-wider text-stone-400">Record your HR team&apos;s sign-off of the wording above</h3>
           <div className="mt-2">
-            <SignOffForm />
+            <SignOffForm hash={settings.wordingHash} />
           </div>
         </div>
       )}

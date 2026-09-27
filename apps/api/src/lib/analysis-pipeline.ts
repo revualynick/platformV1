@@ -1,6 +1,6 @@
 import { eq, and } from "drizzle-orm";
 import { isSupportPhase } from "./support.js";
-import { hasAnsweredTheme } from "./theme-outcomes.js";
+import { saidMoreThanOffScript } from "./theme-outcomes.js";
 import { z } from "zod";
 import type { Queue } from "bullmq";
 import type { TenantDb } from "@revualy/db";
@@ -90,7 +90,7 @@ export async function runAnalysisPipeline(
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
   // Ended on three off-script replies without a real answer: nothing to analyse.
-  if (conversation.offScriptStreak >= 3 && !(await hasAnsweredTheme(db, conversationId))) {
+  if (conversation.offScriptStreak >= 3 && !(await saidMoreThanOffScript(db, conversationId, conversation.offScriptStreak))) {
     return { success: true, failedSteps: [], feedbackEntryId: null };
   }
 

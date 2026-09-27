@@ -64,7 +64,19 @@ describe.skipIf(!dbUp)("engagement streak (integration)", () => {
     expect(await streakOf(ids.keeper)).toBe(4);
   });
 
-  it("resets the streak when this week's target is missed", async () => {
+  it("carries the streak while this week is still open and its target not yet met", async () => {
+    // Review finding 2026-09-28: it used to show 0 until the target was met.
+    await recomputeWeeklyEngagement(db, ids.misser, week);
+    expect(await streakOf(ids.misser)).toBe(3);
+  });
+
+  it("resets the streak for a finished week that missed its target", async () => {
+    // Last week, recomputed from what's actually there for the misser (nothing): below target, and over.
+    await recomputeWeeklyEngagement(db, ids.misser, prevWeek);
+    const [row] = await db.select({ s: engagementScores.streak }).from(engagementScores)
+      .where(and(eq(engagementScores.userId, ids.misser), eq(engagementScores.weekStarting, prevWeek)));
+    expect(row.s).toBe(0);
+    // And this week no longer carries a streak from it.
     await recomputeWeeklyEngagement(db, ids.misser, week);
     expect(await streakOf(ids.misser)).toBe(0);
   });
