@@ -64,6 +64,7 @@ Rules: security and foundations before features; test bed before the logic it te
    - Not verified: the combined prompt has not been run against the real model (no local API key); tests prove the mechanics only.
 7. **Encrypt existing data, Phase E part 2 (S):** background backfill, plaintext check, legacy formats removed, rotation script rewritten. **DONE 2026-09-26** (tooling; per-tenant runs pending): `pnpm --filter @revualy/db encryption check|backfill|rotate`, tier-2 jsonb columns encrypted, migration 0042 keeps `updated_at` untouched by maintenance, legacy reads behind `ENCRYPTION_LEGACY_READS` (on until each tenant is backfilled), Redis `1on1:content` encrypted, `docs/key-rotation.md` rewritten.
 8. **Beta gate (S + wait):** monitoring counters and alerts, real-Workspace verification checklist, full code review. **Beta can start here.**
+   - **In progress 2026-09-28:** monitoring and alerts built (ops checks from the database, job heartbeats, operator email, fleet status; `docs/build/2026-09-28-beta-gate-monitoring.md`); checklist written (`docs/real-workspace-checklist.md`, to run once the Chat app is installed); full code review running.
 9. M2 re-presentation engine (tuned with beta data).
 10. M3 Slack/Teams linking.
 11. First-review leftovers: nudge query, streak writer, relationship 500s, 360 transaction, month keys.

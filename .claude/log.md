@@ -429,3 +429,10 @@
 - beta-hardening pushed to origin as its own branch (103 commits ahead of origin/main), no PR, main untouched (Nick: Railway builds from git, keep it on a branch). Railway deploy branch not verified: CLI not logged in
 - Local main still has one unpushed commit (c7ac771) from before; left alone
 - Nick: concern wording parked (refined client by client); backlog has a Parked section; C2 and a separate conduct contact stay as decisions
+
+## 2026-09-28: beta gate (C3 step 8) started
+- Nick: Google Chat install can wait; do the beta gate
+- Monitoring: ops checks worked out from the DB (stuck inbound, undelivered, unanswered, stale, analysis missing, model fallbacks, failed jobs, audit chain, legacy reads) plus job heartbeats (0050); alerts every 15 min to OPS_ALERT_EMAIL and logs; /api/ops/status via web with a fleet-wide OPS_TOKEN (API is private); fleet health shows it. Verified on staging (all ok)
+- Real-Workspace checklist written (docs/real-workspace-checklist.md), marks the Google Chat assumptions never seen live
+- Full code review of the branch running (code-review skill, high)
+- API 616/616, tenant scripts 34/34, typecheck 17/17

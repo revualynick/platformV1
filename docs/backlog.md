@@ -10,7 +10,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 - **Encrypt existing data on each tenant** (C3 step 7 tooling merged 2026-09-26): run `pnpm --filter @revualy/db encryption check`, `backfill`, `check`, or simply reseed. Only the demo and Nick's test tenant hold pre-encryption rows; legacy reads are off by default. See `docs/key-rotation.md`.
 - **Pseudonym secret behind a KMS or signing service**, so the API environment alone can't re-identify reviewers (today anyone with the API env and the user list can).
 - **Verify the 2026-09-26 merges end to end:** nothing has run against real models or Railway. Deploy the branch to the test tenant, re-run the topic grid on the Linux box against the ticket-based engine, and walk each build note's review checklist.
-- **C3 step 8, beta gate:** monitoring counters and alerts, real-Workspace verification checklist, full code review.
+- **C3 step 8, beta gate:** monitoring and alerts built and the checklist written (`docs/build/2026-09-28-beta-gate-monitoring.md`); full code review under way. Still to do: set `OPS_TOKEN`, `OPS_ALERT_EMAIL` and `RESEND_API_KEY` for the beta tenant and see one alert arrive; run `docs/real-workspace-checklist.md` once the Chat app is installed.
 - **Google Chat app install** on the beta Workspace (needed for step 8).
 - **Revoke the eval API key** on the Linux box when its 7 days are up.
 
@@ -65,7 +65,6 @@ Important, but refined client by client with each HR team, so parked until a cli
 - Employee handover system (spec in `docs/plan.md`), now shaped by the handover summary in the privacy design.
 - Outlook calendar integration.
 - Stripe billing.
-- Production monitoring and alerting.
 - Curated demo seed data.
 - GitHub Actions provisioning automation.
 
