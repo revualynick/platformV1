@@ -334,8 +334,13 @@ test("admin: Verbatim toggle persists across reload", async ({ page }) => {
       await btn.waitFor({ state: "visible", timeout: 10_000 });
       await btn.scrollIntoViewIfNeeded();
       await page.waitForTimeout(1_000); // let the client hydrate so onClick is attached
+      // Wait for the save itself: the button flips the setting, so reloading
+      // before a slow save lands makes the next click undo it.
+      const saved = page
+        .waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/settings/questions"), { timeout: 10_000 })
+        .catch(() => null); // no POST = the click landed before hydration; retry
       await btn.click();
-      await page.waitForTimeout(1_200); // let the server action + revalidate commit
+      await saved;
       await page.reload({ waitUntil: "domcontentloaded" });
       await labelLocator().waitFor({ state: "visible", timeout: 10_000 });
     }

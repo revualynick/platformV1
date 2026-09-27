@@ -12,7 +12,7 @@ const SIGNALS_NOTICE = /You're seeing signals only/;
 
 test("direct manager sees content on the member page", async ({ page }) => {
   await loginAs(page, "manager", `/team/members/${userId(USERS.employee)}`);
-  await expect(page.getByText(/Private Notes/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Private Notes/i }).filter({ visible: true })).toBeVisible();
   await expect(page.getByText(SIGNALS_NOTICE)).toHaveCount(0);
 });
 
@@ -20,14 +20,15 @@ test("skip-level manager sees signals only", async ({ page }) => {
   await loginAs(page, "managerNoReports", `/team/members/${userId(USERS.employee)}`);
   await expect(page.getByText(SIGNALS_NOTICE).filter({ visible: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "1:1 cadence" })).toBeVisible();
-  await expect(page.getByText(/Private Notes/i)).toHaveCount(0);
+  // The notice mentions "private notes"; check the notes section itself is absent.
+  await expect(page.getByRole("heading", { name: /Private Notes/i })).toHaveCount(0);
   await expect(page.getByPlaceholder(/add a private note/i)).toHaveCount(0);
 });
 
 test("admin sees signals only", async ({ page }) => {
   await loginAs(page, "admin", `/team/members/${userId(USERS.employee)}`);
   await expect(page.getByText(SIGNALS_NOTICE).filter({ visible: true })).toBeVisible();
-  await expect(page.getByText(/Private Notes/i)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Private Notes/i })).toHaveCount(0);
 });
 
 test("a manager outside the line is sent back", async ({ page }) => {
