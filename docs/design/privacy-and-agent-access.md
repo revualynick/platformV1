@@ -63,6 +63,25 @@ What we promise people and what we store don't match yet:
 
 "Signals" means: 1:1s are happening, goals are moving, engagement trends, counts of open or overdue actions. Enough to see a relationship that isn't working without reading anything written in private.
 
+### Who sees what about a person (decided 2026-09-27)
+
+Nick: "revise the design for the privacy focus". One rule for every screen and API route that shows data about a named person:
+
+| Viewer | Access level | What they get |
+|---|---|---|
+| The person themselves | self | everything about themselves |
+| Their direct manager | content | released peer themes, values scores, profiles and drift, 360 results, flagged items for coaching, 1:1 content with them, their own private notes |
+| A skip-level manager (anywhere above the direct manager) | signals | name, role and team; engagement score and trend; 1:1 cadence (how many, when last, no content); goal progress (goals are org-visible objects) |
+| Admin or HR (without a break-glass grant) | signals | as skip-level |
+| Anyone else | none | nothing |
+
+Consequences:
+- The API's per-person content routes require self or direct manager, not "anyone in the reporting tree or an admin" as before (`assertContentAccess` in `apps/api/src/lib/rbac.ts`). Signal routes keep the reporting-tree rule.
+- The member page shows skip-levels and admins a signals-only view instead of redirecting them away, and says why.
+- Team profiles (colour and decision-making self-assessments) are self data: only the team's own manager sees them per person.
+- Escalations and the HR feed are a separate, formal process and are not changed by this rule.
+- Admins who need content for a formal process use the break-glass route (not built yet), which is logged.
+
 ### Triggered access
 
 - **Wider sharing** (a skip-level, a promotion panel, HR, a whole-record transfer): only with the subject's approval. Time-limited, revocable, logged.
@@ -175,6 +194,10 @@ The customer admin assistant (`docs/admin-assistant.md`) acts as the signed-in a
 6. **Sharing grants and the handover summary** (needs web UI).
 
 Steps 1 to 3 should land before real employees use the bot, because the bot's anonymity promise depends on them.
+
+## Reflections and concern checks (parked, 2026-09-27)
+
+Self-reflections don't go through the concern detection that peer feedback gets. Nick: reflections are less in the moment than a chat reply, and concern checks on them need methodical thinking before we commit to them in earnest. So nothing changes for now; a design comes first, covering at least: what counts as a concern in a reflection written days after the event, who is told and with what consent, how it interacts with the two-party rule above, and how to avoid turning a private journal into a monitored one.
 
 ## Open questions
 

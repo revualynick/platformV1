@@ -7,7 +7,7 @@ import {
   users,
 } from "@revualy/db";
 import { parseBody, idParamSchema } from "../../lib/validation.js";
-import { requireAuth, requireRole, assertCanAccessUser } from "../../lib/rbac.js";
+import { requireAuth, requireRole, assertContentAccess } from "../../lib/rbac.js";
 import { getFeedbackForSubject } from "@revualy/db/queries";
 import { z } from "zod";
 
@@ -25,8 +25,9 @@ export const feedbackRoutes: FastifyPluginAsync = async (app) => {
     const { id } = parseBody(idParamSchema, request.params);
     const { db } = request.tenant;
 
-    // assertCanAccessUser allows: self, admin/super_admin, or user in caller's reporting tree
-    await assertCanAccessUser(request, id);
+    // Content: the person themselves or their direct manager only
+    // (skip-levels and admins see signals, not themes).
+    await assertContentAccess(request, id);
 
     const { limit } = feedbackLimitSchema.parse(request.query);
     // Tier A: only released batches (3+ reviewers, fortnightly), as

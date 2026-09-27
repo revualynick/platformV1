@@ -22,7 +22,7 @@ import {
   requireAuth,
   requireRole,
   getAuthenticatedUserId,
-  assertCanAccessUser,
+  assertContentAccess,
   assertCanAccessUsers,
   getUserRole,
   isAdminRole,
@@ -96,7 +96,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertCanAccessUser(request, userId);
+      await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileQuerySchema, request.query);
 
@@ -143,7 +143,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertCanAccessUser(request, userId);
+      await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -171,7 +171,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: requireRole("manager") },
     async (request, reply) => {
       const { userId } = parseBody(userIdParamSchema, request.params);
-      await assertCanAccessUser(request, userId);
+      await assertContentAccess(request, userId);
       const { db } = request.tenant;
       const query = parseBody(profileTimelineQuerySchema, request.query);
 
@@ -239,16 +239,11 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       if (!team) {
         return reply.code(404).send({ error: "Team not found" });
       }
-      if (team.managerId) {
-        await assertCanAccessUser(request, team.managerId);
-      } else {
-        // Unmanaged team: only admins may view it. (The previous
-        // assertCanAccessUsers(request, []) passed for anyone, because an
-        // empty list has nothing to reject.)
-        const role = await getUserRole(request, getAuthenticatedUserId(request));
-        if (!isAdminRole(role)) {
-          return reply.code(403).send({ error: "Insufficient permissions" });
-        }
+      // Per-person profiles are self data (two-party): only the team's own
+      // manager sees them, not managers above or admins (privacy design,
+      // "Who sees what about a person", 2026-09-27).
+      if (!team.managerId || team.managerId !== getAuthenticatedUserId(request)) {
+        return reply.code(403).send({ error: "Insufficient permissions" });
       }
 
       // Get team members
@@ -334,8 +329,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       const { db, orgId } = request.tenant;
       const managerId = getAuthenticatedUserId(request);
 
-      const tree = await getReportingTree(db, managerId);
-      if (!tree.has(userId) || userId === managerId) {
+      // Direct reports only (privacy design: a person's profile is two-party).
+      const [target] = await db.select({ managerId: users.managerId }).from(users).where(eq(users.id, userId));
+      if (!target || target.managerId !== managerId || userId === managerId) {
         return reply
           .code(403)
           .send({ error: "You can only invite your own reports" });
@@ -390,7 +386,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Goal not found" });
       }
 
-      await assertCanAccessUser(request, goal.userId);
+      await assertContentAccess(request, goal.userId);
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       if (body.status !== undefined) updates.status = body.status;

@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { isDemoSession } from "@/lib/session-utils";
 import { logPageError } from "@/lib/page-errors";
 import { getDb } from "@/lib/db";
-import { getUserById, listActiveUsers } from "@revualy/db/queries";
+import { getUserById, getReportingTree } from "@revualy/db/queries";
 import { getEngagementScoresForUser } from "@revualy/db/queries";
 import { getFeedbackForSubject, getFlaggedItemsForReports } from "@revualy/db/queries";
 import { getManagerNotes } from "@revualy/db/queries";
@@ -732,6 +732,57 @@ async function NotesWrapper({
 
 // ── Page ───────────────────────────────────────────────
 
+/**
+ * Skip-level managers and admins see signals about a person, not content
+ * (docs/design/privacy-and-agent-access.md, "Who sees what about a person"):
+ * engagement trend and 1:1 cadence, nothing written in private.
+ */
+async function SignalsView({ userId, directManagerId }: { userId: string; directManagerId: string | null }) {
+  const [engResult, sessionsResult] = await Promise.allSettled([
+    getEngagementScoresForUser(getDb(), userId),
+    directManagerId ? getSessionsForPair(getDb(), directManagerId, { employeeId: userId }) : Promise.resolve([]),
+  ]);
+  if (engResult.status === "rejected") logPageError("member-detail:signals", engResult.reason);
+  if (sessionsResult.status === "rejected") logPageError("member-detail:signals", sessionsResult.reason);
+  const engagementHistory =
+    engResult.status === "fulfilled"
+      ? engResult.value.map((e) => ({ week: e.weekStarting, score: e.averageQualityScore, interactions: e.interactionsCompleted }))
+      : [];
+  const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value : [];
+  const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const completed = sessions.filter((s) => s.status === "completed");
+  const recent = completed.filter((s) => new Date(s.scheduledAt).getTime() >= ninetyDaysAgo).length;
+  const last = [...completed].sort((a, b) => +new Date(b.scheduledAt) - +new Date(a.scheduledAt))[0];
+  const next = sessions
+    .filter((s) => s.status === "scheduled" && new Date(s.scheduledAt).getTime() >= Date.now())
+    .sort((a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt))[0];
+  const fmt = (d: Date | string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+  return (
+    <>
+      <div className="card-enter mb-6 rounded-2xl border border-stone-200/60 bg-surface px-5 py-4 text-sm text-stone-600" style={{ boxShadow: "var(--shadow-sm)" }}>
+        You&apos;re seeing signals only. Feedback themes, profiles, 1:1 notes and private notes stay between this person and their direct manager.
+      </div>
+      <div className="mb-8 grid gap-6 lg:grid-cols-2">
+        <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <h3 className="mb-4 font-display text-base font-semibold text-stone-800">Engagement trend</h3>
+          <ChartErrorBoundary>
+            <EngagementChart data={engagementHistory} />
+          </ChartErrorBoundary>
+        </div>
+        <div className="card-enter rounded-2xl border border-stone-200/60 bg-surface p-6" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <h3 className="mb-4 font-display text-base font-semibold text-stone-800">1:1 cadence</h3>
+          <dl className="grid grid-cols-3 gap-4 text-sm">
+            <div><dt className="text-xs text-stone-400">Last 90 days</dt><dd className="mt-1 font-display text-2xl text-stone-900">{recent}</dd></div>
+            <div><dt className="text-xs text-stone-400">Last 1:1</dt><dd className="mt-1 text-stone-700">{last ? fmt(last.scheduledAt) : "None yet"}</dd></div>
+            <div><dt className="text-xs text-stone-400">Next</dt><dd className="mt-1 text-stone-700">{next ? fmt(next.scheduledAt) : "Not scheduled"}</dd></div>
+          </dl>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default async function EmployeeDetailPage({
   params,
 }: {
@@ -742,20 +793,31 @@ export default async function EmployeeDetailPage({
   const session = await auth();
   const isDemo = isDemoSession(session);
 
-  // Enforce direct report access before loading any data
+  // Access level before loading any data (privacy design, 2026-09-27):
+  // the direct manager sees content; a manager further up, or an admin,
+  // sees signals only; anyone else is sent back.
+  let level: "content" | "signals" = "content";
+  let directManagerId: string | null = null;
   if (!isDemo) {
     if (!session?.user?.id) {
       redirect("/team/members");
     }
+    const viewerId = session.user.id;
+    let allowed: "content" | "signals" | null = null;
     try {
-      const reports = await listActiveUsers(getDb(), { managerId: session.user.id });
-      const isDirectReport = reports.some((m) => m.id === userId);
-      if (!isDirectReport) {
-        redirect("/team/members");
+      const target = await getUserById(getDb(), userId);
+      directManagerId = target?.managerId ?? null;
+      if (target && target.managerId === viewerId) allowed = "content";
+      else if (target) {
+        const role = (session as { role?: string }).role ?? "";
+        if (role === "admin" || role === "super_admin") allowed = "signals";
+        else if ((await getReportingTree(getDb(), viewerId)).has(userId)) allowed = "signals";
       }
-    } catch {
-      redirect("/team/members");
+    } catch (err) {
+      logPageError("member-detail:access", err);
     }
+    if (!allowed) redirect("/team/members");
+    level = allowed;
   }
 
   const managerId = session?.user?.id ?? "p2";
@@ -792,6 +854,12 @@ export default async function EmployeeDetailPage({
           <EmployeeHeader userId={userId} managerId={managerId} isDemo={isDemo} />
         </Suspense>
 
+        {level === "signals" ? (
+          <Suspense fallback={<div className="mb-8"><SectionSkeleton /></div>}>
+            <SignalsView userId={userId} directManagerId={directManagerId} />
+          </Suspense>
+        ) : (
+        <>
         {/* Charts row */}
         <Suspense
           fallback={
@@ -837,6 +905,8 @@ export default async function EmployeeDetailPage({
         <Suspense fallback={<SectionSkeleton />}>
           <NotesWrapper userId={userId} managerId={managerId} isDemo={isDemo} />
         </Suspense>
+        </>
+        )}
       </div>
     </PathNameProvider>
   );

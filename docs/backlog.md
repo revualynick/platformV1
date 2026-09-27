@@ -24,8 +24,7 @@ Last consolidated: 2026-09-26, from `docs/c3-plan.md`, `docs/plan.md`, the archi
 
 ## Decisions waiting on Nick
 
-- **Member detail page scope:** the web page allows a manager's direct reports only; the API allows the whole reporting tree and admins. Which is intended, given the privacy design gives skip-levels signals only? (first review)
-- **Self-reflections and concern detection:** reflections skip the flag detection peer feedback gets. Should a reflection that mentions wellbeing or safety go through the concern handling? (first review; a safeguarding decision)
+- **Concern checks on self-reflections: parked** (Nick, 2026-09-27). Needs a methodical design before anything is built; questions listed in the privacy design doc.
 - **Privacy design open questions** (5, at the end of the design doc).
 - **Calendar model:** priority weighting as client-adjustable sliders, possibly a learning algorithm later (Nick, 2026-09-26). Still open: focus when the title is hidden, one check-in per meeting, joiner dates, whether sensitive-looking titles reach Haiku at all.
 - **Imports:** users with direct reports in the file become managers automatically; new `read-excel-file` dependency; historical feedback is stored but nothing shows it.

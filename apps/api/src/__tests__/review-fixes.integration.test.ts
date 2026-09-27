@@ -165,10 +165,12 @@ describe.skipIf(!dbUp)("branch review fixes (integration)", () => {
     expect(again.statusCode).toBe(400);
   });
 
-  it("B9: an unmanaged team's profiles are admin-only", async () => {
+  it("B9: an unmanaged team's per-person profiles are visible to nobody", async () => {
+    // Was admin-only; since 2026-09-27 per-person profiles are two-party
+    // (the team's own manager), and admins see signals, not content.
     const asManager = await app.inject({ method: "GET", url: `/api/v1/profiles/team/${teamId}?framework=colour`, headers: as(ids.manager) });
     expect(asManager.statusCode).toBe(403);
     const asAdmin = await app.inject({ method: "GET", url: `/api/v1/profiles/team/${teamId}?framework=colour`, headers: as(ids.admin) });
-    expect(asAdmin.statusCode).toBe(200);
+    expect(asAdmin.statusCode).toBe(403);
   });
 });

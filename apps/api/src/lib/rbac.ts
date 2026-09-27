@@ -112,16 +112,46 @@ export async function getUserRole(
   return (user?.role as Role | undefined) ?? null;
 }
 
+export type AccessLevel = "self" | "content" | "signals" | "none";
+
 /**
- * Assert the caller may access data belonging to `targetUserId`.
- *
- * Access is granted when the caller is the target themselves, is an
- * admin/super_admin (full-org visibility), or the target is within the
- * caller's reporting tree (direct or indirect report). Throws a 403
- * (surfaced as "Forbidden" by the global error handler) otherwise.
- *
- * Use this in every manager-scoped endpoint that takes a target user id
- * from params/query/body, so role checks are backed by tree membership.
+ * What the caller may see about `targetUserId` (docs/design/
+ * privacy-and-agent-access.md, "Who sees what about a person"):
+ *  - self: it's them
+ *  - content: their direct manager (released themes, profiles, 360, notes)
+ *  - signals: a skip-level manager or an admin (engagement, cadence, goals)
+ *  - none: anyone else
+ */
+export async function getAccessLevel(request: FastifyRequest, targetUserId: string): Promise<AccessLevel> {
+  const { db } = request.tenant;
+  const callerId = getAuthenticatedUserId(request);
+  if (callerId === targetUserId) return "self";
+  const [target] = await db.select({ managerId: users.managerId }).from(users).where(eq(users.id, targetUserId));
+  if (target?.managerId === callerId) return "content";
+  const role = await getUserRole(request, callerId);
+  if (isAdminRole(role)) return "signals";
+  const tree = await getReportingTree(db, callerId);
+  return tree.has(targetUserId) ? "signals" : "none";
+}
+
+/**
+ * Assert the caller may see a person's content: themselves or their direct
+ * manager only. Skip-levels and admins get signals, not content (use
+ * {@link assertCanAccessUser} for signal routes). Throws a 403 otherwise.
+ */
+export async function assertContentAccess(request: FastifyRequest, targetUserId: string): Promise<void> {
+  const level = await getAccessLevel(request, targetUserId);
+  if (level !== "self" && level !== "content") {
+    throw Object.assign(new Error("Insufficient permissions"), { statusCode: 403 });
+  }
+}
+
+/**
+ * Assert the caller may see signals about `targetUserId` (engagement,
+ * cadence, goal progress): the target themselves, an admin/super_admin, or
+ * a manager with the target anywhere in their reporting tree. For a
+ * person's content (themes, profiles, notes) use {@link assertContentAccess}.
+ * Throws a 403 (surfaced as "Forbidden" by the global error handler).
  */
 export async function assertCanAccessUser(
   request: FastifyRequest,
