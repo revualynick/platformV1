@@ -1583,59 +1583,22 @@ export async function getAccessGrantsAboutMe() {
   return apiFetch<{ data: GrantAboutMe[] }>("/api/v1/access-grants/about-me");
 }
 
-// ── Support handover ──────────────────────────────────
-// docs/bot/concerns-playbook.md: the bot offers to put someone in touch with
-// the organisation's support contact; only a yes creates a request.
+// ── Support signposting ───────────────────────────────
+// docs/bot/concerns-playbook.md: who the bot points people to, and how often.
 
 export type SupportSettings = {
-  supportContactId: string | null;
-  supportContactActive: boolean;
-  supportBackupId: string | null;
+  supportContact: string;
   supportDetails: string;
   supportOutside: string;
   /** Counts under minShownCount come back as null. */
-  months: Array<{ month: string; offers: number | null; accepted: number | null }>;
+  months: Array<{ month: string; wellbeing: number | null; safety: number | null; conduct: number | null }>;
   minShownCount: number;
-};
-
-export type SupportRequestRow = {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  urgency: "today" | "soon";
-  status: "open" | "acknowledged" | "closed";
-  createdAt: string;
-  dueAt: string;
-  acknowledgedAt: string | null;
-  closedAt: string | null;
 };
 
 export async function getSupportSettings() {
   return apiFetch<{ data: SupportSettings }>("/api/v1/support/settings");
 }
 
-export async function saveSupportSettings(data: {
-  supportContactId: string | null;
-  supportBackupId: string | null;
-  supportDetails: string;
-  supportOutside: string;
-}) {
+export async function saveSupportSettings(data: { supportContact: string; supportDetails: string; supportOutside: string }) {
   return apiFetch<{ ok: true }>("/api/v1/support/settings", { method: "PUT", body: JSON.stringify(data) });
-}
-
-export async function getSupportMe() {
-  return apiFetch<{ isContact: boolean }>("/api/v1/support/me");
-}
-
-export async function getSupportRequests() {
-  return apiFetch<{ data: SupportRequestRow[] }>("/api/v1/support/requests");
-}
-
-export async function acknowledgeSupportRequest(id: string) {
-  return apiFetch<{ ok: true }>(`/api/v1/support/requests/${id}/acknowledge`, { method: "POST" });
-}
-
-export async function closeSupportRequest(id: string) {
-  return apiFetch<{ ok: true }>(`/api/v1/support/requests/${id}/close`, { method: "POST" });
 }

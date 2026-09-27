@@ -5,8 +5,7 @@ import { saveSupportSettings, friendlyError } from "@/lib/api";
 import { requireRole } from "@/lib/session-utils";
 
 export async function saveSupportSettingsAction(data: {
-  supportContactId: string | null;
-  supportBackupId: string | null;
+  supportContact: string;
   supportDetails: string;
   supportOutside: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {

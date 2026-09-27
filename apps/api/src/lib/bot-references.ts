@@ -28,7 +28,7 @@ export const SERIOUS: ReadonlySet<Concern> = new Set(["wellbeing", "conduct", "s
 export interface OrgResources {
   orgName: string;
   hrContact: string;
-  /** The support contact's name, or null when none is set (then no offer can be made). */
+  /** Who to reach out to for support, in the organisation's words (a person or a team), or null when not set. */
   supportContact: string | null;
   /** Where to get support, in the organisation's own words (EAP, first aiders, HR). */
   supportDetails: string;
@@ -39,7 +39,7 @@ export interface OrgResources {
 export const EVAL_ORG: OrgResources = {
   orgName: "Acme",
   hrContact: "Jo in People Team (jo@acme.test)",
-  supportContact: "Jo Patel",
+  supportContact: "Jo Patel in the People Team (jo@acme.test)",
   supportDetails: "The Acme Employee Assistance Programme is free and confidential on 0800 000 000.",
   supportOutside: "If you'd rather talk to someone outside work, Samaritans are there any time on 116 123.",
 };
@@ -106,7 +106,7 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
         "It IS a wellbeing concern when it sounds sustained or serious: struggling most days, burnout, anxiety about coming in, crying at work, feeling unable to cope, thinking of leaving because of it.",
         "Acknowledge what they said in one or two sentences, specifically and plainly, in the context of work. No therapy language, no forced positivity, no silver linings.",
         "Do NOT ask another feedback question in this conversation, and do not ask them to explain more.",
-        "Do not give advice. Code adds the organisation's support details and the offer to ask their support contact to get in touch (only with their yes).",
+        "Do not give advice. Code adds who at their organisation to reach out to, and the organisation's support details.",
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -117,7 +117,7 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
         "Acknowledge that it sounds serious and that it is fine to share only what they are comfortable with.",
         "Do not judge either person. Never ask what led up to it or anything that makes them justify themselves.",
         "Do not dig for details in the chat and do not ask another feedback question.",
-        `Code adds the route to ${org.hrContact} and asks whether they want it passed on (only with their yes).`,
+        `Code adds that they can raise it with ${org.hrContact}. Nothing is passed on for them.`,
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -130,7 +130,7 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
         "Respond with care in one or two plain sentences: take it seriously, and say you are glad they said something. You are not a crisis service; do not counsel or ask them to explain.",
         "Do not ask feedback questions. Do not try to counsel them.",
         "Quote the exact words that raised the concern in trigger_quote.",
-        "Code adds the offer to ask their organisation's support contact to get in touch today (only with their yes), and the organisation's support details.",
+        "Code adds who at their organisation to reach out to, the organisation's support details, and its line about support outside work if it has one.",
         "Set next to \"pause\".",
       ].join("\n"),
     },
@@ -139,12 +139,13 @@ export function referenceDocs(type: InteractionType, subjectName: string, org: O
 
 /**
  * Fixed wording appended by code after the model's reply, work-relevant.
- * Wellbeing and safety are one handover (Nick, 2026-09-27): the bot says
- * what it is, offers to ask the organisation's support contact to get in
- * touch (today for safety, within two working days for wellbeing), and
- * passes a name on only with a yes. The support details are the
- * organisation's own words. C1 (conduct passed on only with consent)
- * remains a playbook default.
+ *
+ * Nick, 2026-09-27: above the threshold the bot signposts, the way Claude
+ * points people to 111 or 999, except that it points to a person at their
+ * organisation who is better placed to support them. Nothing is passed on
+ * to anyone and nothing is recorded about the person; only a monthly count
+ * of how often each signpost was shown. The same for conduct: the bot says
+ * where to raise it and doesn't pass anything on.
  */
 export function fixedTail(concern: Concern, org: OrgResources): string {
   switch (concern) {
@@ -152,12 +153,9 @@ export function fixedTail(concern: Concern, org: OrgResources): string {
       return "You can carry on, skip this question, or reply stop at any time.";
     case "wellbeing":
     case "safety":
-      return supportOffer(concern, org);
+      return supportSignpost(concern, org);
     case "conduct":
-      return (
-        `You can raise this with ${org.hrContact} directly. ` +
-        `I can pass it on to them for you, but only if you reply yes. Either way, we'll leave the feedback questions there for now.`
-      );
+      return `You can raise this with ${org.hrContact}, who can take it forward properly. I haven't passed anything on. We'll leave the feedback questions there for now.`;
     default:
       return "";
   }
@@ -165,67 +163,17 @@ export function fixedTail(concern: Concern, org: OrgResources): string {
 
 export type SupportLevel = "wellbeing" | "safety";
 
-const WHEN: Record<SupportLevel, string> = {
-  safety: "today",
-  wellbeing: "in the next couple of working days",
-};
-
-function details(org: OrgResources, withOutside: boolean): string {
-  return [org.supportDetails.trim(), withOutside ? org.supportOutside.trim() : ""].filter(Boolean).join(" ");
-}
-
-/** The offer made when someone may need support. Without a support contact there is nothing to offer, only details. */
-export function supportOffer(level: SupportLevel, org: OrgResources): string {
-  const safety = level === "safety";
-  const known = details(org, safety) || "Your HR team can tell you what support is available.";
-  if (!org.supportContact) {
-    return `I'm only a feedback assistant, so I can't help with this myself. ${known} We'll leave the check-in here, and there's no need to reply.`;
-  }
+/** Where to get support: the organisation's contact and details, never a resource we made up. */
+export function supportSignpost(level: SupportLevel, org: OrgResources): string {
+  const details = [org.supportDetails.trim(), level === "safety" ? org.supportOutside.trim() : ""].filter(Boolean).join(" ");
+  const contact = org.supportContact?.trim();
   return [
-    `I'm only a feedback assistant, so I can't help with this myself${safety ? ", but I don't want to leave it there" : ""}.`,
-    `Would you like me to ask ${org.supportContact} to get in touch with you ${WHEN[level]}?`,
-    "I'd only tell them you'd welcome a conversation, not anything you've written here. Reply yes or no.",
-    details(org, safety),
+    "I'm only a feedback assistant, so I can't help with this myself.",
+    contact ? `${contact} is better placed to support you, so it's worth reaching out to them.` : "",
+    details,
+    !contact && !details ? "Your HR team can tell you what support is available." : "",
+    "I haven't passed anything on. We'll leave the check-in here, and there's no need to reply.",
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-/** Replies to the answer, all fixed. */
-export const supportReplies = {
-  yes: (level: SupportLevel, org: OrgResources) =>
-    `Thank you. I've asked ${org.supportContact} to get in touch with you ${WHEN[level]}. I haven't passed on anything you wrote here.`,
-  no: (org: OrgResources) =>
-    `That's fine, I won't pass anything on.${org.supportContact ? ` You can contact ${org.supportContact} yourself at any time.` : ""}`,
-  retry: (org: OrgResources) => `Just to check: would you like me to ask ${org.supportContact} to get in touch? Reply yes or no.`,
-  unavailable: (org: OrgResources) =>
-    `I'm sorry, there's no one set up to pass this on to right now, so I haven't passed anything on. ${details(org, true) || "Your HR team can tell you what support is available."}`,
-  giveUp: (org: OrgResources) =>
-    `I'll leave it there and won't pass anything on.${org.supportContact ? ` You can contact ${org.supportContact} yourself at any time.` : ""}`,
-};
-
-export type ConsentAnswer = "yes" | "no" | "unclear";
-
-const YES = /^(y|yes|yeah|yep|yup|ok|okay|sure|please|go ahead|please do|that would help|that'd help)\b/;
-const NO = /^(n|no|nope|nah|not now|not really|no thanks|i'm ok|im ok|i'm fine|im fine|i'm good|im good)\b/;
-const POSITIVE = new Set(["yes", "yeah", "yep", "yup", "please", "sure"]);
-const NEGATIVE = new Set(["no", "nope", "nah", "not", "don't", "dont", "never"]);
-
-/**
- * A yes or no to the offer, read by code, never by a model: consent is
- * decided by fixed rules. Mixed signals ("please don't", "no, please do")
- * and anything else are unclear and get asked once more; a second unclear
- * answer is treated as no.
- */
-export function parseConsent(text: string): ConsentAnswer {
-  const t = text.toLowerCase().replace(/[’]/g, "'").replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!t) return "unclear";
-  const words = t.split(" ");
-  const pos = words.some((w) => POSITIVE.has(w));
-  const neg = words.some((w) => NEGATIVE.has(w));
-  if (YES.test(t) && !neg) return "yes";
-  if (NO.test(t) && !pos) return "no";
-  if (pos && !neg) return "yes";
-  if (neg && !pos) return "no";
-  return "unclear";
 }

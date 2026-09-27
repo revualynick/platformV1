@@ -12,7 +12,6 @@ import {
   kudos,
   engagementScores,
   escalations,
-  supportRequests,
   notificationPreferences,
   calendarTokens,
   behavioralSignals,
@@ -40,7 +39,6 @@ import { buildJobId } from "../lib/job-ids.js";
 import { getActivePlatform } from "../lib/active-platform.js";
 import { discoverGoogleChatDm } from "../lib/chat-identity.js";
 import { selectNudgeTargets } from "../lib/engagement-aggregation.js";
-import { supportContactIds } from "../lib/support.js";
 import { sendEmail, unsubscribeUrlFor } from "../lib/email.js";
 import { syncCalendarForUser } from "../lib/calendar-sync.js";
 import { runCheckInPipeline, processMeetingNow } from "../lib/check-in-pipeline.js";
@@ -50,7 +48,6 @@ import { getReleasedFeedbackIds } from "@revualy/db/queries";
 import {
   weeklyDigestTemplate,
   flagAlertTemplate,
-  supportRequestTemplate,
   nudgeTemplate,
   assessmentInviteTemplate,
   type WeeklyDigestData,
@@ -185,7 +182,7 @@ export function createWorkers(config: WorkerConfig) {
       const { type } = job.data as { type: string };
 
       // The job agent proposes each ticket's context; the policy gate decides.
-      const deps = { llm, adapters, analysisQueue: queues.analysisQueue, notificationQueue: queues.notificationQueue, ticketAgent: llm };
+      const deps = { llm, adapters, analysisQueue: queues.analysisQueue, ticketAgent: llm };
       const tenantDb = (orgId: string) => getTenantDb(orgId, process.env.DATABASE_URL ?? "");
 
       switch (type) {
@@ -575,40 +572,6 @@ export function createWorkers(config: WorkerConfig) {
             html: flagAlertTemplate(alertData),
             unsubscribeUrl: unsubscribeUrlFor(subject.managerId, "flag_alert"),
           });
-          break;
-        }
-
-        case "support_request": {
-          // Only the request id travels through Redis. The email names no
-          // one; the contacts open the queue, where access is audited.
-          const data = job.data as { orgId: string; requestId: string; kind: "new" | "overdue" };
-          const db = getTenantDb(data.orgId, process.env.DATABASE_URL ?? "");
-          const [req] = await db
-            .select({ urgency: supportRequests.urgency, status: supportRequests.status })
-            .from(supportRequests)
-            .where(eq(supportRequests.id, data.requestId));
-          if (!req || req.status !== "open") break;
-          const contactIds = await supportContactIds(db);
-          if (contactIds.length === 0) {
-            console.error(`[notification] support request ${data.requestId} has no active support contact`);
-            break;
-          }
-          const contacts = await db
-            .select({ name: users.name, email: users.email, isActive: users.isActive })
-            .from(users)
-            .where(inArray(users.id, contactIds));
-          for (const c of contacts) {
-            if (!c.email || !c.isActive) continue;
-            await sendEmail({
-              to: c.email,
-              subject: data.kind === "new" ? "A request for support" : "A support request is overdue",
-              html: supportRequestTemplate({
-                contactName: (c.name ?? "there").split(" ")[0],
-                kind: data.kind,
-                when: req.urgency === "today" ? "today" : "within two working days",
-              }),
-            });
-          }
           break;
         }
 

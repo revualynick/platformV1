@@ -1,76 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { EVAL_ORG, fixedTail, parseConsent, supportOffer, supportReplies } from "../bot-references.js";
+import { EVAL_ORG, fixedTail, supportSignpost } from "../bot-references.js";
 
 /**
- * The support handover's fixed wording and consent rules
- * (docs/bot/concerns-playbook.md, Nick 2026-09-27).
+ * Support signposting's fixed wording (docs/bot/concerns-playbook.md, Nick
+ * 2026-09-27): point to someone at the organisation who is better placed to
+ * support them, with the organisation's own details, and pass nothing on.
  */
 
-describe("parseConsent", () => {
-  it.each([
-    ["yes", "yes"],
-    ["Yes please", "yes"],
-    ["yeah ok", "yes"],
-    ["ok", "yes"],
-    ["Sure, that would help", "yes"],
-    ["please do", "yes"],
-    ["y", "yes"],
-    ["no", "no"],
-    ["No thanks", "no"],
-    ["nah I'm fine", "no"],
-    ["I'm ok thanks", "no"],
-    ["not now", "no"],
-    ["please don't", "unclear"],
-    ["no, please do", "unclear"],
-    ["yes but not today", "unclear"],
-    ["maybe", "unclear"],
-    ["what do you mean?", "unclear"],
-    ["", "unclear"],
-    ["yesterday was rough", "unclear"],
-    ["nothing really", "unclear"],
-  ])("%j -> %s", (text, expected) => {
-    expect(parseConsent(text)).toBe(expected);
-  });
-});
-
-describe("support offer wording", () => {
-  const noContact = { ...EVAL_ORG, supportContact: null };
-
-  it("offers the contact, says what is passed on, and asks for yes or no", () => {
-    const text = supportOffer("wellbeing", EVAL_ORG);
+describe("support signpost", () => {
+  it("names the organisation's contact and details, and says nothing was passed on", () => {
+    const text = supportSignpost("wellbeing", EVAL_ORG);
     expect(text).toContain("I'm only a feedback assistant");
-    expect(text).toContain(`ask ${EVAL_ORG.supportContact} to get in touch with you in the next couple of working days`);
-    expect(text).toContain("not anything you've written here");
-    expect(text).toContain("Reply yes or no");
+    expect(text).toContain(`${EVAL_ORG.supportContact} is better placed to support you`);
     expect(text).toContain(EVAL_ORG.supportDetails);
+    expect(text).toContain("I haven't passed anything on");
+    expect(text).not.toMatch(/reply yes|would you like me to/i);
     // The outside-work line is for safety only.
     expect(text).not.toContain(EVAL_ORG.supportOutside);
   });
 
-  it("safety asks for today and includes the organisation's outside-work line", () => {
-    const text = supportOffer("safety", EVAL_ORG);
-    expect(text).toContain("get in touch with you today");
+  it("safety adds the organisation's outside-work line", () => {
+    const text = supportSignpost("safety", EVAL_ORG);
     expect(text).toContain(EVAL_ORG.supportOutside);
     expect(fixedTail("safety", EVAL_ORG)).toBe(text);
   });
 
-  it("without a support contact there is no offer, only details", () => {
-    const text = supportOffer("safety", noContact);
-    expect(text).not.toContain("Reply yes or no");
-    expect(text).toContain(EVAL_ORG.supportDetails);
-    expect(text).toContain("no need to reply");
-  });
-
   it("never invents a resource when the organisation gave none", () => {
-    const bare = { ...EVAL_ORG, supportDetails: "", supportOutside: "" };
-    const text = supportOffer("safety", bare);
-    expect(text).not.toMatch(/Samaritans|999|911|emergency/i);
+    const bare = { ...EVAL_ORG, supportContact: null, supportDetails: "", supportOutside: "" };
+    const text = supportSignpost("safety", bare);
+    expect(text).toContain("Your HR team can tell you what support is available.");
+    expect(text).not.toMatch(/Samaritans|111|999|911|emergency/i);
   });
 
-  it("the replies say exactly what happened", () => {
-    expect(supportReplies.yes("safety", EVAL_ORG)).toContain("I haven't passed on anything you wrote");
-    expect(supportReplies.no(EVAL_ORG)).toContain("I won't pass anything on");
-    expect(supportReplies.giveUp(EVAL_ORG)).toContain("won't pass anything on");
-    expect(supportReplies.unavailable(noContact)).toContain("haven't passed anything on");
+  it("conduct says where to raise it and passes nothing on", () => {
+    const text = fixedTail("conduct", EVAL_ORG);
+    expect(text).toContain(`raise this with ${EVAL_ORG.hrContact}`);
+    expect(text).toContain("I haven't passed anything on");
+    expect(text).not.toMatch(/reply yes|pass it on to them for you/i);
   });
 });

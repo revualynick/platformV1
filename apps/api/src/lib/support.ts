@@ -1,19 +1,18 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import type { Queue } from "bullmq";
-import { conversations, orgSettings, supportRequests, supportSignals, users, type TenantDb } from "@revualy/db";
-import type { OrgResources, SupportLevel } from "./bot-references.js";
+import { sql } from "drizzle-orm";
+import { orgSettings, supportSignposts, type TenantDb } from "@revualy/db";
+import type { OrgResources } from "./bot-references.js";
 import { EVAL_ORG } from "./bot-references.js";
 
 /**
- * The support handover (docs/bot/concerns-playbook.md, Nick 2026-09-27).
+ * Support signposting (docs/bot/concerns-playbook.md, Nick 2026-09-27).
  *
- * When the bot recognises that someone may need support (wellbeing or
- * safety), it says it is only a feedback assistant, gives the
- * organisation's own support details, and offers to ask the support
- * contact to get in touch. Only a yes creates a request, and a request
- * holds who asked and how soon, never what they wrote. The conversation is
- * never analysed as feedback, and its transcript goes with the usual
- * retention. Admins see monthly counts only.
+ * Above the threshold the bot points the person to someone at their
+ * organisation who is better placed to support them, with the
+ * organisation's own details, the way Claude points people to 111 or 999.
+ * Nothing is passed on and nothing is recorded about the person. The
+ * conversation ends, is never analysed as feedback, and its transcript goes
+ * with the usual retention. The only data kept is a monthly count of how
+ * often each signpost was shown.
  *
  * Job side: this module reads and writes the database. The chat side
  * (reference path) only sees the wording in bot-references.ts.
@@ -22,43 +21,25 @@ import { EVAL_ORG } from "./bot-references.js";
 type Tx = Parameters<Parameters<TenantDb["transaction"]>[0]>[0];
 type DbOrTx = TenantDb | Tx;
 
-const HOUR = 60 * 60 * 1000;
+export type SignpostLevel = "wellbeing" | "safety" | "conduct";
 
-export const SUPPORT_PHASES = ["support_offer", "support_retry", "support"] as const;
+/** A conversation that ended after a wellbeing or safety signpost. */
 export function isSupportPhase(phase: string | null | undefined): boolean {
-  return (SUPPORT_PHASES as readonly string[]).includes(phase ?? "");
+  return phase === "support";
 }
 
 export interface SupportSettings {
-  contactId: string | null;
-  backupId: string | null;
-  contactName: string | null;
+  contact: string;
   details: string;
   outside: string;
 }
 
 export async function loadSupportSettings(db: DbOrTx): Promise<SupportSettings> {
   const [row] = await db
-    .select({
-      contactId: orgSettings.supportContactId,
-      backupId: orgSettings.supportBackupId,
-      details: orgSettings.supportDetails,
-      outside: orgSettings.supportOutside,
-    })
+    .select({ contact: orgSettings.supportContact, details: orgSettings.supportDetails, outside: orgSettings.supportOutside })
     .from(orgSettings)
     .limit(1);
-  let contactName: string | null = null;
-  if (row?.contactId) {
-    const [c] = await db.select({ name: users.name, isActive: users.isActive }).from(users).where(eq(users.id, row.contactId));
-    if (c?.isActive) contactName = c.name;
-  }
-  return {
-    contactId: contactName ? (row?.contactId ?? null) : null,
-    backupId: row?.backupId ?? null,
-    contactName,
-    details: row?.details ?? "",
-    outside: row?.outside ?? "",
-  };
+  return { contact: row?.contact ?? "", details: row?.details ?? "", outside: row?.outside ?? "" };
 }
 
 /** What the bot's fixed wording needs, from the organisation's settings. */
@@ -67,91 +48,29 @@ export async function loadSupportResources(db: DbOrTx): Promise<OrgResources> {
     loadSupportSettings(db),
     db.select({ name: orgSettings.name }).from(orgSettings).limit(1),
   ]);
+  const contact = settings.contact.trim() || null;
   return {
     orgName: org?.name ?? EVAL_ORG.orgName,
-    // Conduct routing isn't configurable yet (backlog).
-    hrContact: settings.contactName ?? "your HR team",
-    supportContact: settings.contactName,
+    // Conduct routing isn't a setting of its own yet (backlog).
+    hrContact: contact ?? "your HR team",
+    supportContact: contact,
     supportDetails: settings.details,
     supportOutside: settings.outside,
   };
 }
 
-/** First day of the month, UTC, as the counts' key. */
-function monthKey(now: Date): string {
+/** First day of the month, UTC: the counts' key. */
+export function monthKey(now: Date): string {
   return `${now.toISOString().slice(0, 7)}-01`;
 }
 
-async function bumpSignal(tx: DbOrTx, now: Date, field: "offers" | "accepted") {
-  const month = monthKey(now);
+/** Count one signpost shown. No person, conversation or time is stored. */
+export async function countSignpost(tx: DbOrTx, level: SignpostLevel, now = new Date()): Promise<void> {
   await tx
-    .insert(supportSignals)
-    .values({ month, offers: field === "offers" ? 1 : 0, accepted: field === "accepted" ? 1 : 0 })
+    .insert(supportSignposts)
+    .values({ month: monthKey(now), level, shown: 1 })
     .onConflictDoUpdate({
-      target: supportSignals.month,
-      set: field === "offers" ? { offers: sql`${supportSignals.offers} + 1` } : { accepted: sql`${supportSignals.accepted} + 1` },
+      target: [supportSignposts.month, supportSignposts.level],
+      set: { shown: sql`${supportSignposts.shown} + 1` },
     });
-}
-
-/**
- * The bot has made the offer: the conversation waits for a yes or no, and
- * the month's offer count goes up. Called in the same transaction as the
- * turn that sent the offer. When there is no support contact the offer
- * can't be made, so the conversation just ends for support.
- */
-export async function recordSupportOffer(tx: Tx, conversationId: string, level: SupportLevel, canOffer: boolean, now = new Date()) {
-  await tx
-    .update(conversations)
-    .set(
-      canOffer
-        ? { phase: "support_offer", supportLevel: level }
-        : { phase: "support", supportLevel: level, status: "incomplete", closedAt: now },
-    )
-    .where(eq(conversations.id, conversationId));
-  await bumpSignal(tx, now, "offers");
-}
-
-/**
- * When the contact should have been in touch by: the same working day for
- * safety (8 hours), two working days for wellbeing (weekends skipped).
- */
-export function supportDueAt(level: SupportLevel, now = new Date()): Date {
-  if (level === "safety") return new Date(now.getTime() + 8 * HOUR);
-  const due = new Date(now);
-  let added = 0;
-  while (added < 2) {
-    due.setUTCDate(due.getUTCDate() + 1);
-    const day = due.getUTCDay();
-    if (day !== 0 && day !== 6) added++;
-  }
-  return due;
-}
-
-/** The person said yes: one request, and the month's accepted count goes up. */
-export async function createSupportRequest(tx: Tx, userId: string, level: SupportLevel, now = new Date()): Promise<string> {
-  const [row] = await tx
-    .insert(supportRequests)
-    .values({ userId, urgency: level === "safety" ? "today" : "soon", createdAt: now, dueAt: supportDueAt(level, now) })
-    .returning({ id: supportRequests.id });
-  await bumpSignal(tx, now, "accepted");
-  return row.id;
-}
-
-/** Email the support contacts. Only the request id travels; the email names no one. */
-export async function notifySupportContacts(queue: Queue | undefined, orgId: string, requestId: string, kind: "new" | "overdue" = "new") {
-  if (!queue) return;
-  await queue.add(
-    "support_request",
-    { orgId, requestId, kind },
-    { jobId: `support-${kind}-${requestId}` },
-  );
-}
-
-/** Who may work the queue: the support contact and the backup, if still active. */
-export async function supportContactIds(db: DbOrTx): Promise<string[]> {
-  const s = await loadSupportSettings(db);
-  const ids = [s.contactId, s.backupId].filter((v): v is string => Boolean(v));
-  if (ids.length === 0) return [];
-  const active = await db.select({ id: users.id }).from(users).where(inArray(users.id, ids));
-  return active.map((a) => a.id);
 }

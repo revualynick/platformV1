@@ -6,12 +6,13 @@ import type { LLMGateway } from "@revualy/ai-core";
 import type { AdapterRegistry, OutboundMessage } from "@revualy/chat-core";
 import type { ChatPlatform, InteractionType } from "@revualy/shared";
 import { buildJobId } from "./job-ids.js";
-import { planTurn, themeQuestion } from "./turn-planner.js";
+import { planTurn, themeQuestion, type PlanInput } from "./turn-planner.js";
+import { runReferencePath, compose, type ReferenceNext } from "./reference-path.js";
+import { SERIOUS, type Concern } from "./bot-references.js";
 import { recordThemeAsked, recordThemeJudged, recordUnreachedThemes } from "./theme-outcomes.js";
 import { attachTicket, markTicketDoneForConversation, prepareTicket, prepareTicketForConversation } from "./tickets/prepare.js";
 import { openTicket, openTicketForConversation, type TicketHandle } from "./tickets/reader.js";
-import { parseConsent, supportReplies, type SupportLevel } from "./bot-references.js";
-import { createSupportRequest, isSupportPhase, loadSupportResources, notifySupportContacts } from "./support.js";
+import { countSignpost, isSupportPhase, loadSupportResources } from "./support.js";
 
 /**
  * Conversation engine. All conversation state lives in Postgres (the
@@ -41,8 +42,6 @@ export interface OrchestratorDeps {
    * decides). Absent: every ticket gets the deterministic default.
    */
   ticketAgent?: Pick<LLMGateway, "complete">;
-  /** For emailing the support contacts when someone accepts the offer of support. */
-  notificationQueue?: Queue;
 }
 
 type Conversation = typeof conversations.$inferSelect;
@@ -404,12 +403,6 @@ export async function processTurn(
   if (pending.length === 0) return { status: "nothing_pending" };
   const lastPendingSeq = pending[pending.length - 1].seq;
 
-  // Waiting for a yes or no to the offer of support: code answers, no model.
-  if (conv.phase === "support_offer" || conv.phase === "support_retry") {
-    const reply = pending.map((m) => m.content).join("\n\n");
-    return answerSupportOffer(db, deps, conv, ticket, reply, lastPendingSeq, history.length, opts);
-  }
-
   // ── Decide and draft (one LLM call, outside any transaction) ──
   const interactionType = conv.interactionType as InteractionType;
   const maxMessages = getMaxMessages(interactionType);
@@ -421,7 +414,7 @@ export async function processTurn(
   const currentTheme = themes[index] ?? null;
   const nextTheme = themes[index + 1] ?? null;
 
-  const plan = await planTurn(deps.llm, {
+  const planInput: PlanInput = {
     interactionType,
     subjectName: stripControlChars(ctx.subjectFirstName),
     verbatim: ctx.verbatim,
@@ -434,7 +427,16 @@ export async function processTurn(
     canContinue: messageCount < maxMessages - 1,
     history: history.map((m) => ({ role: m.role, content: m.content })),
     reply,
-  });
+  };
+  const plan = await planTurn(deps.llm, planInput);
+
+  // A concern goes to the reference path (docs/bot/concerns-playbook.md).
+  // If it decides the message was an ordinary answer after all, the turn
+  // carries on as planned.
+  if (plan.concern !== "none") {
+    const handled = await handleConcern(db, deps, conv, ticket, planInput, plan.concern, lastPendingSeq, messageCount, opts);
+    if (handled) return handled;
+  }
 
   const closing = plan.action === "close";
   const next =
@@ -542,44 +544,51 @@ export async function markIncomplete(
   return true;
 }
 
-// ── The answer to an offer of support ───────────────────
+// ── Concerns: the reference path ─────────────────────────
 
 /**
- * The person has answered the offer of support (docs/bot/concerns-playbook.md).
- * Consent is read by fixed rules (parseConsent), never by a model:
- *  - yes: a support request (who and how soon, nothing they wrote), the
- *    support contacts are emailed, and the check-in ends
- *  - no: nothing is passed on, and the check-in ends
- *  - unclear: asked once more; unclear again counts as no
- * The conversation ends as `incomplete` in phase `support` and is never
- * analysed as feedback.
+ * The script path flagged a concern. The reference path (Opus 5.5 for
+ * wellbeing, conduct and safety) writes a short acknowledgement; code adds
+ * the fixed wording and decides what happens (docs/bot/concerns-playbook.md):
+ *  - privacy, off_script: answer and carry on; the theme doesn't move
+ *  - wellbeing, safety: signpost to the organisation's support contact and
+ *    details, end the check-in, never analyse it, count the signpost
+ *  - conduct: say where to raise it, end the check-in (analysed as usual,
+ *    so the existing flag for review applies), count the signpost
+ * Nothing is passed on to anyone. Returns null when the reference path
+ * finds an ordinary answer after all, so the planned turn goes ahead.
  */
-async function answerSupportOffer(
+async function handleConcern(
   db: TenantDb,
   deps: OrchestratorDeps,
   conv: Conversation,
   ticket: TicketHandle,
-  reply: string,
+  input: PlanInput,
+  hint: Concern,
   lastPendingSeq: number,
   messageCount: number,
   opts: DeliverOptions,
-): Promise<TurnResult> {
+): Promise<TurnResult | null> {
   const org = await loadSupportResources(db);
-  const level: SupportLevel = conv.supportLevel ?? "wellbeing";
-  const answer = parseConsent(reply);
-  const retry = answer === "unclear" && conv.phase === "support_offer" && Boolean(org.supportContact);
-  const yes = answer === "yes" && Boolean(org.supportContact);
-  const outbound = yes
-    ? supportReplies.yes(level, org)
-    : answer === "yes"
-      ? supportReplies.unavailable(org)
-      : retry
-        ? supportReplies.retry(org)
-        : answer === "no"
-          ? supportReplies.no(org)
-          : supportReplies.giveUp(org);
+  let concern: Concern = hint;
+  let message: string;
+  let next: ReferenceNext;
+  try {
+    const ref = await runReferencePath(deps.llm, input, hint, org);
+    if (ref.concern === "none") return null;
+    concern = ref.concern;
+    message = ref.message;
+    next = ref.next;
+  } catch (err) {
+    // The model failed. A serious concern still gets the fixed wording; a
+    // lighter one falls back to the planned turn.
+    if (!SERIOUS.has(hint)) return null;
+    console.error("[orchestrator] reference path failed; sending fixed wording:", err);
+    ({ message, next } = compose(hint, "", "pause", org));
+  }
 
-  let requestId: string | null = null;
+  const ending = next === "pause";
+  const support = concern === "wellbeing" || concern === "safety";
   try {
     await db.transaction(async (tx) => {
       const now = new Date();
@@ -589,8 +598,9 @@ async function answerSupportOffer(
           turn: sql`${conversations.turn} + 1`,
           messageCount: messageCount + 1,
           lastActivityAt: now,
-          phase: retry ? "support_retry" : "support",
-          ...(retry ? { status: "in_progress" } : { status: "incomplete", closedAt: now }),
+          ...(ending
+            ? { status: "incomplete", closedAt: now, phase: support ? ("support" as const) : ("closing" as const) }
+            : { status: "in_progress" }),
         })
         .where(and(eq(conversations.id, conv.id), eq(conversations.turn, conv.turn)))
         .returning({ id: conversations.id });
@@ -609,12 +619,12 @@ async function answerSupportOffer(
         .limit(1);
       if (newer) throw new Superseded();
 
-      await ticket.appendTurn(tx, outbound);
-      if (!retry) {
+      await ticket.appendTurn(tx, message);
+      if (ending) {
         await recordUnreachedThemes(tx, conv);
         await markTicketDoneForConversation(tx, conv.id, "incomplete", now);
       }
-      if (yes) requestId = await createSupportRequest(tx, conv.reviewerId, level, now);
+      if (concern === "wellbeing" || concern === "safety" || concern === "conduct") await countSignpost(tx, concern, now);
     });
   } catch (err) {
     if (err instanceof Superseded) return { status: "superseded" };
@@ -622,9 +632,10 @@ async function answerSupportOffer(
     throw err;
   }
 
-  if (requestId) await notifySupportContacts(deps.notificationQueue, tenantOrgId(), requestId);
+  // A support conversation is never analysed; a conduct report is, as before.
+  if (ending && !support) await queueAnalysis(deps, conv.id);
   await deliverOutbox(db, deps, conv.id, opts);
-  return retry ? { status: "replied" } : { status: "closed" };
+  return ending ? { status: "closed" } : { status: "replied" };
 }
 
 // ── In-process conversations (web demo, reflections, simulator) ──
